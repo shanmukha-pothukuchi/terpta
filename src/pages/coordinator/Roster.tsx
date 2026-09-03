@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { BellRing, MailCheck, Trash2, UserPlus, Users } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
@@ -82,8 +83,16 @@ export function RosterView({
         <EmptyState
           icon={Users}
           title="No staffing period selected"
-          hint="Create a staffing period in Period setup, then invite TAs here."
-        />
+          hint="Set up a course first, then invite TAs here."
+        >
+          <Link
+            to="/coordinator/setup"
+            className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-umd px-3 text-[12.5px] font-medium text-white hover:brightness-110"
+          >
+            <UserPlus size={14} strokeWidth={1.5} aria-hidden />
+            Set up a course
+          </Link>
+        </EmptyState>
       </div>
     );
   }

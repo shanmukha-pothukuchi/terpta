@@ -6,6 +6,7 @@ import { UserRoundPlus } from "lucide-react";
 import { useCurrentUser } from "../lib/useCurrentUser";
 import { useSignOut } from "../lib/useSignOut";
 import { RoleChooser } from "../components/RoleChooser";
+import { usePeriod } from "../lib/period";
 import { FullPageSpinner, EmptyState } from "../components/ui";
 
 /** Role-based landing: TA -> availability, coordinator -> roster. */
@@ -44,13 +45,27 @@ export default function Home() {
   }
 
   if (me.role === "coordinator") {
-    return <Navigate to="/coordinator/roster" replace />;
+    return <CoordinatorLanding />;
   }
   // A TA with no profile at all has never been through setup.
   if (me.taProfiles.length === 0) {
     return <Navigate to="/ta/onboarding" replace />;
   }
   return <TaLanding periodRef={me.taProfiles[0].periodRef} />;
+}
+
+/**
+ * A coordinator with no course yet has nothing to see on the roster, and
+ * every other screen is the same empty state. Landing them on the roster
+ * regardless was the first thing a new coordinator saw: a screen for a
+ * course that does not exist, with no button that would make one.
+ */
+function CoordinatorLanding() {
+  const { loading, entries } = usePeriod();
+  if (loading) return <FullPageSpinner label="Loading your courses…" />;
+  return (
+    <Navigate to={entries.length === 0 ? "/coordinator/setup" : "/coordinator/roster"} replace />
+  );
 }
 
 /**
