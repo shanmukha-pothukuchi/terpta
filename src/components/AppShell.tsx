@@ -22,6 +22,7 @@ import {
 import { useCurrentUser } from "../lib/useCurrentUser";
 import { useSignOut } from "../lib/useSignOut";
 import { usePeriod, PeriodProvider, type PeriodStatus } from "../lib/period";
+import { termName } from "../lib/format";
 import type { Role } from "../lib/api";
 import { Toaster } from "./ui";
 import { CommandPalette } from "./CommandPalette";
@@ -75,7 +76,7 @@ function SideNav({ role, userLoading }: { role?: Role; userLoading: boolean }) {
   const footer = periodLoading
     ? "Loading…"
     : selected
-      ? `${selected.term} · ${STATUS_LABEL[selected.status]}`
+      ? `${termName(selected.term)} · ${STATUS_LABEL[selected.status]}`
       : "No period selected";
 
   return (
@@ -169,7 +170,7 @@ function CourseSwitcher({ role }: { role?: Role }) {
           <>
             <span className="font-mono text-[12.5px] font-medium">{selected.courseId}</span>
             <span className="text-[#5B5B64]">·</span>
-            <span className="text-[12.5px] text-[#C9C9CF]">{selected.term}</span>
+            <span className="text-[12.5px] text-[#C9C9CF]">{termName(selected.term)}</span>
           </>
         ) : (
           <span className="text-[12.5px] text-faint">
@@ -210,7 +211,7 @@ function CourseSwitcher({ role }: { role?: Role }) {
                   >
                     <span className="font-mono text-[12.5px] font-medium">{e.courseId}</span>
                     <span className="text-[#5B5B64]">·</span>
-                    <span className="flex-1 truncate text-[12.5px] text-muted">{e.term}</span>
+                    <span className="flex-1 truncate text-[12.5px] text-muted">{termName(e.term)}</span>
                     {isSelected ? (
                       <Check size={14} strokeWidth={1.5} className="text-ink" aria-hidden />
                     ) : null}

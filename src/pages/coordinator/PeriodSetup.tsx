@@ -16,7 +16,7 @@ import {
   toast,
   type BadgeTone,
 } from "../../components/ui";
-import { formatDate, formatMeeting } from "../../lib/format";
+import { formatDate, formatMeeting, termName } from "../../lib/format";
 import { errorMessage } from "../../lib/errorMessage";
 
 type PeriodListItem = FunctionReturnType<typeof api.periods.listMine>[number];
@@ -47,10 +47,9 @@ export const PERIOD_STATUS_LABEL: Record<string, string> = {
 function termLabel(term: string): string {
   const found = TERM_OPTIONS.find((t) => t.value === term);
   if (found) return found.label;
-  const year = term.slice(0, 4);
-  const season =
-    { "01": "Spring", "05": "Summer", "08": "Fall", "12": "Winter" }[term.slice(4)] ?? term.slice(4);
-  return `${season} ${year}`;
+  // One decoder for the rest of the app; a second copy here had already
+  // drifted from it once.
+  return termName(term);
 }
 
 const SOURCE_NOTE: Record<ImportResult["source"], string> = {

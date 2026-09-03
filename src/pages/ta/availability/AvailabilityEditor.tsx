@@ -8,7 +8,7 @@ import {
 } from "react";
 import { Check, LoaderCircle } from "lucide-react";
 import { Button, StatusBadge, useToast } from "../../../components/ui";
-import { formatDate, formatHourCount } from "../../../lib/format";
+import { formatDate, formatHourCount, termName } from "../../../lib/format";
 import { AvailabilityGrid } from "./AvailabilityGrid";
 import { DateExceptions } from "./DateExceptions";
 import {
@@ -265,7 +265,7 @@ export function AvailabilityEditor({
             Availability
           </h1>
           <div className="text-[12.5px] text-muted">
-            {data.term && <span className="hidden sm:inline">{data.term} · </span>}
+            {data.term && <span className="hidden sm:inline">{termName(data.term)} · </span>}
             {data.deadline && (
               <>
                 due{" "}
