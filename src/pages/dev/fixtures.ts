@@ -21,6 +21,7 @@ import type { PeriodEntry } from "../../lib/period";
 import type { ScheduleViewProps } from "../ta/Schedule";
 import type { HoursViewProps as TaHoursViewProps } from "../ta/Hours";
 import type { PeriodSetupViewProps } from "../coordinator/PeriodSetup";
+import type { CoveragePanelViewProps } from "../coordinator/builder/CoveragePanel";
 
 const fid = <T extends TableNames>(s: string) => s as Id<T>;
 const T0 = 1756800000000; // fixture _creationTime
@@ -671,4 +672,52 @@ export const setupPeriods: PeriodSetupViewProps["periods"] = [
     },
     taProfileId: null,
   },
+];
+
+/* ------------------------------------------------------------------ */
+/* One-off coverage (Builder panel)                                    */
+/* ------------------------------------------------------------------ */
+
+export const coverageRows: CoveragePanelViewProps["rows"] = [
+  {
+    id: "cov-1",
+    date: "2026-09-04",
+    label: "Discussion 0101",
+    startMin: 660,
+    endMin: 710,
+    absentName: "Shan Pothukuchi",
+    coverTaRef: null,
+    coverName: null,
+    filledBy: null,
+    reason: "Conference travel that week",
+  },
+  {
+    id: "cov-2",
+    date: "2026-09-11",
+    label: "Office Hours",
+    startMin: 780,
+    endMin: 900,
+    absentName: "Daniel Chen",
+    coverTaRef: "ta-priya",
+    coverName: "Priya Shah",
+    filledBy: "auto",
+    reason: null,
+  },
+  {
+    id: "cov-3",
+    date: "2026-09-18",
+    label: "Exam Proctoring · Midterm 1",
+    startMin: 1140,
+    endMin: 1260,
+    absentName: "Marcus Johnson",
+    coverTaRef: null,
+    coverName: null,
+    filledBy: null,
+    reason: "Family obligation, cleared with the coordinator in advance",
+  },
+];
+
+export const coverageCandidates: NonNullable<CoveragePanelViewProps["candidates"]> = [
+  { taProfileRef: "ta-priya", name: "Priya Shah", fit: "available", assignedCount: 2 },
+  { taProfileRef: "ta-sarah", name: "Sarah Kim", fit: "prefer_not", assignedCount: 1 },
 ];

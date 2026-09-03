@@ -636,17 +636,15 @@ export function HoursView({
                                     }
                                   >
                                     <IconButton
-                                      size="sm"
                                       onClick={() => beginEdit(log)}
                                       aria-label={`Edit ${formatDate(log.date)} entry`}
                                     >
-                                      <Pencil size={15} strokeWidth={1.5} aria-hidden />
+                                      <Pencil size={16} strokeWidth={1.5} aria-hidden />
                                     </IconButton>
                                   </Tooltip>
                                   {onDeleteLog ? (
                                     <Tooltip label="Delete this entry">
                                       <IconButton
-                                        size="sm"
                                         variant="danger"
                                         disabled={busy}
                                         onClick={() => {
@@ -657,7 +655,7 @@ export function HoursView({
                                         }}
                                         aria-label={`Delete ${formatDate(log.date)} entry`}
                                       >
-                                        <Trash2 size={15} strokeWidth={1.5} aria-hidden />
+                                        <Trash2 size={16} strokeWidth={1.5} aria-hidden />
                                       </IconButton>
                                     </Tooltip>
                                   ) : null}

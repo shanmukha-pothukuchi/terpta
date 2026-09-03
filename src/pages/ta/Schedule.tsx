@@ -618,11 +618,10 @@ export function ScheduleView({
                     {s.status === "pending" && onCancelSwap ? (
                       <Tooltip label="Withdraw this request">
                         <IconButton
-                          size="sm"
                           onClick={() => onCancelSwap(s.id)}
                           aria-label={`Withdraw swap request for ${s.label}`}
                         >
-                          <X size={15} strokeWidth={1.5} aria-hidden />
+                          <X size={16} strokeWidth={1.5} aria-hidden />
                         </IconButton>
                       </Tooltip>
                     ) : null}

@@ -28,6 +28,7 @@ import { availabilityFixture } from "../ta/availability/model";
 import { BuilderScreen } from "../coordinator/Builder";
 import { RosterView } from "../coordinator/Roster";
 import { ShiftsView } from "../coordinator/Shifts";
+import { CoveragePanelView } from "../coordinator/builder/CoveragePanel";
 import {
   DEFAULT_STAFF_KINDS,
   PeriodSetupView,
@@ -236,6 +237,25 @@ function PeriodSetupPreview() {
   );
 }
 
+/** The coverage panel at its real width: the Builder's right column. */
+function CoveragePreview() {
+  const [editing, setEditing] = useState<string | null>(null);
+  return (
+    <PageFrame>
+      <div className="w-[300px]">
+        <CoveragePanelView
+          rows={fx.coverageRows}
+          candidates={fx.coverageCandidates}
+          candidatesFor={editing}
+          onPickRow={setEditing}
+          onSetCover={noop}
+          onAutoFill={noop}
+        />
+      </div>
+    </PageFrame>
+  );
+}
+
 function ShiftsPreview() {
   return (
     <PageFrame>
@@ -407,6 +427,10 @@ const SCREENS: Record<string, { label: string; element: ReactNode }> = {
   "builder-publish": { label: "Builder — publish modal", element: <BuilderPreview publish /> },
   roster: { label: "Coordinator roster", element: <RosterPreview /> },
   shifts: { label: "Coordinator shifts", element: <ShiftsPreview /> },
+  coverage: {
+    label: "Builder — one-off coverage panel",
+    element: <CoveragePreview />,
+  },
   "period-setup": {
     label: "Coordinator period setup",
     element: <PeriodSetupPreview />,

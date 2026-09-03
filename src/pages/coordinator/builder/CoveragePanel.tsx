@@ -75,11 +75,13 @@ export function CoveragePanelView({
 
   return (
     <div className="overflow-hidden rounded-[12px] border border-line bg-surface">
-      <div className="flex h-10 items-center gap-[10px] border-b border-line px-[14px]">
+      {/* This panel lives in the Builder's narrow right column, so everything
+          stacks. Laid out as one wide row, every field truncated to an
+          ellipsis and the card said nothing at all. */}
+      <div className="flex h-10 items-center gap-2 border-b border-line px-[14px]">
         <CalendarX2 size={14} strokeWidth={1.5} className="shrink-0 text-muted" aria-hidden />
-        <div className="shrink-0 text-[13px] font-medium">One-off coverage</div>
-        <div className="min-w-0 flex-1 truncate text-xs text-faint">
-          Approved single-date swaps. The regular assignment is unchanged.
+        <div className="min-w-0 flex-1 truncate text-[13px] font-medium">
+          One-off coverage
         </div>
         {unfilled > 0 && (
           <Badge tone="amber" className="shrink-0">
@@ -93,49 +95,45 @@ export function CoveragePanelView({
           const editing = candidatesFor === row.id;
           const busy = busyRowId === row.id;
           return (
-            <div key={row.id} className="flex flex-col gap-1.5 px-[14px] py-2.5">
-              <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
-                <span className="shrink-0 font-mono text-[11.5px] text-muted">
-                  {formatIsoDate(row.date)}
-                </span>
+            <div key={row.id} className="flex flex-col gap-1.5 px-[14px] py-3">
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 font-mono text-[11.5px] text-muted">
+                <span>{formatIsoDate(row.date)}</span>
                 {row.startMin !== undefined && row.endMin !== undefined && (
-                  <span className="shrink-0 font-mono text-[11.5px] text-faint">
+                  <span className="text-faint">
                     {formatTimeRange(row.startMin, row.endMin)}
                   </span>
                 )}
-                <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">
-                  {row.label}
-                </span>
-                <span className="shrink-0 text-[12px] text-faint">
-                  {row.absentName} out
-                </span>
+              </div>
+
+              {/* The shift name wraps rather than truncating — it is the one
+                  thing the row exists to identify. */}
+              <div className="text-[12.5px] font-medium text-ink">{row.label}</div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[12px] text-faint">{row.absentName} out</span>
                 {row.coverTaRef ? (
-                  <Badge tone="green" className="shrink-0">
+                  <Badge tone="green">
                     <UserRoundCheck size={11} strokeWidth={1.5} aria-hidden />
                     {row.coverName}
                     {row.filledBy === "auto" ? " · auto" : ""}
                   </Badge>
                 ) : (
-                  <Badge tone="amber" className="shrink-0">
-                    Unfilled
-                  </Badge>
+                  <Badge tone="amber">Unfilled</Badge>
                 )}
               </div>
 
               {row.reason && (
-                <div className="min-w-0 truncate text-[12px] text-faint">{row.reason}</div>
+                <div className="text-[12px] leading-snug text-faint">“{row.reason}”</div>
               )}
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                 {editing ? (
                   <>
                     <Select
                       aria-label={`Cover for ${row.label} on ${row.date}`}
                       value={row.coverTaRef ?? ""}
-                      onChange={(e) =>
-                        onSetCover?.(row.id, e.target.value || null)
-                      }
-                      className="h-7 max-w-[260px] text-[12px]"
+                      onChange={(e) => onSetCover?.(row.id, e.target.value || null)}
+                      className="h-7 w-full text-[12px]"
                     >
                       <option value="">Nobody yet</option>
                       {candidates.map((c) => (
@@ -151,21 +149,13 @@ export function CoveragePanelView({
                         Nobody in the pool is free then.
                       </span>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onPickRow?.(null)}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => onPickRow?.(null)}>
                       Done
                     </Button>
                   </>
                 ) : (
                   <>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => onPickRow?.(row.id)}
-                    >
+                    <Button variant="secondary" size="sm" onClick={() => onPickRow?.(row.id)}>
                       {row.coverTaRef ? "Change" : "Pick someone"}
                     </Button>
                     {row.coverTaRef === null && (

@@ -325,9 +325,8 @@ export function HoursView({
                           setFlagTarget(log);
                           setFlagNote(log.flagNote ?? "");
                         }}
-                        size="sm"
                       >
-                        <Flag size={15} strokeWidth={1.5} aria-hidden />
+                        <Flag size={16} strokeWidth={1.5} aria-hidden />
                       </IconButton>
                     </Tooltip>
                     {flagged ? (
@@ -336,9 +335,8 @@ export function HoursView({
                           variant="secondary"
                           aria-label={`Unflag log from ${log.taName}`}
                           onClick={() => onUnflag?.(log.hourLogId)}
-                          size="sm"
                         >
-                          <FlagOff size={15} strokeWidth={1.5} aria-hidden />
+                          <FlagOff size={16} strokeWidth={1.5} aria-hidden />
                         </IconButton>
                       </Tooltip>
                     ) : null}
@@ -348,9 +346,8 @@ export function HoursView({
                           variant="secondary"
                           aria-label={`Unapprove log from ${log.taName}`}
                           onClick={() => onUnapprove?.(log.hourLogId)}
-                          size="sm"
                         >
-                          <Undo2 size={15} strokeWidth={1.5} aria-hidden />
+                          <Undo2 size={16} strokeWidth={1.5} aria-hidden />
                         </IconButton>
                       </Tooltip>
                     ) : null}
