@@ -135,6 +135,42 @@ function ShellPreview() {
   );
 }
 
+/** The shell before any course exists: no rail, just the header and the ask. */
+function ShellNoCoursePreview() {
+  return (
+    <StaticPeriodProvider
+      value={{
+        periodId: null,
+        label: "",
+        loading: false,
+        entries: [],
+        selected: null,
+        taProfileId: null,
+      }}
+    >
+      <Frame>
+        <AppShellView
+          role="coordinator"
+          userName="Dr. Nelson"
+          userEmail="nelson@umd.edu"
+          onSignOut={noop}
+          onOpenPalette={noop}
+        >
+          <RosterView
+            periodSelected={false}
+            rows={undefined}
+            nudging={false}
+            onNudge={noop}
+            inviting={false}
+            onInvite={noop}
+            onRemove={noop}
+          />
+        </AppShellView>
+      </Frame>
+    </StaticPeriodProvider>
+  );
+}
+
 function AvailabilityPreview() {
   return (
     <PageFrame>
@@ -474,6 +510,10 @@ function PreferencesTabPreview() {
 const SCREENS: Record<string, { label: string; element: ReactNode }> = {
   login: { label: "Login (add ?state=loading or ?state=error)", element: <LoginPreview /> },
   shell: { label: "App shell + command palette", element: <ShellPreview /> },
+  "shell-no-course": {
+    label: "App shell before a course exists",
+    element: <ShellNoCoursePreview />,
+  },
   availability: { label: "TA availability editor", element: <AvailabilityPreview /> },
   builder: { label: "Builder — default", element: <BuilderPreview /> },
   "builder-drawer": { label: "Builder — TA drawer (Daniel)", element: <BuilderPreview drawer /> },

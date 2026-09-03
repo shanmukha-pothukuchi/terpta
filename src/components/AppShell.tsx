@@ -356,10 +356,33 @@ export function AppShellView({
   onOpenPalette: () => void;
   children: ReactNode;
 }) {
+  const { selected, loading: periodLoading } = usePeriod();
+  // The nav lists screens that belong to a course. Until one is chosen —
+  // during the role pick, account sync, or a coordinator's very first
+  // visit — every item leads to "no period selected", so the rail is noise
+  // beside a screen that is asking one question. The switcher in the header
+  // is how a course gets chosen or created, and it stays.
+  const showNav =
+    role !== undefined && !userLoading && (periodLoading || selected !== null);
+
   return (
-    <div className="grid h-dvh grid-cols-[208px_1fr] grid-rows-[52px_1fr] bg-page text-ink">
-      <SideNav role={role} userLoading={userLoading} />
+    <div
+      className={cx(
+        "grid h-dvh grid-rows-[52px_1fr] bg-page text-ink",
+        showNav ? "grid-cols-[208px_1fr]" : "grid-cols-[1fr]",
+      )}
+    >
+      {showNav ? <SideNav role={role} userLoading={userLoading} /> : null}
       <header className="flex h-[52px] items-center gap-3 border-b border-line px-5">
+        {showNav ? null : (
+          <span className="flex items-center gap-2 pr-2">
+            <span
+              className="size-2 rounded-full bg-umd shadow-[0_0_10px_rgba(226,24,51,0.6)]"
+              aria-hidden
+            />
+            <span className="text-[14px] font-semibold tracking-[-0.02em]">TerpTA</span>
+          </span>
+        )}
         <CourseSwitcher role={role} />
         <div className="flex-1" />
         {role === "coordinator" ? <PaletteTrigger onOpen={onOpenPalette} /> : null}
