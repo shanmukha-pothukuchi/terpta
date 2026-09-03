@@ -721,3 +721,76 @@ export const coverageCandidates: NonNullable<CoveragePanelViewProps["candidates"
   { taProfileRef: "ta-priya", name: "Priya Shah", fit: "available", assignedCount: 2 },
   { taProfileRef: "ta-sarah", name: "Sarah Kim", fit: "prefer_not", assignedCount: 1 },
 ];
+
+/* ------------------------------------------------------------------ */
+/* One dated week of a TA schedule                                     */
+/* ------------------------------------------------------------------ */
+
+/* The week of Mon 2026-09-14, carrying every state the grid can show:
+   a normal meeting, one handed off to somebody else, one this TA is
+   covering, and one on a day they marked themselves away. */
+export const TA_WEEK_START_DATED = "2026-09-14";
+
+export const weekOccurrences: NonNullable<ScheduleViewProps["weekOccurrences"]> = [
+  {
+    key: "occ-1",
+    date: "2026-09-14",
+    day: "M",
+    startMin: 600,
+    endMin: 650,
+    title: "Discussion 0101",
+    color: "#E21833",
+    state: "normal",
+    otherName: null,
+    note: null,
+    swapTarget: { assignmentRef: "sa-1", label: "Discussion 0101", detail: "M 10:00a" },
+  },
+  {
+    key: "occ-2",
+    date: "2026-09-14",
+    day: "M",
+    startMin: 780,
+    endMin: 900,
+    title: "Office Hours",
+    color: "#7D93B2",
+    state: "off",
+    otherName: "Ravi Patel",
+    note: null,
+    swapTarget: null,
+  },
+  {
+    key: "occ-3",
+    date: "2026-09-16",
+    day: "W",
+    startMin: 660,
+    endMin: 710,
+    title: "Discussion 0104",
+    color: "#E21833",
+    state: "covering",
+    otherName: "Daniel Chen",
+    note: null,
+    swapTarget: null,
+  },
+  {
+    key: "occ-4",
+    date: "2026-09-17",
+    day: "Th",
+    startMin: 600,
+    endMin: 650,
+    title: "Discussion 0106",
+    color: "#E21833",
+    state: "excepted",
+    otherName: null,
+    note: "Conference travel",
+    swapTarget: { assignmentRef: "sa-3", label: "Discussion 0106", detail: "Th 10:00a" },
+  },
+];
+
+export const weekExceptions: NonNullable<ScheduleViewProps["weekExceptions"]> = [
+  {
+    id: "exc-1",
+    startDate: "2026-09-17",
+    endDate: "2026-09-17",
+    reason: "Conference travel",
+  },
+];

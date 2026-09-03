@@ -17,26 +17,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { dayValidator } from "./schema";
 import { requireCoordinator, requireUser } from "./lib/auth";
-
-type DayCode = "M" | "Tu" | "W" | "Th" | "F";
-
-const DAYS: DayCode[] = ["M", "Tu", "W", "Th", "F"];
-
-/**
- * ISO date -> weekday code, or null at the weekend. Parsed by hand rather
- * than with `new Date(iso)`, which reads a bare date as UTC midnight and can
- * land on the previous day west of Greenwich.
- */
-export function dayOfIso(iso: string): DayCode | null {
-  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return null;
-  const dow = new Date(
-    Number(m[1]),
-    Number(m[2]) - 1,
-    Number(m[3]),
-  ).getDay();
-  return dow >= 1 && dow <= 5 ? DAYS[dow - 1] : null;
-}
+import { dayOfIso } from "./lib/week";
 
 function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number) {
   return aStart < bEnd && bStart < aEnd;

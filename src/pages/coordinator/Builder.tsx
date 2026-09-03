@@ -9,10 +9,12 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { RefreshCw, Send, TriangleAlert, Undo2, Wand2 } from "lucide-react";
+import { CalendarOff, RefreshCw, Send, TriangleAlert, Undo2, Wand2 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { termName } from "../../lib/format";
+import { thisMonday } from "../../lib/week";
+import { WeekNav } from "../../components/WeekNav";
 import { usePeriod } from "../../lib/period";
 import {
   Badge,
@@ -40,6 +42,10 @@ import { AsyncTable } from "./builder/AsyncTable";
 import { DiagnosticsPanel } from "./builder/DiagnosticsPanel";
 import { RosterPanel } from "./builder/RosterPanel";
 import { CoveragePanel } from "./builder/CoveragePanel";
+import {
+  awayTaIds,
+  buildWeekOverlay,
+} from "./builder/weekOverlay";
 import { TaDrawer } from "./builder/TaDrawer";
 import { PublishModal } from "./builder/PublishModal";
 
@@ -134,6 +140,7 @@ export function BuilderScreen({
   const [generating, setGenerating] = useState(false);
   const [addedTaIds, setAddedTaIds] = useState<string[]>([]);
   const [dragName, setDragName] = useState<string | null>(null);
+  const [weekStart, setWeekStart] = useState(thisMonday);
 
   const undoStack = useRef<Array<() => Promise<void>>>([]);
   const [undoCount, setUndoCount] = useState(0);
@@ -166,6 +173,17 @@ export function BuilderScreen({
       ? `${periodInfo.course.courseId} · ${termName(periodInfo.period.term)}`
       : "",
   };
+
+  // The board is a repeating template; this is what is different about
+  // the selected week. Skipped under a fixture so previews stay pure.
+  const weekData = useQuery(
+    api.weeks.builderWeek,
+    skip ? "skip" : { periodRef, weekStart },
+  );
+  const week = useMemo(
+    () => (weekData ? buildWeekOverlay(weekData) : null),
+    [weekData],
+  );
 
   const model: BuilderModel | null = useMemo(() => {
     if (!data.shifts || !data.dutyTypes || !data.roster || !data.board) return null;
@@ -403,13 +421,25 @@ export function BuilderScreen({
   return (
     <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       <div className="flex min-w-0 flex-col gap-4">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="text-xl font-semibold tracking-[-0.02em]">Builder</div>
           {published ? (
             <Badge tone="green">Published</Badge>
           ) : (
             <Badge tone="neutral" dot={false}>
               Draft
+            </Badge>
+          )}
+          {/* The board is a repeating template. Paging to a week reveals what
+              is actually true of it: who is away, who is standing in, which
+              shifts are out of term. */}
+          {!fixture && (
+            <WeekNav weekStart={weekStart} onChange={setWeekStart} compact />
+          )}
+          {week && week.absences.length > 0 && (
+            <Badge tone="amber">
+              <CalendarOff size={11} strokeWidth={1.5} aria-hidden />
+              {week.absences.length} away
             </Badge>
           )}
           <div className="text-[12.5px] text-faint">
@@ -449,6 +479,7 @@ export function BuilderScreen({
               <WeekGrid
                 model={model}
                 highlight={highlight}
+                week={week}
                 onOpenTa={setDrawerTa}
                 onToggleLock={(ref) => void onToggleLock(ref)}
                 onRemoveAssignment={(ref) => void doUnassign(ref)}
@@ -477,7 +508,12 @@ export function BuilderScreen({
                 onToggle={(key) => setHighlight((h) => (h === key ? null : key))}
                 onClear={() => setHighlight(null)}
               />
-              <RosterPanel model={model} highlight={highlight} onOpenTa={setDrawerTa} />
+              <RosterPanel
+                model={model}
+                highlight={highlight}
+                awayTaIds={awayTaIds(week)}
+                onOpenTa={setDrawerTa}
+              />
               {/* Approved single-date swaps land here as fill-in slots. */}
               {!fixture && <CoveragePanel periodRef={periodRef} />}
             </div>

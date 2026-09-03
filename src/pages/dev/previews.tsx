@@ -319,6 +319,7 @@ function HoursApprovalPreview() {
 }
 
 function SchedulePreview() {
+  const [weekStart, setWeekStart] = useState(fx.TA_WEEK_START_DATED);
   return (
     <PageFrame>
       <ScheduleView
@@ -330,6 +331,14 @@ function SchedulePreview() {
         pendingSwaps={fx.pendingSwaps}
         coverage={fx.coverageNotices}
         onCancelSwap={() => {}}
+        weekStart={weekStart}
+        onWeekChange={setWeekStart}
+        weekOccurrences={
+          weekStart === fx.TA_WEEK_START_DATED ? fx.weekOccurrences : []
+        }
+        weekExceptions={
+          weekStart === fx.TA_WEEK_START_DATED ? fx.weekExceptions : []
+        }
         onRequestSwap={noop}
         onAddToCalendar={noop}
         addingToCalendar={false}

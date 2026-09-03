@@ -1,5 +1,5 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-import { GripVertical, TriangleAlert } from "lucide-react";
+import { CalendarOff, GripVertical, TriangleAlert } from "lucide-react";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Tooltip } from "../../../components/ui";
 import { firstName, type BuilderModel, type Highlight, type RosterRow } from "./model";
@@ -7,6 +7,8 @@ import { firstName, type BuilderModel, type Highlight, type RosterRow } from "./
 export interface RosterPanelProps {
   model: BuilderModel;
   highlight: Highlight;
+  /** TAs away for part of the selected week. */
+  awayTaIds?: ReadonlySet<string>;
   onOpenTa: (taProfileRef: Id<"taProfiles">) => void;
 }
 
@@ -14,11 +16,13 @@ function RosterRowView({
   row,
   model,
   highlight,
+  away,
   onOpenTa,
 }: {
   row: RosterRow;
   model: BuilderModel;
   highlight: Highlight;
+  away?: boolean;
   onOpenTa: (taProfileRef: Id<"taProfiles">) => void;
 }) {
   const id = row.taProfileRef as string;
@@ -84,6 +88,16 @@ function RosterRowView({
             <TriangleAlert size={11} strokeWidth={1.5} className="text-warn" />
           </Tooltip>
         ) : null}
+        {away ? (
+          <Tooltip label="Away for part of this week">
+            <CalendarOff
+              size={11}
+              strokeWidth={1.5}
+              className="shrink-0 text-warn"
+              aria-label="Away this week"
+            />
+          </Tooltip>
+        ) : null}
         <span className="min-w-12 truncate">{`${hours} / ${cap}h`}</span>
       </span>
     </div>
@@ -91,7 +105,12 @@ function RosterRowView({
 }
 
 /** Draggable roster with per-TA load bars (amber when over cap). */
-export function RosterPanel({ model, highlight, onOpenTa }: RosterPanelProps) {
+export function RosterPanel({
+  model,
+  highlight,
+  awayTaIds,
+  onOpenTa,
+}: RosterPanelProps) {
   const rows = [...model.rosterByTa.values()].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
@@ -125,6 +144,7 @@ export function RosterPanel({ model, highlight, onOpenTa }: RosterPanelProps) {
               row={row}
               model={model}
               highlight={highlight}
+              away={awayTaIds?.has(row.taProfileRef as string)}
               onOpenTa={onOpenTa}
             />
           ))

@@ -30,6 +30,7 @@ import type * as solver_types from "../solver/types.js";
 import type * as ta from "../ta.js";
 import type * as umd from "../umd.js";
 import type * as users from "../users.js";
+import type * as weeks from "../weeks.js";
 
 import type {
   ApiFromModules,
@@ -60,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   ta: typeof ta;
   umd: typeof umd;
   users: typeof users;
+  weeks: typeof weeks;
 }>;
 
 /**

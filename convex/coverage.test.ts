@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayOfIso } from "./coverage";
+import { dayOfIso } from "./lib/week";
 
 describe("dayOfIso", () => {
   it("maps weekdays to their day code", () => {

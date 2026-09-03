@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
+import { CalendarOff, UserRoundCheck } from "lucide-react";
+import { Tooltip } from "../../../components/ui";
+import { coverageFor, type WeekOverlay } from "./weekOverlay";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { DAY_CODES, DAY_SHORT, formatTimeRange } from "../../../lib/format";
 import type { DayCode } from "../../../lib/format";
@@ -20,6 +23,8 @@ const PX_PER_HOUR = 52;
 export interface WeekGridProps {
   model: BuilderModel;
   highlight: Highlight;
+  /** What is different about the selected week; null = the template. */
+  week?: WeekOverlay | null;
   onOpenTa: (taProfileRef: Id<"taProfiles">) => void;
   onToggleLock: (assignmentRef: Id<"assignments">) => void;
   onRemoveAssignment: (assignmentRef: Id<"assignments">) => void;
@@ -46,6 +51,7 @@ function Slot({
   shift,
   span,
   highlight,
+  week,
   onOpenTa,
   onToggleLock,
   onRemoveAssignment,
@@ -55,11 +61,16 @@ function Slot({
   /** Column within the day's overlap cluster; undefined means "alone". */
   span: LaneSpan | undefined;
   highlight: Highlight;
+  week?: WeekOverlay | null;
   onOpenTa: (taProfileRef: Id<"taProfiles">) => void;
   onToggleLock: (assignmentRef: Id<"assignments">) => void;
   onRemoveAssignment: (assignmentRef: Id<"assignments">) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `shift:${shift._id}` });
+  // A shift whose term does not reach this week is shown, but greyed:
+  // hiding it would make the board look wrong rather than empty.
+  const dormant = week?.dormantShiftIds.has(shift._id as string) ?? false;
+  const coverage = coverageFor(week ?? null, shift._id, shift.day);
   const assigned = model.assignmentsByShift.get(shift._id as string) ?? [];
   const missing = Math.max(0, shift.requiredCount - assigned.length);
   const unfilled = missing > 0;
@@ -68,6 +79,12 @@ function Slot({
     ? model.sectionById.get(shift.sectionRef as string)
     : undefined;
   const duty = model.dutyById.get(shift.dutyTypeRef as string);
+
+  const coverNote = coverage
+    ? coverage.coverName
+      ? `${coverage.coverName} covers for ${coverage.absentName}`
+      : `${coverage.absentName} out — nobody covering yet`
+    : null;
 
   const startMin = shift.startMin ?? model.gridStartMin;
   const endMin = shift.endMin ?? startMin + 60;
@@ -91,7 +108,9 @@ function Slot({
   return (
     <div
       ref={setNodeRef}
-      title={`${label} · ${timeText}${hint.text ? ` · ${hint.text}` : ""}`}
+      title={[label, timeText, hint.text, coverNote, dormant ? "Not running this week" : null]
+        .filter(Boolean)
+        .join(" · ")}
       className="absolute box-border flex flex-col gap-1 overflow-hidden rounded-[8px] px-[7px] py-[5px] transition-[box-shadow,background] duration-150"
       style={{
         top,
@@ -109,6 +128,8 @@ function Slot({
             ? "1px solid rgba(255,255,255,0.08)"
             : "1px solid rgba(125,147,178,0.25)",
         boxShadow: ring,
+        // Out of term this week: still on the board, visibly not in play.
+        opacity: dormant ? 0.4 : 1,
       }}
     >
       <div className="flex min-w-0 items-center gap-x-[6px] whitespace-nowrap text-[10.5px] leading-3">
@@ -119,7 +140,26 @@ function Slot({
           {label}
         </span>
         <span className="truncate text-faint">{timeText}</span>
-        {narrow ? null : (
+        {dormant ? (
+          <CalendarOff
+            size={11}
+            strokeWidth={1.5}
+            className="ml-auto shrink-0 text-faint"
+            aria-hidden
+          />
+        ) : coverNote ? (
+          <Tooltip label={coverNote}>
+            <UserRoundCheck
+              size={11}
+              strokeWidth={1.5}
+              className={
+                "ml-auto shrink-0 " +
+                (coverage?.coverName ? "text-ok" : "text-warn")
+              }
+              aria-label={coverNote}
+            />
+          </Tooltip>
+        ) : narrow ? null : (
           <span className="ml-auto truncate" style={{ color: hint.color }}>
             {hint.text}
           </span>
@@ -189,6 +229,7 @@ function Slot({
 export function WeekGrid({
   model,
   highlight,
+  week = null,
   onOpenTa,
   onToggleLock,
   onRemoveAssignment,
@@ -270,6 +311,7 @@ export function WeekGrid({
                   shift={shift}
                   span={laneSpans.get(shift._id as string)}
                   highlight={highlight}
+                  week={week}
                   onOpenTa={onOpenTa}
                   onToggleLock={onToggleLock}
                   onRemoveAssignment={onRemoveAssignment}

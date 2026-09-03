@@ -13,6 +13,7 @@ import {
   ArrowLeftRight,
   CalendarClock,
   CalendarDays,
+  CalendarOff,
   CalendarPlus,
   Inbox,
   UserRoundCheck,
@@ -49,6 +50,17 @@ import {
   Tooltip,
   toast,
 } from "../../components/ui";
+import { WeekNav } from "../../components/WeekNav";
+import {
+  dateOfDayInWeek,
+  dayOfIso,
+  mondayOf,
+
+  weeklyShiftRunsInWeek,
+  thisMonday,
+  todayIso,
+  weekRange,
+} from "../../lib/week";
 import SwapRequestModal, { type SwapModalTarget } from "./SwapRequestModal";
 
 type ScheduleResult = FunctionReturnType<typeof api.ta.getSchedule>;
@@ -128,12 +140,6 @@ function hourLabel(h: number, isFirst: boolean): string {
   return String(h12);
 }
 
-function todayIso(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 /** Active period for the signed-in TA: context selection, else first period
  *  where they have a profile (api.periods.listMine). */
 function useMyTaPeriod() {
@@ -191,69 +197,156 @@ function swapTargetFor(item: ScheduleItem): SwapModalTarget {
 /* Weekly grid                                                         */
 /* ------------------------------------------------------------------ */
 
+/**
+ * One meeting on one dated day.
+ *
+ * The grid used to draw the repeating week straight from assignments, which
+ * cannot express anything that happens to a *particular* week: a date the TA
+ * is away, a meeting somebody else is covering, a one-off event. Every block
+ * is now a dated occurrence, so those states have somewhere to live.
+ */
+export interface WeekOccurrence {
+  key: string;
+  date: string;
+  day: DayCode;
+  startMin: number;
+  endMin: number;
+  title: string;
+  color: string;
+  state: "normal" | "off" | "covering" | "excepted";
+  /** The other party in a coverage. */
+  otherName: string | null;
+  /** Why the TA marked themselves away, for "excepted". */
+  note: string | null;
+  /** Null when the TA has no assignment of their own to swap (covering). */
+  swapTarget: SwapModalTarget | null;
+}
+
+const OCCURRENCE_NOTE: Record<WeekOccurrence["state"], string | null> = {
+  normal: null,
+  off: "Not you this week",
+  covering: "You are covering",
+  excepted: "You marked yourself away",
+};
+
+/** Place this week's weekly + one-off items on their real dates. */
+export function occurrencesFromItems(
+  items: ScheduleItem[],
+  weekStart: string,
+): WeekOccurrence[] {
+  const week = weekRange(weekStart);
+  const out: WeekOccurrence[] = [];
+  for (const item of items) {
+    const s = item.shift;
+    if (s.startMin === undefined || s.endMin === undefined) continue;
+    let date: string | null = null;
+    let day: DayCode | null = null;
+    if (s.recurrence === "weekly" && s.day) {
+      if (!weeklyShiftRunsInWeek(s, week)) continue;
+      day = s.day as DayCode;
+      date = dateOfDayInWeek(week.start, day);
+    } else if (s.recurrence === "once" && s.date) {
+      if (s.date < week.start || s.date > week.end) continue;
+      day = dayOfIso(s.date);
+      date = s.date;
+    }
+    if (!date || !day) continue;
+    out.push({
+      key: `${item.assignment._id}:${date}`,
+      date,
+      day,
+      startMin: s.startMin,
+      endMin: s.endMin,
+      title: occurrenceTitle(item.dutyType.name, s.description),
+      color: item.dutyType.color || "#7d93b2",
+      state: "normal",
+      otherName: null,
+      note: null,
+      swapTarget: swapTargetFor(item),
+    });
+  }
+  return out;
+}
+
+/** "Discussion 0101" without saying "Discussion" twice. */
+export function occurrenceTitle(dutyTypeName: string, description?: string): string {
+  const detail = description ? shortShiftName(description, dutyTypeName) : "";
+  return detail && detail !== dutyTypeName ? `${dutyTypeName} ${detail}` : dutyTypeName;
+}
+
 const SLOT_PX = 22; // px per 30 minutes (board recipe)
 
 function WeeklyGrid({
-  items,
+  occurrences,
+  weekStart,
   onRequestSwap,
 }: {
-  items: ScheduleItem[];
+  occurrences: WeekOccurrence[];
+  weekStart: string;
   onRequestSwap: (t: SwapModalTarget) => void;
 }) {
-  const weekly = items.filter(
-    (i) =>
-      i.shift.recurrence === "weekly" &&
-      i.shift.day !== undefined &&
-      i.shift.startMin !== undefined &&
-      i.shift.endMin !== undefined,
-  );
+  const week = weekRange(weekStart);
+  const today = todayIso();
 
   let rangeStart = 8 * 60;
   let rangeEnd = 20 * 60;
-  for (const i of weekly) {
-    rangeStart = Math.min(rangeStart, Math.floor((i.shift.startMin ?? rangeStart) / 60) * 60);
-    rangeEnd = Math.max(rangeEnd, Math.ceil((i.shift.endMin ?? rangeEnd) / 60) * 60);
+  for (const o of occurrences) {
+    rangeStart = Math.min(rangeStart, Math.floor(o.startMin / 60) * 60);
+    rangeEnd = Math.max(rangeEnd, Math.ceil(o.endMin / 60) * 60);
   }
   const slots = (rangeEnd - rangeStart) / 30;
   const hours: number[] = [];
   for (let h = rangeStart / 60; h < rangeEnd / 60; h++) hours.push(h);
 
-  const byDay = new Map<DayCode, ScheduleItem[]>();
+  const byDay = new Map<DayCode, WeekOccurrence[]>();
   for (const d of DAY_CODES) byDay.set(d, []);
-  for (const i of weekly) byDay.get(i.shift.day as DayCode)?.push(i);
+  for (const o of occurrences) byDay.get(o.day)?.push(o);
 
-  // Blocks are absolutely positioned by time, so two assignments in the same
-  // slot would paint on top of each other. Split each day's overlaps into
-  // side-by-side lanes; a block with no neighbour still spans the column.
+  // Blocks are absolutely positioned by time, so two in the same slot would
+  // paint on top of each other. Split each day overlap set into side-by-side
+  // lanes; a block with no neighbour still spans the column.
   const laneSpans = new Map<string, LaneSpan>();
   for (const d of DAY_CODES) {
-    const dayItems = (byDay.get(d) ?? []).map((i) => ({
-      id: i.assignment._id as string,
-      start: i.shift.startMin ?? rangeStart,
-      end: i.shift.endMin ?? (i.shift.startMin ?? rangeStart) + 30,
+    const dayItems = (byDay.get(d) ?? []).map((o) => ({
+      id: o.key,
+      start: o.startMin,
+      end: o.endMin,
     }));
     for (const [id, span] of assignLanes(dayItems)) laneSpans.set(id, span);
   }
 
   return (
     <div className="overflow-hidden rounded-[12px] border border-line bg-surface">
-      {/* Day header */}
+      {/* Day header — dated, so "this week" is a fact rather than a guess. */}
       <div className="grid h-[34px] grid-cols-[56px_repeat(5,1fr)] items-center border-b border-line">
         <div />
-        {DAY_CODES.map((d) => {
-          const dayItems = byDay.get(d) ?? [];
-          const total = dayItems.reduce(
-            (s, i) => s + ((i.shift.endMin ?? 0) - (i.shift.startMin ?? 0)) / 60,
-            0,
-          );
+        {week.days.map(({ day, date }) => {
+          const dayItems = byDay.get(day) ?? [];
+          // Hours the TA is actually on the hook for: a meeting somebody else
+          // is covering does not count toward their week.
+          const total = dayItems
+            .filter((o) => o.state !== "off")
+            .reduce((sum, o) => sum + (o.endMin - o.startMin) / 60, 0);
+          const isToday = date === today;
           return (
             <div
-              key={d}
-              className="border-l border-[rgba(255,255,255,0.06)] pl-2.5 text-[12.5px] font-medium text-[#C9C9CF]"
+              key={day}
+              className={
+                "flex items-baseline gap-1.5 border-l border-[rgba(255,255,255,0.06)] pl-2.5 pr-2 text-[12.5px] " +
+                (isToday ? "font-semibold text-ink" : "font-medium text-[#C9C9CF]")
+              }
             >
-              {DAY_SHORT[d]}
+              <span>{DAY_SHORT[day]}</span>
+              <span
+                className={
+                  "font-mono text-[11.5px] font-normal " +
+                  (isToday ? "text-ink" : "text-faint")
+                }
+              >
+                {Number(date.slice(8, 10))}
+              </span>
               {total > 0 ? (
-                <span className="ml-1.5 font-mono text-[12px] font-normal text-faint">
+                <span className="ml-auto font-mono text-[12px] font-normal text-faint">
                   {formatHourCount(total)}
                 </span>
               ) : null}
@@ -274,8 +367,12 @@ function WeeklyGrid({
             </div>
           ))}
         </div>
-        {DAY_CODES.map((d) => (
-          <div key={d} className="relative border-l border-[rgba(255,255,255,0.06)]">
+        {week.days.map(({ day, date }) => (
+          <div
+            key={day}
+            className="relative border-l border-[rgba(255,255,255,0.06)]"
+            style={date === today ? { background: "rgba(255,255,255,0.022)" } : undefined}
+          >
             {Array.from({ length: slots }, (_, s) => (
               <div
                 key={s}
@@ -286,51 +383,90 @@ function WeeklyGrid({
                 }}
               />
             ))}
-            {(byDay.get(d) ?? []).map((item) => {
-              const start = item.shift.startMin ?? rangeStart;
-              const end = item.shift.endMin ?? start + 30;
-              const top = ((start - rangeStart) / 30) * SLOT_PX + 1;
-              const height = ((end - start) / 30) * SLOT_PX - 3;
-              const color = item.dutyType.color || "#7d93b2";
-              const { left, width } = laneStyle(
-                laneSpans.get(item.assignment._id as string),
-              );
+            {(byDay.get(day) ?? []).map((o) => {
+              const top = ((o.startMin - rangeStart) / 30) * SLOT_PX + 1;
+              const height = ((o.endMin - o.startMin) / 30) * SLOT_PX - 3;
+              const { left, width } = laneStyle(laneSpans.get(o.key));
+              // Handed off: keep the block so the TA can see it is not simply
+              // gone, but drain the colour so it never reads as work to attend.
+              const off = o.state === "off";
+              const accent = off ? "#7d7d86" : o.color;
+              const ring =
+                o.state === "excepted"
+                  ? "inset 0 0 0 1px rgba(245,165,36,0.75)"
+                  : `inset 0 0 0 1px ${hexToRgba(accent, off ? 0.28 : 0.35)}`;
+              const stateNote = OCCURRENCE_NOTE[o.state];
+              const tip = [
+                o.title,
+                formatTimeRange(o.startMin, o.endMin),
+                o.state === "off" && o.otherName
+                  ? `${o.otherName} is covering`
+                  : stateNote,
+                o.note,
+              ]
+                .filter(Boolean)
+                .join(" · ");
               return (
                 <div
-                  key={item.assignment._id}
+                  key={o.key}
+                  title={tip}
                   className="group absolute box-border overflow-hidden rounded-[6px] px-2 py-[5px]"
                   style={{
                     top,
                     height,
                     left,
                     width,
-                    background: hexToRgba(color, 0.16),
-                    boxShadow: `inset 0 0 0 1px ${hexToRgba(color, 0.35)}`,
+                    background: hexToRgba(accent, off ? 0.07 : 0.16),
+                    boxShadow: ring,
+                    // Standing in for somebody is not the same commitment as
+                    // your own shift, and the block is too short for a label —
+                    // a green left edge separates them at a glance.
+                    borderLeft:
+                      o.state === "covering" ? "3px solid var(--color-ok)" : undefined,
                   }}
                 >
                   {/* pr-5 keeps the title clear of the hover swap button. */}
                   <div className="flex min-w-0 flex-col gap-px pr-5">
-                    <span className="truncate text-[11px] font-medium text-ink">
-                      {item.dutyType.name}
-                      {item.shift.description
-                        ? ` ${shortShiftName(item.shift.description, item.dutyType.name)}`
-                        : ""}
+                    <span
+                      className={
+                        "truncate text-[11px] font-medium " +
+                        (off ? "text-faint line-through" : "text-ink")
+                      }
+                    >
+                      {o.title}
                     </span>
                     {height >= 34 ? (
-                      <span className="truncate font-mono text-[10.5px]" style={{ color }}>
-                        {formatTimeRange(start, end)}
+                      <span
+                        className="truncate font-mono text-[10.5px]"
+                        style={{ color: accent }}
+                      >
+                        {formatTimeRange(o.startMin, o.endMin)}
+                      </span>
+                    ) : null}
+                    {height >= 50 && stateNote ? (
+                      <span
+                        className={
+                          "truncate text-[10.5px] " +
+                          (o.state === "excepted" ? "text-warn-text" : "text-faint")
+                        }
+                      >
+                        {o.state === "off" && o.otherName
+                          ? `${o.otherName} covers`
+                          : stateNote}
                       </span>
                     ) : null}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onRequestSwap(swapTargetFor(item))}
-                    title="Request swap"
-                    aria-label={`Request swap for ${item.dutyType.name}`}
-                    className="absolute top-1 right-1 grid size-5 cursor-pointer place-items-center rounded-[5px] bg-black/30 text-muted opacity-0 transition-opacity duration-100 group-hover:opacity-100 hover:bg-black/50 hover:text-ink"
-                  >
-                    <ArrowLeftRight size={11} strokeWidth={1.5} />
-                  </button>
+                  {o.swapTarget && o.state !== "off" ? (
+                    <button
+                      type="button"
+                      onClick={() => onRequestSwap(o.swapTarget as SwapModalTarget)}
+                      title="Request swap"
+                      aria-label={`Request swap for ${o.title}`}
+                      className="absolute top-1 right-1 grid size-5 cursor-pointer place-items-center rounded-[5px] bg-black/30 text-muted opacity-0 transition-opacity duration-100 group-hover:opacity-100 hover:bg-black/50 hover:text-ink"
+                    >
+                      <ArrowLeftRight size={11} strokeWidth={1.5} />
+                    </button>
+                  ) : null}
                 </div>
               );
             })}
@@ -354,6 +490,17 @@ export interface ScheduleViewProps {
   pendingSwaps: PendingSwap[];
   /** One-off substitutions touching this TA, either direction. */
   coverage?: CoverageNotice[];
+  /** ISO Monday of the visible week. Defaults to the current one. */
+  weekStart?: string;
+  onWeekChange?: (weekStart: string) => void;
+  /**
+   * This week's dated meetings. Omitted in previews and while the week query
+   * is still loading, in which case the generic repeating week is derived
+   * from `items` so the grid is never blank.
+   */
+  weekOccurrences?: WeekOccurrence[];
+  /** Date exceptions overlapping the visible week. */
+  weekExceptions?: Array<{ id: string; startDate: string; endDate: string; reason: string }>;
   onRequestSwap: (target: SwapModalTarget) => void;
   /** Omitted in previews; hides the withdraw button when absent. */
   onCancelSwap?: (swapId: string) => void;
@@ -369,12 +516,20 @@ export function ScheduleView({
   maxHoursPerWeek,
   pendingSwaps,
   coverage = [],
+  weekStart: weekStartProp,
+  onWeekChange,
+  weekOccurrences,
+  weekExceptions = [],
   onRequestSwap,
   onCancelSwap,
   onAddToCalendar,
   addingToCalendar,
 }: ScheduleViewProps) {
   const today = todayIso();
+  const weekStart = weekStartProp ?? mondayOf(today);
+  // Falling back to the repeating week keeps the grid populated while the
+  // dated query resolves, and lets the preview harness render without it.
+  const occurrences = weekOccurrences ?? occurrencesFromItems(items, weekStart);
 
   const weeklyHours = items
     .filter((i) => i.shift.recurrence === "weekly")
@@ -448,7 +603,29 @@ export function ScheduleView({
         />
       ) : (
         <>
-          <WeeklyGrid items={items} onRequestSwap={onRequestSwap} />
+          {onWeekChange ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <WeekNav weekStart={weekStart} onChange={onWeekChange} />
+              {weekExceptions.length > 0 ? (
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  {weekExceptions.map((x) => (
+                    <Badge key={x.id} tone="amber">
+                      <CalendarOff size={11} strokeWidth={1.5} aria-hidden />
+                      Away {formatIsoDate(x.startDate)}
+                      {x.endDate !== x.startDate ? ` – ${formatIsoDate(x.endDate)}` : ""}
+                      {x.reason ? ` · ${x.reason}` : ""}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <WeeklyGrid
+            occurrences={occurrences}
+            weekStart={weekStart}
+            onRequestSwap={onRequestSwap}
+          />
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card title="Upcoming events">
@@ -670,6 +847,14 @@ export default function TaSchedule() {
   const [swapTarget, setSwapTarget] = useState<SwapModalTarget | null>(null);
   const [swapOpen, setSwapOpen] = useState(false);
   const [minting, setMinting] = useState(false);
+  const [weekStart, setWeekStart] = useState(thisMonday);
+
+  // The dated week: which meetings actually happen, who is away, who is
+  // covering. The repeating week cannot express any of that.
+  const week = useQuery(
+    api.weeks.taWeek,
+    pick.taProfileId ? { taProfileRef: pick.taProfileId, weekStart } : "skip",
+  );
 
   if (pick.loading) {
     return (
@@ -749,6 +934,42 @@ export default function TaSchedule() {
           label: c.label,
           role: c.role,
           otherName: c.otherName,
+        }))}
+        weekStart={weekStart}
+        onWeekChange={setWeekStart}
+        weekOccurrences={
+          week
+            ? week.occurrences.map((o) => ({
+                key: o.key,
+                date: o.date,
+                day: (o.day ?? "M") as DayCode,
+                startMin: o.shift.startMin ?? 0,
+                endMin: o.shift.endMin ?? 0,
+                title: occurrenceTitle(o.dutyType.name, o.shift.description),
+                color: o.dutyType.color || "#7d93b2",
+                state: o.state,
+                otherName: o.otherName,
+                note: o.exceptionReason,
+                // A meeting being covered belongs to somebody else this week,
+                // so there is nothing of the TA's own to swap out of it.
+                swapTarget: o.assignment
+                  ? {
+                      assignmentRef: o.assignment._id,
+                      label: occurrenceTitle(o.dutyType.name, o.shift.description),
+                      detail: formatTimeRange(
+                        o.shift.startMin ?? 0,
+                        o.shift.endMin ?? 0,
+                      ),
+                    }
+                  : null,
+              }))
+            : undefined
+        }
+        weekExceptions={(week?.exceptions ?? []).map((x) => ({
+          id: x._id as string,
+          startDate: x.startDate,
+          endDate: x.endDate,
+          reason: x.reason,
         }))}
         onRequestSwap={(t) => {
           setSwapTarget(t);
