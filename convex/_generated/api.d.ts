@@ -23,6 +23,7 @@ import type * as periods from "../periods.js";
 import type * as roster from "../roster.js";
 import type * as seed from "../seed.js";
 import type * as shifts from "../shifts.js";
+import type * as smtp from "../smtp.js";
 import type * as solver_solve from "../solver/solve.js";
 import type * as solver_types from "../solver/types.js";
 import type * as ta from "../ta.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   roster: typeof roster;
   seed: typeof seed;
   shifts: typeof shifts;
+  smtp: typeof smtp;
   "solver/solve": typeof solver_solve;
   "solver/types": typeof solver_types;
   ta: typeof ta;

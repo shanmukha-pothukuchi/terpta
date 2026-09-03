@@ -24,7 +24,7 @@ export interface WeekGridProps {
 
 function Legend({ swatch, label }: { swatch: ReactNode; label: string }) {
   return (
-    <div className="flex items-center gap-[6px] text-[11.5px] text-muted">
+    <div className="flex shrink-0 items-center gap-[6px] whitespace-nowrap text-[11.5px] text-muted">
       {swatch}
       {label}
     </div>
@@ -183,12 +183,11 @@ export function WeekGrid({ model, highlight, onOpenTa, onToggleLock }: WeekGridP
   return (
     <div className="overflow-hidden rounded-[12px] border border-line bg-surface">
       <div className="flex h-10 items-center gap-[10px] border-b border-line px-[14px]">
-        <div className="text-[13px] font-medium">Recurring</div>
-        <div className="text-xs text-faint">
+        <div className="shrink-0 text-[13px] font-medium">Recurring</div>
+        <div className="min-w-0 flex-1 truncate text-[12px] text-faint">
           {sectionCount} discussion sections · {otherCount} office-hour blocks ·{" "}
           {filled} of {model.weekly.length} filled
         </div>
-        <div className="flex-1" />
         <Legend
           swatch={<div className="h-2 w-2 rounded-[2px] bg-[rgba(226,24,51,0.5)]" />}
           label="Conflict"

@@ -326,12 +326,18 @@ export function ScheduleView({
         actions={
           <>
             {published && maxHoursPerWeek !== null ? (
-              <div className="flex h-8 items-center gap-2 rounded-[9px] border border-line bg-[rgba(255,255,255,0.03)] px-3">
-                <span className="font-mono text-[12.5px] text-ink">
+              <div className="flex h-8 shrink-0 items-center gap-2 rounded-[9px] border border-line bg-[rgba(255,255,255,0.03)] px-3">
+                <span className="shrink-0 font-mono text-[12.5px] text-ink">
                   {formatHours(weeklyHours, maxHoursPerWeek)}
                 </span>
-                <span className="text-[12px] text-faint">per week</span>
-                <ProgressBar value={weeklyHours} max={maxHoursPerWeek} className="w-16" />
+                <span className="shrink-0 whitespace-nowrap text-[12px] text-faint">
+                  per week
+                </span>
+                <ProgressBar
+                  value={weeklyHours}
+                  max={maxHoursPerWeek}
+                  className="w-16 shrink-0"
+                />
               </div>
             ) : null}
             <Button

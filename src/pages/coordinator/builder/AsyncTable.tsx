@@ -86,8 +86,8 @@ export function AsyncTable({
   return (
     <div className="overflow-hidden rounded-[12px] border border-line bg-surface">
       <div className="flex h-10 items-center gap-[10px] border-b border-line px-[14px]">
-        <div className="text-[13px] font-medium">Async allocation</div>
-        <div className="text-xs text-faint">
+        <div className="shrink-0 text-[13px] font-medium">Async allocation</div>
+        <div className="min-w-0 flex-1 truncate text-[12px] text-faint">
           Hours per TA · async hours count toward the weekly cap spread over the
           semester
         </div>
@@ -100,11 +100,11 @@ export function AsyncTable({
         {asyncShifts.map((shift) => {
           const duty = model.dutyById.get(shift.dutyTypeRef as string);
           return (
-            <div key={shift._id as string} className="flex flex-col gap-[1px]">
-              <span className="font-medium text-[#C9C9CF]">
+            <div key={shift._id as string} className="flex min-w-0 flex-col gap-[1px]">
+              <span className="truncate font-medium text-[#C9C9CF]">
                 {shift.description ?? duty?.name ?? "Async duty"}
               </span>
-              <span className="font-mono text-[10.5px]">
+              <span className="truncate font-mono text-[10.5px]">
                 {shift.hoursRequired ?? 0}h per TA · {shift.requiredCount} TAs
                 {shift.dueDate ? ` · due ${formatDate(shift.dueDate)}` : ""}
               </span>

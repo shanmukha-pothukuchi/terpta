@@ -810,7 +810,7 @@ export function Stepper({ steps, current, className }: { steps: string[]; curren
                 !done && !active && "bg-[rgba(255,255,255,0.05)] text-faint shadow-[inset_0_0_0_1px_rgba(255,255,255,0.10)]",
               )}
             >
-              {done ? <Check size={11} strokeWidth={2} aria-hidden /> : i + 1}
+              {done ? <Check size={11} strokeWidth={1.5} aria-hidden /> : i + 1}
             </span>
             <span className={cx("text-[12.5px]", active ? "font-medium text-ink" : done ? "text-muted" : "text-faint")}>
               {label}

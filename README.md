@@ -37,10 +37,17 @@ On Windows PowerShell, set the env var with `$env:CONVEX_AGENT_MODE = 'anonymous
 | `WORKOS_CLIENT_ID` | Convex server env | WorkOS client id, for token verification |
 | `WORKOS_API_KEY` | Convex server env | WorkOS secret API key |
 | `WORKOS_WEBHOOK_SECRET` | Convex server env | Verifies WorkOS webhook signatures |
-| `RESEND_API_KEY` | Convex server env (optional) | Enables email notifications via Resend |
+| `SMTP_USER` / `SMTP_PASS` | Convex server env (optional) | Sends email over SMTP. For Gmail, `SMTP_PASS` is an [app password](https://myaccount.google.com/apppasswords), not the account password |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_FROM` | Convex server env (optional) | Defaults: `smtp.gmail.com`, `465`, `TerpTA <SMTP_USER>` |
+| `RESEND_API_KEY` | Convex server env (optional) | Email via Resend, used only when `SMTP_*` is unset |
 | `EXPORT_TOKEN_SECRET` | Convex server env | Signs tokenized calendar/CSV export links |
 
 Set server-side vars with `npx convex env set NAME value` (or the Convex dashboard).
+
+Email picks the first configured transport: SMTP, then Resend, then a console
+log in `npx convex logs` when neither is set — so nothing depends on a paid
+service to run. SMTP lives in `convex/smtp.ts`, which uses the Convex Node
+runtime (`"use node"`) because SMTP needs raw TCP/TLS sockets.
 
 ## Deployment
 

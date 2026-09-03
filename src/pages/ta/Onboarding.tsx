@@ -216,7 +216,7 @@ function WeekPreview({ blocks }: { blocks: ClassBlock[] }) {
                   >
                     {height >= 16 ? (
                       <div className="flex items-center gap-1 px-1 pt-0.5">
-                        <Lock size={8} strokeWidth={1.5} className="shrink-0 text-classblue" aria-hidden />
+                        <Lock size={10} strokeWidth={1.5} className="shrink-0 text-classblue" aria-hidden />
                         <span className="truncate font-mono text-[9px] text-[#B7C6DC]">
                           {b.label ?? ""}
                         </span>

@@ -133,13 +133,17 @@ export function RosterView({
       ) : (
         <Surface className="overflow-hidden">
           <div className="flex h-10 items-center gap-2.5 border-b border-line px-3.5">
-            <span className="text-[13px] font-medium text-ink">TAs</span>
-            <span className="text-[12px] text-faint">
+            <span className="shrink-0 text-[13px] font-medium text-ink">TAs</span>
+            <span className="min-w-0 flex-1 truncate text-[12px] text-faint">
               {submitted} of {rows.length} submitted availability
             </span>
-            <span className="flex-1" />
-            <ProgressBar value={submitted} max={rows.length} tone="ok" className="w-28" />
-            <span className="font-mono text-[11px] text-muted">
+            <ProgressBar
+              value={submitted}
+              max={rows.length}
+              tone="ok"
+              className="w-28 shrink-0"
+            />
+            <span className="shrink-0 font-mono text-[11px] text-muted">
               {submitted}/{rows.length}
             </span>
           </div>

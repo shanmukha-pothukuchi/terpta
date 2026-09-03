@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 // The Convex runtime exposes process.env; @types/node is not installed in
 // this project, so declare the minimal shape locally (module-scoped).
@@ -8,8 +9,10 @@ declare const process: { env: Record<string, string | undefined> };
 /**
  * Fire-and-forget email sender.
  *
- * - If RESEND_API_KEY is set, POSTs to the Resend API.
- * - Otherwise logs the payload (dev mode).
+ * Picks the first configured transport:
+ * - SMTP_USER + SMTP_PASS -> convex/smtp.ts (Node runtime; Gmail app password).
+ * - RESEND_API_KEY        -> the Resend HTTP API.
+ * - neither               -> logs the payload (dev mode).
  * - NEVER throws: an email failure must not break the calling workflow
  *   (nudges, notifications, etc.). Failures are logged instead.
  */
@@ -20,11 +23,20 @@ export const send = internalAction({
     text: v.string(),
   },
   returns: v.null(),
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      try {
+        await ctx.runAction(internal.smtp.sendMail, args);
+      } catch (err) {
+        console.error("[emails.send] SMTP delivery failed:", err);
+      }
+      return null;
+    }
+
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
       console.log(
-        `[emails.send] RESEND_API_KEY not set — would send to=${args.to} ` +
+        `[emails.send] no SMTP_* or RESEND_API_KEY — would send to=${args.to} ` +
           `subject=${JSON.stringify(args.subject)} text=${JSON.stringify(args.text)}`,
       );
       return null;
