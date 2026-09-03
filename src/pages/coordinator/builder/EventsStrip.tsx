@@ -10,7 +10,7 @@ import { EmptyState } from "../../../components/ui";
 import { CalendarX2 } from "lucide-react";
 import { AssignChip } from "./AssignChip";
 import { lighten, withAlpha } from "../../../lib/color";
-import { firstName, type BuilderModel, type Highlight, type ShiftRow } from "./model";
+import { type BuilderModel, type Highlight, type ShiftRow } from "./model";
 
 export interface EventsStripProps {
   model: BuilderModel;
@@ -103,7 +103,7 @@ function EventCard({
           const conflicts = model.conflictsByAssignment.get(a._id as string) ?? [];
           const conflict = conflicts.length > 0;
           const over = model.overTaIds.has(a.taProfileRef as string);
-          const name = firstName(model.taName(a.taProfileRef));
+          const name = model.taShort(a.taProfileRef);
           const lit =
             (highlight === "conflict" && conflict) ||
             (highlight === "over" && over) ||

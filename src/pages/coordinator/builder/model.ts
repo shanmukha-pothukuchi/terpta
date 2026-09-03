@@ -43,6 +43,10 @@ export interface BuilderModel {
   underTaIds: Set<string>;
   zeroTaIds: Set<string>;
   taName: (id: Id<"taProfiles">) => string;
+  /** Full name → the shortest form that is still unique on this roster. */
+  shortName: (fullName: string) => string;
+  /** The same, by profile id. */
+  taShort: (id: Id<"taProfiles">) => string;
   rosterByTa: Map<string, RosterRow>;
   dutyById: Map<string, DutyType>;
   sectionById: Map<string, BoardData["sections"][number]>;
@@ -116,6 +120,12 @@ export function buildModel(
   const rosterByTa = new Map(roster.map((r) => [r.taProfileRef as string, r]));
   const taName = (id: Id<"taProfiles">) =>
     rosterByTa.get(id as string)?.name ?? "(unknown)";
+  // Built from the whole roster, not from who is assigned: a name is
+  // ambiguous because two people answer to it, not because both are booked.
+  const shortNames = shortNameMap(roster.map((r) => r.name));
+  const shortName = (fullName: string) =>
+    shortNames.get(fullName) ?? firstName(fullName);
+  const taShort = (id: Id<"taProfiles">) => shortName(taName(id));
 
   // Default window is 8 AM – 9 PM so evening office hours land on the grid
   // instead of off the bottom of it. Real shifts still widen it either way.
@@ -142,6 +152,8 @@ export function buildModel(
     underTaIds,
     zeroTaIds,
     taName,
+    shortName,
+    taShort,
     rosterByTa,
     dutyById,
     sectionById,
@@ -172,9 +184,54 @@ export function weeklyLaneSpans(model: BuilderModel): Map<string, LaneSpan> {
   return spans;
 }
 
-/** First name only — chips read like the board ("Priya", not full names). */
+/**
+ * First name only — chips read like the board ("Priya", not full names).
+ *
+ * Trimmed first: a name stored with a leading space split to an empty
+ * string, and the chip rendered blank.
+ */
 export function firstName(name: string): string {
-  return name.split(/\s+/)[0] ?? name;
+  return name.trim().split(/\s+/)[0] || name;
+}
+
+/** "Priya Shah" → "Priya S."; a one-word name keeps its one word. */
+function withInitial(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return parts[0] ?? name;
+  const initial = parts[parts.length - 1][0];
+  return `${parts[0]} ${initial.toUpperCase()}.`;
+}
+
+/**
+ * The shortest name that still says who somebody is.
+ *
+ * A board of first names is easy to read right up until two TAs share one,
+ * at which point "Sreeram" on two chips is worse than useless. Everyone
+ * unambiguous keeps their first name; the ones who collide gain a last
+ * initial, and if that still collides they get their whole name. Nobody
+ * else's chip grows to pay for it.
+ */
+export function shortNameMap(names: Iterable<string>): Map<string, string> {
+  const all = [...new Set(names)].filter((n) => n.trim().length > 0);
+  const count = (values: string[]) => {
+    const m = new Map<string, number>();
+    for (const v of values) m.set(v.toLowerCase(), (m.get(v.toLowerCase()) ?? 0) + 1);
+    return m;
+  };
+
+  const firstCounts = count(all.map(firstName));
+  const draft = new Map<string, string>();
+  for (const name of all) {
+    const first = firstName(name);
+    draft.set(name, (firstCounts.get(first.toLowerCase()) ?? 0) > 1 ? withInitial(name) : first);
+  }
+
+  // Two Sreeram P.s, or a TA with no surname to take an initial from.
+  const draftCounts = count([...draft.values()]);
+  for (const [name, short] of draft) {
+    if ((draftCounts.get(short.toLowerCase()) ?? 0) > 1) draft.set(name, name);
+  }
+  return draft;
 }
 
 /** "Section 0101" / "Office hours" style label for lists + selects. */

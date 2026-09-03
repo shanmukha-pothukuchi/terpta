@@ -16,7 +16,6 @@ import { lighten, withAlpha } from "../../../lib/color";
 import { AssignChip } from "./AssignChip";
 import {
   availabilityHint,
-  firstName,
   roomOf,
   weeklyLaneSpans,
   type BuilderModel,
@@ -158,14 +157,14 @@ function Slot({
   // assignment with the absent TA — so the badge has to name them. Someone
   // swapped in on the roster is already on a chip below it, so naming them
   // again would just print the same word twice.
-  const recordedCover = coverage?.coverName ? firstName(coverage.coverName) : null;
+  const recordedCover = coverage?.coverName ? model.shortName(coverage.coverName) : null;
   const rosterCovered =
     recordedCover === null &&
     coverage !== undefined &&
     present.length >= shift.requiredCount;
   const standIn =
     recordedCover ??
-    (rosterCovered ? firstName(model.taName(present[0].assignment.taProfileRef)) : null);
+    (rosterCovered ? model.taShort(present[0].assignment.taProfileRef) : null);
   const coverLabel = recordedCover ?? (rosterCovered ? "Covered" : null);
 
   // Short on the day itself: nobody assigned is coming and no stand-in was
@@ -190,7 +189,7 @@ function Slot({
   // exception over the day and nothing was ever raised against it.
   const awayNames = roster
     .filter((r) => r.away)
-    .map((r) => firstName(model.taName(r.assignment.taProfileRef)));
+    .map((r) => model.taShort(r.assignment.taProfileRef));
   // Only when somebody is actually away. A slot nobody was ever assigned to
   // is plainly unstaffed, not missing a sub, and the dashed seat says that
   // better than a badge would.
@@ -292,7 +291,7 @@ function Slot({
           const over = model.overTaIds.has(a.taProfileRef as string);
           const under = model.underTaIds.has(a.taProfileRef as string);
           const load = model.loadByTa.get(a.taProfileRef as string);
-          const name = firstName(model.taName(a.taProfileRef));
+          const name = model.taShort(a.taProfileRef);
           const awayNote = away
             ? standIn
               ? `${name} is away — ${standIn} takes it`

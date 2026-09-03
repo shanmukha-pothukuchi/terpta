@@ -27,7 +27,6 @@ import {
 } from "../../components/ui";
 import {
   buildModel,
-  firstName,
   type BoardAssignment,
   type BoardData,
   type BuilderModel,
@@ -292,7 +291,7 @@ export function BuilderScreen({
       if (res.conflicts.length > 0) {
         toast(res.conflicts[0].detail, { tone: "error" });
       } else if (announce) {
-        toast(`${firstName(model.taName(taProfileRef))} assigned`, {
+        toast(`${model.taShort(taProfileRef)} assigned`, {
           tone: "success",
         });
       }
@@ -321,7 +320,7 @@ export function BuilderScreen({
    * deliberate second choice, offered on the toast rather than assumed.
    */
   const doCover = async (cov: WeekCoverage, taProfileRef: Id<"taProfiles">) => {
-    const name = firstName(model.taName(taProfileRef));
+    const name = model.taShort(taProfileRef);
     try {
       await setCoverMut({ coverageRef: cov._id, coverTaRef: taProfileRef });
       pushUndo(async () => {
@@ -352,7 +351,7 @@ export function BuilderScreen({
       await setCoverMut({ coverageRef: cov._id });
       await doAssign(taProfileRef, cov.shiftRef);
       toast(
-        `${firstName(model.taName(taProfileRef))} now has ${shiftLabel(cov.shiftRef)} every week`,
+        `${model.taShort(taProfileRef)} now has ${shiftLabel(cov.shiftRef)} every week`,
       );
     } catch (e) {
       err(e, "Could not make that permanent");
@@ -378,7 +377,7 @@ export function BuilderScreen({
             : {}),
         });
       });
-      toast(`${firstName(model.taName(existing.taProfileRef))} removed`);
+      toast(`${model.taShort(existing.taProfileRef)} removed`);
     } catch (e) {
       err(e, "Could not remove that assignment");
     }

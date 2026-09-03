@@ -1,6 +1,5 @@
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
-  firstName,
   shiftLongLabel,
   shiftWhen,
   type BuilderModel,
@@ -55,7 +54,7 @@ export function DiagnosticsPanel({
         const seats = weekSeats(week, s, model.assignmentsByShift.get(s._id as string) ?? []);
         if (seats.short === 0 || seats.away.length === 0) return [];
         const who = seats.away
-          .map((a) => firstName(model.taName(a.taProfileRef as Id<"taProfiles">)))
+          .map((a) => model.taShort(a.taProfileRef as Id<"taProfiles">))
           .join(", ");
         return [`${shiftLongLabel(model, s)} · ${shiftWhen(s)} · ${who} away, no sub`];
       })
@@ -64,7 +63,7 @@ export function DiagnosticsPanel({
   const conflictItems: string[] = [];
   for (const list of model.conflictsByAssignment.values()) {
     for (const c of list) {
-      conflictItems.push(`${firstName(model.taName(c.taProfileRef))} — ${c.detail}`);
+      conflictItems.push(`${model.taShort(c.taProfileRef)} — ${c.detail}`);
     }
   }
 

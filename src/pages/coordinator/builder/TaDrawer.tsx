@@ -13,7 +13,6 @@ import {
 } from "../../../lib/format";
 import { Spinner } from "../../../components/ui";
 import {
-  firstName,
   roomOf,
   shiftLongLabel,
   shiftWhen,
@@ -419,7 +418,7 @@ export function TaDrawer({
             }}
             className="flex h-8 items-center gap-[7px] whitespace-nowrap rounded-[9px] bg-ink px-3 text-[12.5px] font-medium text-page hover:bg-white disabled:opacity-50"
           >
-            Assign {firstName(name)} to…
+            Assign {model.shortName(name)} to…
           </button>
         </div>
       </div>

@@ -348,6 +348,12 @@ export const roster: RosterRow[] = [
     topDutyTypeNames: ["Grading", "Discussion"],
     syncAsyncPreference: 0.8,
   }),
+  // Shares a first name with Priya Shah, so the board has to show a last
+  // initial. Last in the list: the destructuring below is positional.
+  rosterRow("ta-priyak", "Priya Kumar", "pkumar@umd.edu", {
+    assignedWeeklyHours: 0,
+    syncAsyncPreference: 0.5,
+  }),
 ];
 const [PRIYA, DANIEL, MARCUS, SARAH, ALEX, EMMA] = roster;
 void ALEX;

@@ -1,7 +1,7 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CalendarOff, GripVertical, TriangleAlert } from "lucide-react";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { firstName, type BuilderModel, type Highlight, type RosterRow } from "./model";
+import { type BuilderModel, type Highlight, type RosterRow } from "./model";
 
 export interface RosterPanelProps {
   model: BuilderModel;
@@ -25,7 +25,7 @@ function RosterRowView({
   onOpenTa: (taProfileRef: Id<"taProfiles">) => void;
 }) {
   const id = row.taProfileRef as string;
-  const name = firstName(row.name);
+  const name = model.shortName(row.name);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `roster:${id}`,
     data: { taProfileRef: row.taProfileRef, name },
