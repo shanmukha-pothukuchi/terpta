@@ -203,11 +203,22 @@ export const taWeek = query({
       if (!shift) continue;
       const dutyType = await ctx.db.get(shift.dutyTypeRef);
       if (!dutyType) continue;
+      // Hour logs hang off an assignment, and a stand-in has none of their
+      // own. Carry the seat they are filling — the absent TA's, or failing
+      // that any on the shift — so the Hours screen has something to log
+      // the meeting against. Attribution goes by the log's own taProfileRef,
+      // so whose seat it is does not matter for the money.
+      const seats = await ctx.db
+        .query("assignments")
+        .withIndex("by_shift", (q) => q.eq("shiftRef", shift._id))
+        .collect();
+      const seat =
+        seats.find((a) => a.taProfileRef === coverage.absentTaRef) ?? seats[0] ?? null;
       occurrences.push({
         key: `${coverage._id}:${coverage.date}`,
         date: coverage.date,
         day: dayOfIso(coverage.date),
-        assignment: null,
+        assignment: seat,
         shift,
         dutyType,
         state: "covering" as const,

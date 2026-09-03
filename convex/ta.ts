@@ -7,6 +7,7 @@ import { blockStatusValidator, dayValidator, meetingValidator } from "./schema";
 import { requireOwnProfile, requireUser } from "./lib/auth";
 import { dutyTypeDoc } from "./dutyTypes";
 import { assignmentDoc, shiftDoc } from "./shifts";
+import { dayOfIso, toIsoDate } from "./lib/week";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -391,11 +392,42 @@ export const logHours = mutation({
   handler: async (ctx, args) => {
     const assignment = await ctx.db.get(args.assignmentRef);
     if (!assignment) throw new ConvexError("Assignment not found");
-    const { profile } = await requireOwnProfile(ctx, assignment.taProfileRef);
     if (!ISO_DATE.test(args.date)) throw new ConvexError("date must be ISO YYYY-MM-DD");
     if (!(args.hours > 0) || args.hours > 24) {
       throw new ConvexError("hours must be > 0 and <= 24");
     }
+
+    // Either the assignment is the caller's own, or the caller is on record
+    // as standing in on that shift that day. A stand-in has no assignment of
+    // their own, so this used to reject them outright — they worked the
+    // meeting and had no way to be paid for it. The log is filed under the
+    // shift's assignment for the label and under the caller for the money.
+    const { user } = await requireUser(ctx);
+    const owner = await ctx.db.get(assignment.taProfileRef);
+    if (!owner) throw new ConvexError("The TA on that assignment no longer exists");
+    let profile = owner.userRef === user._id ? owner : null;
+    if (!profile) {
+      const mine = await ctx.db
+        .query("taProfiles")
+        .withIndex("by_user_period", (q) =>
+          q.eq("userRef", user._id).eq("periodRef", owner.periodRef),
+        )
+        .unique();
+      const covering = mine
+        ? await ctx.db
+            .query("shiftCoverages")
+            .withIndex("by_shift_date", (q) =>
+              q.eq("shiftRef", assignment.shiftRef).eq("date", args.date),
+            )
+            .filter((q) => q.eq(q.field("coverTaRef"), mine._id))
+            .first()
+        : null;
+      if (!mine || !covering) {
+        throw new ConvexError("Not your assignment, and you are not covering it that day");
+      }
+      profile = mine;
+    }
+
     return await ctx.db.insert("hourLogs", {
       assignmentRef: assignment._id,
       taProfileRef: profile._id,
@@ -444,6 +476,8 @@ export const submitWeek = mutation({
 
 const swapScopeValidator = v.union(v.literal("date"), v.literal("permanent"));
 
+const DAY_NAMES = { M: "Monday", Tu: "Tuesday", W: "Wednesday", Th: "Thursday", F: "Friday" } as const;
+
 /** Request a swap for one of the caller's own assignments. */
 export const requestSwap = mutation({
   args: {
@@ -464,8 +498,43 @@ export const requestSwap = mutation({
     if (args.reason.trim().length === 0) {
       throw new ConvexError("A reason is required");
     }
-    if (args.scope === "date" && !args.date) {
-      throw new ConvexError("Pick the date you need covered");
+    if (args.scope === "date") {
+      if (!args.date || !ISO_DATE.test(args.date)) {
+        throw new ConvexError("Pick the date you need covered");
+      }
+      // A cover on a day the shift does not meet would sit in the table
+      // forever, drawn nowhere: the board looks coverages up by weekday and
+      // the TA schedule by the shift's own dates.
+      if (shift.recurrence === "weekly") {
+        if (!shift.day || dayOfIso(args.date) !== shift.day) {
+          throw new ConvexError(`This shift meets on ${DAY_NAMES[shift.day ?? "M"]}s — pick one of those`);
+        }
+      } else if (shift.recurrence === "once") {
+        if (args.date !== shift.date) {
+          throw new ConvexError("A one-off event can only be covered on its own date");
+        }
+      } else {
+        throw new ConvexError("Async work has no meeting to cover — request a permanent swap instead");
+      }
+      // Yesterday in UTC is the earliest anyone in a US timezone can still
+      // mean "today"; anything before that is over.
+      if (args.date < addDaysIso(toIsoDate(new Date()), -1)) {
+        throw new ConvexError("That date has already passed");
+      }
+    }
+    const openRequests = await ctx.db
+      .query("swapRequests")
+      .withIndex("by_requester", (q) => q.eq("requesterRef", profile._id))
+      .collect();
+    const duplicate = openRequests.find(
+      (r) =>
+        r.status === "pending" &&
+        r.assignmentRef === assignment._id &&
+        (r.scope ?? "permanent") === args.scope &&
+        (args.scope === "permanent" || r.date === args.date),
+    );
+    if (duplicate) {
+      throw new ConvexError("You already have a pending request for that");
     }
     if (args.suggestedTaRef !== undefined) {
       const suggested = await ctx.db.get(args.suggestedTaRef);

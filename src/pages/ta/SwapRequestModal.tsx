@@ -9,6 +9,8 @@ import { useMutation } from "convex/react";
 import { ArrowLeftRight } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { DAY_LABELS, type DayCode } from "../../lib/format";
+import { dayOfIso, todayIso } from "../../lib/week";
 import {
   Button,
   Input,
@@ -40,6 +42,10 @@ export interface SwapModalTarget {
   label: string;
   /** e.g. "Tu 2:00p–4:00p" — rendered in mono. */
   detail?: string;
+  /** Weekday a weekly shift meets; the only days a one-date swap can name. */
+  day?: DayCode;
+  /** The date of a one-off event, which is the only date it can be covered on. */
+  onceDate?: string;
 }
 
 export interface SwapRequestModalViewProps {
@@ -81,6 +87,7 @@ export function SwapRequestModalView({
       setSuggested("");
       // One date is the common case and the reversible one, so it leads.
       setScope("date");
+      setDate(target?.onceDate ?? "");
       setDate("");
       setError(null);
       setBusy(false);
@@ -92,8 +99,17 @@ export function SwapRequestModalView({
       setError("A reason is required.");
       return;
     }
+    // Mirror the server's rule so the answer arrives before the round trip.
     if (scope === "date" && !date) {
       setError("Pick the date you need covered.");
+      return;
+    }
+    if (scope === "date" && target?.day && dayOfIso(date) !== target.day) {
+      setError(`This shift meets on ${DAY_LABELS[target.day]}s — pick a ${DAY_LABELS[target.day]}.`);
+      return;
+    }
+    if (scope === "date" && date < todayIso()) {
+      setError("That date has already passed.");
       return;
     }
     setBusy(true);
@@ -153,11 +169,18 @@ export function SwapRequestModalView({
                 type="date"
                 aria-label="Date to cover"
                 value={date}
+                min={todayIso()}
+                readOnly={target?.onceDate !== undefined}
                 onChange={(e) => setDate(e.target.value)}
                 className="w-[168px]"
               />
             ) : null}
           </div>
+          {scope === "date" && target?.day ? (
+            <p className="mt-1 text-[12px] text-faint">
+              Meets on {DAY_LABELS[target.day]}s.
+            </p>
+          ) : null}
           {/* The old flow said nothing about duration, and approving always
               handed the shift over for good — spell out which one this is. */}
           <p className="mt-1.5 text-[12px] text-faint">

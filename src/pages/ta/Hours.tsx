@@ -61,6 +61,8 @@ import {
 
 type ScheduleResult = FunctionReturnType<typeof api.ta.getSchedule>;
 export type ScheduleItem = ScheduleResult["items"][number];
+type WeekResult = FunctionReturnType<typeof api.weeks.taWeek>;
+export type WeekOccurrence = WeekResult["occurrences"][number];
 type HourLog = FunctionReturnType<typeof api.ta.getHourLogs>[number];
 
 /* ------------------------------------------------------------------ */
@@ -139,6 +141,12 @@ export interface HoursViewProps {
   courseLabel: string;
   published: boolean;
   items: ScheduleItem[];
+  /**
+   * This week as it actually is, when known: meetings handed off do not
+   * appear, and meetings the TA is standing in for do. Falls back to the
+   * standing roster when absent (previews).
+   */
+  weekOccurrences?: WeekOccurrence[];
   hourLogs: HourLog[];
   maxHoursPerWeek: number | null;
   /** ISO Monday of the visible week. */
@@ -172,6 +180,7 @@ export function HoursView({
   courseLabel,
   published,
   items,
+  weekOccurrences,
   hourLogs,
   maxHoursPerWeek,
   weekStart,
@@ -239,7 +248,30 @@ export function HoursView({
 
   // Sync occurrences inside this week: weekly shifts (active that week) +
   // one-off shifts dated within it.
-  const occurrences = items
+  // One row per meeting this week. Built from the dated week when it is
+  // known, because the standing roster cannot say that Tuesday was handed
+  // off or that Thursday is somebody else's seat the TA is filling — and a
+  // stand-in with no assignment of their own had no row at all to log from.
+  const fromWeek = weekOccurrences
+    ?.filter((o) => o.state !== "off" && o.assignment !== null)
+    .filter((o) => o.shift.startMin !== undefined && o.shift.endMin !== undefined)
+    .map((o) => {
+      const s = o.shift;
+      const start = s.startMin ?? 0;
+      const end = s.endMin ?? 0;
+      return {
+        item: { assignment: o.assignment!, shift: s, dutyType: o.dutyType },
+        date: o.date,
+        hours: (end - start) / 60,
+        when:
+          s.recurrence === "once"
+            ? `${formatDate(o.date)} ${formatTimeRange(start, end)}`
+            : formatMeeting((o.day ?? "M") as DayCode, start, end),
+        coveringFor: o.state === "covering" ? o.otherName : null,
+      };
+    });
+
+  const occurrences = fromWeek ?? items
     .flatMap((item) => {
       const s = item.shift;
       if (
@@ -257,6 +289,7 @@ export function HoursView({
             date,
             hours: (s.endMin - s.startMin) / 60,
             when: formatMeeting(s.day as DayCode, s.startMin, s.endMin),
+            coveringFor: null as string | null,
           },
         ];
       }
@@ -274,6 +307,7 @@ export function HoursView({
             date: s.date,
             hours: (s.endMin - s.startMin) / 60,
             when: `${formatDate(s.date)} ${formatTimeRange(s.startMin, s.endMin)}`,
+            coveringFor: null as string | null,
           },
         ];
       }
@@ -439,6 +473,9 @@ export function HoursView({
                       </span>
                       <span className="min-w-0 truncate text-[12.5px] text-ink">
                         {itemLabel(occ.item)}
+                        {occ.coveringFor ? (
+                          <span className="text-ok-text"> · covering for {occ.coveringFor}</span>
+                        ) : null}
                       </span>
                       <span className="ml-auto shrink-0 font-mono text-[12px] text-muted">
                         {formatHourCount(occ.hours)}
@@ -709,6 +746,10 @@ export default function TaHours() {
 
   const [weekStart, setWeekStart] = useState(() => mondayOf(todayIso()));
   const [submitting, setSubmitting] = useState(false);
+  const week = useQuery(
+    api.weeks.taWeek,
+    pick.taProfileId ? { taProfileRef: pick.taProfileId, weekStart } : "skip",
+  );
 
   if (pick.loading) {
     return (
@@ -763,6 +804,7 @@ export default function TaHours() {
       courseLabel={pick.courseLabel}
       published={schedule.published}
       items={schedule.items}
+      weekOccurrences={week?.occurrences}
       hourLogs={hourLogs}
       maxHoursPerWeek={profile?.maxHoursPerWeek ?? null}
       weekStart={weekStart}

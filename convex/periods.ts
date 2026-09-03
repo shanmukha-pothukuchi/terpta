@@ -1,8 +1,11 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { action, internalQuery, mutation, query } from "./_generated/server";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { dayValidator, meetingValidator, sectionTypeValidator } from "./schema";
 import { requireCoordinator, requireUser } from "./lib/auth";
+import { appUrl, type EmailResult } from "./emails";
+import { batchResultValidator, type BatchResult } from "./roster";
 
 const periodStatusValidator = v.union(
   v.literal("draft"),
@@ -252,6 +255,85 @@ export const publish = mutation({
   },
 });
 
+/** Everyone on the roster, for the publish notice. Coordinator only. */
+export const publishTargets = internalQuery({
+  args: { periodRef: v.id("staffingPeriods") },
+  returns: v.object({
+    courseName: v.string(),
+    coordinatorName: v.string(),
+    targets: v.array(v.object({ email: v.string(), name: v.string() })),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    courseName: string;
+    coordinatorName: string;
+    targets: Array<{ email: string; name: string }>;
+  }> => {
+    const { user, period } = await requireCoordinator(ctx, args.periodRef);
+    const course = await ctx.db.get(period.courseRef);
+    const profiles = await ctx.db
+      .query("taProfiles")
+      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
+      .collect();
+    const targets = [];
+    for (const profile of profiles) {
+      const ta = await ctx.db.get(profile.userRef);
+      if (ta) targets.push({ email: ta.email, name: ta.preferredName || ta.name });
+    }
+    return {
+      courseName: course ? `${course.courseId} — ${course.name}` : "your course",
+      coordinatorName: user.name,
+      targets,
+    };
+  },
+});
+
+/**
+ * Publish, and if asked, tell every TA on the roster.
+ *
+ * The publish modal has carried a "Notify TAs" switch since the start; until
+ * now it changed the wording of the success toast and nothing else. Every TA
+ * gets the same note pointing at their schedule, and the per-address outcome
+ * comes back so the coordinator sees who was actually reached.
+ */
+export const publishAndNotify = action({
+  args: { periodRef: v.id("staffingPeriods"), notify: v.boolean() },
+  returns: v.union(v.null(), batchResultValidator),
+  handler: async (ctx, args): Promise<BatchResult | null> => {
+    await ctx.runMutation(api.periods.publish, { periodRef: args.periodRef });
+    if (!args.notify) return null;
+
+    const { courseName, coordinatorName, targets }: {
+      courseName: string;
+      coordinatorName: string;
+      targets: Array<{ email: string; name: string }>;
+    } = await ctx.runQuery(internal.periods.publishTargets, { periodRef: args.periodRef });
+    const result: BatchResult = { attempted: targets.length, delivered: 0, failures: [] };
+    for (const target of targets) {
+      const sent: EmailResult = await ctx.runAction(internal.emails.send, {
+        to: target.email,
+        subject: `[TerpTA] Your ${courseName} schedule is out`,
+        text:
+          `Hi ${target.name},
+
+` +
+          `${coordinatorName} has published the TA schedule for ${courseName}. ` +
+          `Sign in to see your shifts, add them to your calendar, and log hours:
+` +
+          `${appUrl()}
+
+Thanks!
+TerpTA`,
+      });
+      if (sent.ok) result.delivered++;
+      else result.failures.push({ email: target.email, error: sent.error ?? "unknown error" });
+    }
+    return result;
+  },
+});
+
 /**
  * Change log for a period, newest first, with the actor's display name
  * joined in. Coordinator only.
@@ -447,19 +529,23 @@ export const resolveSwap = mutation({
     // seeded with the TA the requester suggested. The Builder's Coverage panel
     // is where it gets filled, by hand or from the pool.
     if (args.approve && scope === "date" && swap.date) {
+      // The shift is snapshotted on the request precisely so this still works
+      // after the assignment is gone — the TA still needs that date covered.
       const assignment = await ctx.db.get(swap.assignmentRef);
-      if (assignment) {
+      const shiftRef = swap.shiftRef ?? assignment?.shiftRef;
+      const shift = shiftRef ? await ctx.db.get(shiftRef) : null;
+      if (shift) {
         const existing = await ctx.db
           .query("shiftCoverages")
           .withIndex("by_shift_date", (q) =>
-            q.eq("shiftRef", assignment.shiftRef).eq("date", swap.date!),
+            q.eq("shiftRef", shift._id).eq("date", swap.date!),
           )
           .filter((q) => q.eq(q.field("absentTaRef"), swap.requesterRef))
-          .unique();
+          .first();
         if (!existing) {
           await ctx.db.insert("shiftCoverages", {
             periodRef: swap.periodRef,
-            shiftRef: assignment.shiftRef,
+            shiftRef: shift._id,
             date: swap.date,
             absentTaRef: swap.requesterRef,
             coverTaRef: swap.suggestedTaRef,
@@ -482,7 +568,17 @@ export const resolveSwap = mutation({
           swap.suggestedTaRef !== undefined
             ? await ctx.db.get(swap.suggestedTaRef)
             : null;
-        if (suggested && suggested.periodRef === swap.periodRef) {
+        // Handing over to somebody already on the shift would leave them on
+        // it twice; in that case the requester's seat simply closes.
+        const alreadyThere = suggested
+          ? (
+              await ctx.db
+                .query("assignments")
+                .withIndex("by_shift", (q) => q.eq("shiftRef", assignment.shiftRef))
+                .collect()
+            ).some((a) => a.taProfileRef === suggested._id)
+          : false;
+        if (suggested && suggested.periodRef === swap.periodRef && !alreadyThere) {
           await ctx.db.patch(assignment._id, {
             taProfileRef: suggested._id,
             createdBy: "manual",

@@ -19,7 +19,7 @@ import type { HourLogRow, TaTotalsRow } from "../coordinator/Hours";
 import type { PaletteTa } from "../../components/CommandPalette";
 import type { PeriodEntry } from "../../lib/period";
 import type { ScheduleViewProps } from "../ta/Schedule";
-import type { HoursViewProps as TaHoursViewProps } from "../ta/Hours";
+import type { HoursViewProps as TaHoursViewProps, WeekOccurrence as TaWeekOccurrence } from "../ta/Hours";
 import type { PeriodSetupViewProps } from "../coordinator/PeriodSetup";
 import type { CoveragePanelViewProps } from "../coordinator/builder/CoveragePanel";
 import type { WeekOverlayInput } from "../coordinator/builder/weekOverlay";
@@ -611,6 +611,48 @@ export const scheduleItems: ScheduleItems = [
   scheduleItem("sa-3", ohMonday, DT_OH),
   scheduleItem("sa-4", examShift, DT_EXAM, { locked: true }),
   scheduleItem("sa-5", gradingPool, DT_GRADING, { hoursAllocated: 3 }),
+];
+
+/**
+ * The same week as `api.weeks.taWeek` returns it, for the Hours screen: the
+ * Monday office hours are handed off (must not offer a Log button), and the
+ * Wednesday 0104 section is somebody else's seat this TA is standing in for
+ * (must offer one, filed under that seat).
+ */
+export const taWeekOccurrences: TaWeekOccurrence[] = [
+  {
+    key: "sa-1:2026-09-14",
+    date: "2026-09-14",
+    day: "M",
+    assignment: scheduleItems[0].assignment,
+    shift: scheduleItems[0].shift,
+    dutyType: scheduleItems[0].dutyType,
+    state: "normal",
+    otherName: null,
+    exceptionReason: null,
+  },
+  {
+    key: "sa-3:2026-09-14",
+    date: "2026-09-14",
+    day: "M",
+    assignment: scheduleItems[2].assignment,
+    shift: scheduleItems[2].shift,
+    dutyType: scheduleItems[2].dutyType,
+    state: "off",
+    otherName: "Ravi Patel",
+    exceptionReason: null,
+  },
+  {
+    key: "cov-0104:2026-09-16",
+    date: "2026-09-16",
+    day: "W",
+    assignment: scheduleItem("sa-daniel-0104", discussionShifts[3], DT_DISC).assignment,
+    shift: discussionShifts[3],
+    dutyType: DT_DISC,
+    state: "covering",
+    otherName: "Daniel Chen",
+    exceptionReason: null,
+  },
 ];
 
 export const taHourLogs: ScheduleHourLogs = [

@@ -190,7 +190,13 @@ function swapTargetFor(item: ScheduleItem): SwapModalTarget {
   } else if (item.shift.hoursRequired !== undefined) {
     detail = `${formatHourCount(item.assignment.hoursAllocated ?? item.shift.hoursRequired)} async`;
   }
-  return { assignmentRef: item.assignment._id, label, detail };
+  return {
+    assignmentRef: item.assignment._id,
+    label,
+    detail,
+    day: item.shift.recurrence === "weekly" ? item.shift.day : undefined,
+    onceDate: item.shift.recurrence === "once" ? item.shift.date : undefined,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -951,17 +957,21 @@ export default function TaSchedule() {
                 otherName: o.otherName,
                 note: o.exceptionReason,
                 // A meeting being covered belongs to somebody else this week,
-                // so there is nothing of the TA's own to swap out of it.
-                swapTarget: o.assignment
-                  ? {
-                      assignmentRef: o.assignment._id,
-                      label: occurrenceTitle(o.dutyType.name, o.shift.description),
-                      detail: formatTimeRange(
-                        o.shift.startMin ?? 0,
-                        o.shift.endMin ?? 0,
-                      ),
-                    }
-                  : null,
+                // so there is nothing of the TA's own to swap out of it — the
+                // seat carried on a "covering" occurrence is the absent TA's.
+                swapTarget:
+                  o.assignment && o.state !== "covering"
+                    ? {
+                        assignmentRef: o.assignment._id,
+                        label: occurrenceTitle(o.dutyType.name, o.shift.description),
+                        detail: formatTimeRange(
+                          o.shift.startMin ?? 0,
+                          o.shift.endMin ?? 0,
+                        ),
+                        day: o.shift.recurrence === "weekly" ? o.shift.day : undefined,
+                        onceDate: o.shift.recurrence === "once" ? o.shift.date : undefined,
+                      }
+                    : null,
               }))
             : undefined
         }

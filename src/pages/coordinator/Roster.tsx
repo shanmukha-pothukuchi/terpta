@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { BellRing, Trash2, UserPlus, Users } from "lucide-react";
+import { BellRing, MailCheck, Trash2, UserPlus, Users } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import {
@@ -49,6 +49,9 @@ export interface RosterViewProps {
   rows: RosterRow[] | undefined;
   nudging: boolean;
   onNudge: () => void;
+  /** Send the coordinator a test message and report what happened. */
+  onTestEmail?: () => void;
+  testingEmail?: boolean;
   inviting: boolean;
   onInvite: (email: string) => void;
   onRemove: (taProfileRef: Id<"taProfiles">) => void;
@@ -59,6 +62,8 @@ export function RosterView({
   rows,
   nudging,
   onNudge,
+  onTestEmail,
+  testingEmail,
   inviting,
   onInvite,
   onRemove,
@@ -101,6 +106,14 @@ export function RosterView({
         description="TAs in this staffing period, their weekly hour caps, and whether they've submitted availability."
         actions={
           <>
+            {/* Delivery has no other feedback loop: an invite that went
+                nowhere looked identical to one that arrived. */}
+            {onTestEmail ? (
+              <Button variant="ghost" onClick={onTestEmail} loading={testingEmail}>
+                {!testingEmail && <MailCheck size={14} strokeWidth={1.5} aria-hidden />}
+                Test email
+              </Button>
+            ) : null}
             <Button onClick={onNudge} loading={nudging} disabled={missing === 0}>
               {!nudging && <BellRing size={14} strokeWidth={1.5} aria-hidden />}
               Nudge missing{missing > 0 ? ` (${missing})` : ""}
@@ -304,24 +317,47 @@ export function RosterView({
 export default function Roster() {
   const { periodId } = usePeriod();
   const rows = useQuery(api.roster.list, periodId ? { periodRef: periodId } : "skip");
-  const invite = useMutation(api.roster.invite);
+  const invite = useAction(api.roster.invite);
   const removeTa = useMutation(api.roster.remove);
   const nudge = useAction(api.roster.nudge);
+  const sendTest = useAction(api.emails.sendTest);
   const [nudging, setNudging] = useState(false);
   const [inviting, setInviting] = useState(false);
+  const [testingEmail, setTestingEmail] = useState(false);
 
   return (
     <RosterView
       periodSelected={periodId !== null}
       rows={periodId ? rows : undefined}
       nudging={nudging}
+      testingEmail={testingEmail}
+      onTestEmail={() => {
+        setTestingEmail(true);
+        sendTest({})
+          .then((r) =>
+            r.ok
+              ? toast(`Test email sent via ${r.via.toUpperCase()} — check your inbox`)
+              : toast(`Email is not working: ${r.error}`, { tone: "error", duration: 12000 }),
+          )
+          .catch((e) => toast(errorMessage(e), { tone: "error" }))
+          .finally(() => setTestingEmail(false));
+      }}
       onNudge={() => {
         if (!periodId || !rows) return;
         const targets = rows.filter((r) => r.status === "missing").map((r) => r.taProfileRef);
         if (targets.length === 0) return;
         setNudging(true);
         nudge({ periodRef: periodId, taProfileRefs: targets })
-          .then((n) => toast(`Nudged ${n} TA${n === 1 ? "" : "s"} by email`))
+          .then((r) => {
+            if (r.failures.length === 0) {
+              toast(`Nudged ${r.delivered} TA${r.delivered === 1 ? "" : "s"} by email`);
+            } else {
+              toast(
+                `${r.delivered} of ${r.attempted} nudges sent — ${r.failures[0].error}`,
+                { tone: "error", duration: 10000 },
+              );
+            }
+          })
           .catch((e) => toast(errorMessage(e), { tone: "error" }))
           .finally(() => setNudging(false));
       }}
@@ -330,7 +366,15 @@ export default function Roster() {
         if (!periodId) return;
         setInviting(true);
         invite({ periodRef: periodId, email })
-          .then(() => toast(`Invited ${email}`))
+          .then((r) => {
+            if (!r.created) toast(`${email} is already on the roster`);
+            else if (r.email.ok) toast(`Invited ${email} — email sent`);
+            else
+              toast(`${email} added, but the invite email failed — ${r.email.error}`, {
+                tone: "error",
+                duration: 10000,
+              });
+          })
           .catch((e) => toast(errorMessage(e), { tone: "error" }))
           .finally(() => setInviting(false));
       }}

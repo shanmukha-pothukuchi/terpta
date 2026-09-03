@@ -1,8 +1,15 @@
 import { ConvexError, v } from "convex/values";
-import { action, internalQuery, mutation, query } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { isAllowedEmail, requireCoordinator } from "./lib/auth";
+import { appUrl, emailResultValidator, type EmailResult } from "./emails";
 
 /**
  * Coordinator roster for a staffing period: every TA profile joined with its
@@ -121,14 +128,34 @@ export const list = query({
  * first sign-in) plus a pending taProfile with defaults. Idempotent: returns
  * the existing profile if the TA is already on the roster.
  */
-export const invite = mutation({
+/**
+ * The database half of an invite: a placeholder user (claimed on first
+ * sign-in) and a TA profile in the period. Idempotent.
+ */
+export const createInvite = internalMutation({
   args: {
     periodRef: v.id("staffingPeriods"),
     email: v.string(),
   },
-  returns: v.id("taProfiles"),
-  handler: async (ctx, args) => {
-    await requireCoordinator(ctx, args.periodRef);
+  returns: v.object({
+    taProfileRef: v.id("taProfiles"),
+    /** False when the person was already on the roster. */
+    created: v.boolean(),
+    courseName: v.string(),
+    coordinatorName: v.string(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    taProfileRef: Id<"taProfiles">;
+    created: boolean;
+    courseName: string;
+    coordinatorName: string;
+  }> => {
+    const { user: coordinator, period } = await requireCoordinator(ctx, args.periodRef);
+    const course = await ctx.db.get(period.courseRef);
+    const courseName = course ? `${course.courseId} — ${course.name}` : "your course";
     const email = args.email.trim().toLowerCase();
     if (!isAllowedEmail(email)) {
       throw new ConvexError("Only umd.edu and terpmail.umd.edu emails can be invited");
@@ -153,9 +180,16 @@ export const invite = mutation({
         q.eq("userRef", userRef).eq("periodRef", args.periodRef),
       )
       .unique();
-    if (existingProfile) return existingProfile._id;
+    if (existingProfile) {
+      return {
+        taProfileRef: existingProfile._id,
+        created: false,
+        courseName,
+        coordinatorName: coordinator.name,
+      };
+    }
 
-    return await ctx.db.insert("taProfiles", {
+    const taProfileRef = await ctx.db.insert("taProfiles", {
       userRef,
       periodRef: args.periodRef,
       maxHoursPerWeek: 10,
@@ -164,6 +198,64 @@ export const invite = mutation({
       dutyTypePrefs: [],
       sectionPrefs: [],
     });
+    return { taProfileRef, created: true, courseName, coordinatorName: coordinator.name };
+  },
+});
+
+/**
+ * Invite a TA by email: put them on the roster and tell them.
+ *
+ * This used to be the mutation above on its own. It created the row and
+ * returned, and the screen said "Invited" — but no message ever left, so the
+ * TA found out only if the coordinator told them some other way. The email
+ * result comes back with the profile so the screen can say which happened.
+ */
+export const invite = action({
+  args: {
+    periodRef: v.id("staffingPeriods"),
+    email: v.string(),
+  },
+  returns: v.object({
+    taProfileRef: v.id("taProfiles"),
+    created: v.boolean(),
+    email: emailResultValidator,
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ taProfileRef: Id<"taProfiles">; created: boolean; email: EmailResult }> => {
+    const row: {
+      taProfileRef: Id<"taProfiles">;
+      created: boolean;
+      courseName: string;
+      coordinatorName: string;
+    } = await ctx.runMutation(internal.roster.createInvite, args);
+    if (!row.created) {
+      return {
+        taProfileRef: row.taProfileRef,
+        created: false,
+        email: { ok: true, via: "none" as const },
+      };
+    }
+    const email: EmailResult = await ctx.runAction(internal.emails.send, {
+      to: args.email.trim().toLowerCase(),
+      subject: `[TerpTA] You're a TA for ${row.courseName}`,
+      text:
+        `Hi,
+
+` +
+        `${row.coordinatorName} has added you to the TA roster for ${row.courseName} on TerpTA.
+
+` +
+        `Sign in with your UMD Google account to enter your classes, availability and ` +
+        `preferences:
+${appUrl()}
+
+` +
+        `Thanks!
+TerpTA`,
+    });
+    return { taProfileRef: row.taProfileRef, created: true, email };
   },
 });
 
@@ -204,33 +296,58 @@ export const nudgeTargets = internalQuery({
   },
 });
 
+/** How a batch of emails went, address by address. */
+export const batchResultValidator = v.object({
+  attempted: v.number(),
+  delivered: v.number(),
+  failures: v.array(v.object({ email: v.string(), error: v.string() })),
+});
+export type BatchResult = {
+  attempted: number;
+  delivered: number;
+  failures: Array<{ email: string; error: string }>;
+};
+
 /**
  * Email a nudge to each still-missing TA among the given profiles.
- * Returns the number of nudge emails attempted.
+ *
+ * Returns who it reached. A count of attempts used to be all the caller got,
+ * so a deployment with no working transport reported "Nudged 4 TAs" every
+ * time and nobody heard anything.
  */
 export const nudge = action({
   args: {
     periodRef: v.id("staffingPeriods"),
     taProfileRefs: v.array(v.id("taProfiles")),
   },
-  returns: v.number(),
-  handler: async (ctx, args): Promise<number> => {
+  returns: batchResultValidator,
+  handler: async (ctx, args): Promise<BatchResult> => {
     const { courseName, collectionDeadline, targets } = await ctx.runQuery(
       internal.roster.nudgeTargets,
       { periodRef: args.periodRef, taProfileRefs: args.taProfileRefs },
     );
+    const result: BatchResult = { attempted: targets.length, delivered: 0, failures: [] };
     for (const target of targets) {
-      await ctx.runAction(internal.emails.send, {
+      const sent: EmailResult = await ctx.runAction(internal.emails.send, {
         to: target.email,
         subject: `[TerpTA] Availability needed for ${courseName}`,
         text:
-          `Hi ${target.name},\n\n` +
+          `Hi ${target.name},
+
+` +
           `Your coordinator for ${courseName} is waiting on your availability. ` +
-          `Please sign in to TerpTA and submit it by ${collectionDeadline}.\n\n` +
-          `Thanks!\nTerpTA`,
+          `Please sign in to TerpTA and submit it by ${collectionDeadline}.
+
+` +
+          `${appUrl()}
+
+Thanks!
+TerpTA`,
       });
+      if (sent.ok) result.delivered++;
+      else result.failures.push({ email: target.email, error: sent.error ?? "unknown error" });
     }
-    return targets.length;
+    return result;
   },
 });
 

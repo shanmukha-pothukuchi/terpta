@@ -137,7 +137,7 @@ export function BuilderScreen({
   const removeAssignment = useMutation(api.builder.removeAssignment);
   const toggleLockMut = useMutation(api.builder.toggleLock);
   const generateAction = useAction(api.builder.generate);
-  const publishMut = useMutation(api.periods.publish);
+  const publishAndNotify = useAction(api.periods.publishAndNotify);
 
   const [highlight, setHighlight] = useState<Highlight>(null);
   const [drawerTa, setDrawerTa] = useState<Id<"taProfiles"> | null>(initialDrawerTa);
@@ -439,11 +439,21 @@ export function BuilderScreen({
   const onPublish = async (notify: boolean) => {
     setPublishing(true);
     try {
-      await publishMut({ periodRef });
+      const mail = await publishAndNotify({ periodRef, notify });
       setPublishOpen(false);
-      toast(notify ? "Schedule published · TAs can now see it" : "Schedule published", {
-        tone: "success",
-      });
+      // The notice is only worth announcing if it actually went somewhere.
+      if (!mail) {
+        toast("Schedule published", { tone: "success" });
+      } else if (mail.failures.length === 0) {
+        toast(`Schedule published · ${mail.delivered} TA${mail.delivered === 1 ? "" : "s"} emailed`, {
+          tone: "success",
+        });
+      } else {
+        toast(
+          `Schedule published, but ${mail.failures.length} of ${mail.attempted} emails failed — ${mail.failures[0].error}`,
+          { tone: "error", duration: 10000 },
+        );
+      }
     } catch (e) {
       err(e, "Publish failed");
     } finally {

@@ -361,6 +361,7 @@ function TaHoursPreview({ unpublished }: { unpublished?: boolean } = {}) {
         courseLabel="CMSC132 · Fall 2026"
         published={!unpublished}
         items={fx.scheduleItems}
+        weekOccurrences={unpublished ? undefined : fx.taWeekOccurrences}
         hourLogs={fx.taHourLogs}
         maxHoursPerWeek={10}
         weekStart={weekStart}
