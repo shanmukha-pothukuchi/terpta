@@ -31,6 +31,8 @@ export interface WeekGridProps {
   /** What is different about the selected week; null = the template. */
   week?: WeekOverlay | null;
   onOpenTa: (taProfileRef: Id<"taProfiles">) => void;
+  /** Open the shift side panel. */
+  onOpenShift: (shift: ShiftRow) => void;
   onToggleLock: (assignmentRef: Id<"assignments">) => void;
   onRemoveAssignment: (assignmentRef: Id<"assignments">) => void;
 }
@@ -103,6 +105,7 @@ function Slot({
   highlight,
   week,
   onOpenTa,
+  onOpenShift,
   onToggleLock,
   onRemoveAssignment,
 }: {
@@ -113,6 +116,7 @@ function Slot({
   highlight: Highlight;
   week?: WeekOverlay | null;
   onOpenTa: (taProfileRef: Id<"taProfiles">) => void;
+  onOpenShift: (shift: ShiftRow) => void;
   onToggleLock: (assignmentRef: Id<"assignments">) => void;
   onRemoveAssignment: (assignmentRef: Id<"assignments">) => void;
 }) {
@@ -217,10 +221,21 @@ function Slot({
   return (
     <div
       ref={setNodeRef}
+      // A block is a few hundred pixels wide at most; the panel is where the
+      // room, the term and the whole roster actually fit.
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpenShift(shift)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenShift(shift);
+        }
+      }}
       title={[label, timeText, hint.text, coverNote, dormant ? "Not running this week" : null]
         .filter(Boolean)
         .join(" · ")}
-      className="absolute box-border flex flex-col gap-1 overflow-hidden rounded-[8px] px-[7px] py-[5px] transition-[box-shadow,background] duration-150"
+      className="absolute box-border flex cursor-pointer flex-col gap-1 overflow-hidden rounded-[8px] px-[7px] py-[5px] transition-[box-shadow,background] duration-150"
       style={{
         top,
         height,
@@ -344,6 +359,7 @@ export function WeekGrid({
   highlight,
   week = null,
   onOpenTa,
+  onOpenShift,
   onToggleLock,
   onRemoveAssignment,
 }: WeekGridProps) {
@@ -438,6 +454,7 @@ export function WeekGrid({
                   highlight={highlight}
                   week={week}
                   onOpenTa={onOpenTa}
+                  onOpenShift={onOpenShift}
                   onToggleLock={onToggleLock}
                   onRemoveAssignment={onRemoveAssignment}
                 />

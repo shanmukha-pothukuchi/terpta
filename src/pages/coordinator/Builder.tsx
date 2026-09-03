@@ -46,10 +46,12 @@ import {
   awayTaIds,
   buildWeekOverlay,
   coverageDropTarget,
+  coverageFor,
   type WeekCoverage,
   type WeekOverlayInput,
 } from "./builder/weekOverlay";
 import { TaDrawer } from "./builder/TaDrawer";
+import { ShiftDrawer, type ShiftCandidate } from "./builder/ShiftDrawer";
 import { PublishModal } from "./builder/PublishModal";
 
 /** Fixture bundle so a DEV preview harness can render without auth/Convex. */
@@ -114,6 +116,8 @@ export function BuilderScreen({
   fixture,
   fixtureDetail,
   initialDrawerTa = null,
+  initialDrawerShift = null,
+  fixtureCandidates,
   initialPublishOpen = false,
 }: {
   periodRef: Id<"staffingPeriods">;
@@ -122,6 +126,10 @@ export function BuilderScreen({
   fixtureDetail?: TaDetailData;
   /** DEV harness: open the TA drawer for this profile on mount. */
   initialDrawerTa?: Id<"taProfiles"> | null;
+  /** DEV harness: open the shift panel for this shift on mount. */
+  initialDrawerShift?: Id<"shifts"> | null;
+  /** DEV harness: shift-panel candidate list, skips the Convex query. */
+  fixtureCandidates?: ShiftCandidate[];
   /** DEV harness: open the publish modal on mount. */
   initialPublishOpen?: boolean;
 }) {
@@ -141,6 +149,7 @@ export function BuilderScreen({
 
   const [highlight, setHighlight] = useState<Highlight>(null);
   const [drawerTa, setDrawerTa] = useState<Id<"taProfiles"> | null>(initialDrawerTa);
+  const [drawerShift, setDrawerShift] = useState<Id<"shifts"> | null>(initialDrawerShift);
   const [publishOpen, setPublishOpen] = useState(initialPublishOpen);
   const [publishing, setPublishing] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -506,6 +515,18 @@ export function BuilderScreen({
     void doAssign(payload.taProfileRef, targetShiftRef, source);
   };
 
+  const openShift =
+    drawerShift !== null ? shiftById(drawerShift as string) : undefined;
+  // Only offer "this date only" when there is a hole to fill on it; otherwise
+  // the panel would quietly write a one-week cover nobody asked for.
+  const coverageOfOpenShift = openShift
+    ? coverageFor(week, openShift._id, openShift.day)
+    : undefined;
+  const openShiftCoverage =
+    coverageOfOpenShift && coverageOfOpenShift.coverTaRef === null
+      ? coverageOfOpenShift
+      : undefined;
+
   let conflictCount = 0;
   for (const list of model.conflictsByAssignment.values()) {
     conflictCount += list.length;
@@ -575,6 +596,7 @@ export function BuilderScreen({
                 highlight={highlight}
                 week={week}
                 onOpenTa={setDrawerTa}
+                onOpenShift={(shift) => setDrawerShift(shift._id)}
                 onToggleLock={(ref) => void onToggleLock(ref)}
                 onRemoveAssignment={(ref) => void doUnassign(ref)}
               />
@@ -582,6 +604,7 @@ export function BuilderScreen({
                 model={model}
                 highlight={highlight}
                 onOpenTa={setDrawerTa}
+                onOpenShift={(shift) => setDrawerShift(shift._id)}
                 onToggleLock={(ref) => void onToggleLock(ref)}
                 onRemoveAssignment={(ref) => void doUnassign(ref)}
               />
@@ -615,6 +638,30 @@ export function BuilderScreen({
           </div>
         )}
       </div>
+
+      {/* The shift panel is the long form of a board block: every field it
+          truncates, plus the roster ranked against the slot. A TA opened from
+          inside it stacks on top and closes back to it. */}
+      {openShift !== undefined && (
+        <ShiftDrawer
+          shift={openShift}
+          model={model}
+          week={week}
+          // A preview must never reach Convex: an empty list is the honest
+          // answer for a fixture that did not supply one.
+          fixtureCandidates={fixture ? (fixtureCandidates ?? []) : undefined}
+          onClose={() => setDrawerShift(null)}
+          onOpenTa={setDrawerTa}
+          onAssign={(ta) => void doAssign(ta, openShift._id, undefined, true)}
+          onCoverDate={
+            openShiftCoverage
+              ? (ta) => void doCover(openShiftCoverage, ta)
+              : undefined
+          }
+          onToggleLock={(ref) => void onToggleLock(ref)}
+          onRemoveAssignment={(ref) => void doUnassign(ref)}
+        />
+      )}
 
       {drawerTa !== null && (
         <TaDrawer

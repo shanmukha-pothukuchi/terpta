@@ -10,6 +10,7 @@
  *   /dev/preview/builder         — coordinator builder, default view
  *   /dev/preview/builder-drawer  — builder with Daniel's TA drawer open
  *   /dev/preview/builder-publish — builder with the publish modal open
+ *   /dev/preview/builder-shift   — builder with the shift side panel open
  *   /dev/preview/roster          — coordinator roster
  *   /dev/preview/shifts          — coordinator shifts
  *   /dev/preview/hours-approval  — coordinator hours approval queue
@@ -186,10 +187,13 @@ function AvailabilityPreview() {
 
 function BuilderPreview({
   drawer,
+  shiftPanel,
   publish,
   week,
 }: {
   drawer?: boolean;
+  /** Open the shift side panel on the unfilled 0107 discussion. */
+  shiftPanel?: boolean;
   publish?: boolean;
   week?: boolean;
 }) {
@@ -205,6 +209,8 @@ function BuilderPreview({
           }
           fixtureDetail={drawer ? fx.danielDetail : undefined}
           initialDrawerTa={drawer ? fx.danielId : null}
+          initialDrawerShift={shiftPanel ? fx.PANEL_SHIFT_ID : null}
+          fixtureCandidates={shiftPanel ? fx.shiftCandidates : undefined}
           initialPublishOpen={publish ?? false}
         />
       </div>
@@ -518,6 +524,10 @@ const SCREENS: Record<string, { label: string; element: ReactNode }> = {
   builder: { label: "Builder — default", element: <BuilderPreview /> },
   "builder-drawer": { label: "Builder — TA drawer (Daniel)", element: <BuilderPreview drawer /> },
   "builder-publish": { label: "Builder — publish modal", element: <BuilderPreview publish /> },
+  "builder-shift": {
+    label: "Builder — shift panel (0107)",
+    element: <BuilderPreview shiftPanel />,
+  },
   "builder-week": {
     label: "Builder — one week (subs, absences, out-of-term)",
     element: <BuilderPreview week />,

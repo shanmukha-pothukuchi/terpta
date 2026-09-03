@@ -15,6 +15,8 @@ export interface EventsStripProps {
   model: BuilderModel;
   highlight: Highlight;
   onOpenTa: (taProfileRef: Id<"taProfiles">) => void;
+  /** Open the shift side panel. */
+  onOpenShift: (shift: ShiftRow) => void;
   onToggleLock: (assignmentRef: Id<"assignments">) => void;
   onRemoveAssignment: (assignmentRef: Id<"assignments">) => void;
 }
@@ -24,6 +26,7 @@ function EventCard({
   shift,
   highlight,
   onOpenTa,
+  onOpenShift,
   onToggleLock,
   onRemoveAssignment,
 }: {
@@ -31,6 +34,7 @@ function EventCard({
   shift: ShiftRow;
   highlight: Highlight;
   onOpenTa: (taProfileRef: Id<"taProfiles">) => void;
+  onOpenShift: (shift: ShiftRow) => void;
   onToggleLock: (assignmentRef: Id<"assignments">) => void;
   onRemoveAssignment: (assignmentRef: Id<"assignments">) => void;
 }) {
@@ -51,7 +55,16 @@ function EventCard({
   return (
     <div
       ref={setNodeRef}
-      className="flex flex-col gap-2 rounded-[10px] px-3 py-[10px] transition-[box-shadow] duration-150"
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpenShift(shift)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenShift(shift);
+        }
+      }}
+      className="flex cursor-pointer flex-col gap-2 rounded-[10px] px-3 py-[10px] transition-[box-shadow] duration-150"
       style={{
         border: unfilled
           ? "1px dashed rgba(226,24,51,0.5)"
@@ -136,6 +149,7 @@ export function EventsStrip({
   model,
   highlight,
   onOpenTa,
+  onOpenShift,
   onToggleLock,
   onRemoveAssignment,
 }: EventsStripProps) {
@@ -172,8 +186,9 @@ export function EventsStrip({
               shift={shift}
               highlight={highlight}
               onOpenTa={onOpenTa}
+              onOpenShift={onOpenShift}
               onToggleLock={onToggleLock}
-          onRemoveAssignment={onRemoveAssignment}
+              onRemoveAssignment={onRemoveAssignment}
             />
           ))}
         </div>

@@ -12,6 +12,10 @@ import {
 
 const modeValidator = dutyModeValidator;
 
+/** Office hours default to hour-long blocks; half an hour is the floor. */
+const DEFAULT_MIN_BLOCK = 60;
+const MIN_BLOCK_FLOOR = 30;
+
 /** Full dutyTypes doc validator (shared with ta.getSchedule). */
 export const dutyTypeDoc = v.object({
   _id: v.id("dutyTypes"),
@@ -23,6 +27,9 @@ export const dutyTypeDoc = v.object({
   defaultHoursCredit: v.number(),
   hoursPerTa: v.optional(v.number()),
   maxPerTa: v.optional(v.number()),
+  minBlockMinutes: v.optional(v.number()),
+  noOverlapDutyRefs: v.optional(v.array(v.id("dutyTypes"))),
+  noOverlapLectures: v.optional(v.boolean()),
 });
 
 /**
@@ -77,6 +84,9 @@ export const create = mutation({
     defaultHoursCredit: v.number(),
     hoursPerTa: v.optional(v.number()),
     maxPerTa: v.optional(v.number()),
+    minBlockMinutes: v.optional(v.number()),
+    noOverlapDutyRefs: v.optional(v.array(v.id("dutyTypes"))),
+    noOverlapLectures: v.optional(v.boolean()),
   },
   returns: v.id("dutyTypes"),
   handler: async (ctx, args) => {
@@ -91,7 +101,18 @@ export const create = mutation({
       mode: args.mode,
       color: args.color,
       defaultHoursCredit: args.defaultHoursCredit,
-      ...(args.mode === "window" ? { hoursPerTa: args.hoursPerTa ?? 2 } : {}),
+      ...(args.mode === "window"
+        ? {
+            hoursPerTa: args.hoursPerTa ?? 2,
+            minBlockMinutes: args.minBlockMinutes ?? DEFAULT_MIN_BLOCK,
+            ...(args.noOverlapDutyRefs !== undefined
+              ? { noOverlapDutyRefs: args.noOverlapDutyRefs }
+              : {}),
+            ...(args.noOverlapLectures !== undefined
+              ? { noOverlapLectures: args.noOverlapLectures }
+              : {}),
+          }
+        : {}),
       ...(args.maxPerTa !== undefined && args.maxPerTa > 0 ? { maxPerTa: Math.round(args.maxPerTa) } : {}),
     });
   },
@@ -107,6 +128,9 @@ export const update = mutation({
     hoursPerTa: v.optional(v.number()),
     /** Zero clears the cap. */
     maxPerTa: v.optional(v.number()),
+    minBlockMinutes: v.optional(v.number()),
+    noOverlapDutyRefs: v.optional(v.array(v.id("dutyTypes"))),
+    noOverlapLectures: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -150,6 +174,25 @@ export const update = mutation({
       // solver saw zero hours to place and generated no office hours at all
       // while the screen showed the default. Store the default it shows.
       patch.hoursPerTa = 2;
+    }
+    if (args.minBlockMinutes !== undefined) {
+      if (args.minBlockMinutes < MIN_BLOCK_FLOOR) {
+        throw new ConvexError("A block cannot be shorter than half an hour");
+      }
+      patch.minBlockMinutes = Math.round(args.minBlockMinutes);
+    } else if (args.mode === "window" && dutyType.minBlockMinutes === undefined) {
+      patch.minBlockMinutes = DEFAULT_MIN_BLOCK;
+    }
+    // An empty list is a real answer ("may overlap anything"), so it is
+    // stored rather than treated as "not set".
+    if (args.noOverlapDutyRefs !== undefined) {
+      if (args.noOverlapDutyRefs.some((id) => id === dutyType._id)) {
+        throw new ConvexError("A duty type cannot be told to avoid itself");
+      }
+      patch.noOverlapDutyRefs = args.noOverlapDutyRefs;
+    }
+    if (args.noOverlapLectures !== undefined) {
+      patch.noOverlapLectures = args.noOverlapLectures;
     }
     if (args.maxPerTa !== undefined) {
       if (args.maxPerTa < 0) throw new ConvexError("maxPerTa must be >= 0");

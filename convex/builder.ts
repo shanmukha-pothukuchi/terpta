@@ -10,6 +10,7 @@ import {
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireCoordinator } from "./lib/auth";
+import { fitWindow } from "./lib/availability";
 import { dayValidator, meetingValidator } from "./schema";
 import { solve } from "./solver/solve";
 import type {
@@ -24,6 +25,8 @@ import type {
 // Period bounds (Fall 2026). Used as defaults when a weekly shift omits
 // startDate/endDate and as the averaging window for weekly-load math.
 // ---------------------------------------------------------------------------
+/** Shortest office-hour block when a window duty type does not say. */
+const DEFAULT_MIN_BLOCK_MIN = 60;
 const DEFAULT_PERIOD_START = "2026-08-31";
 const DEFAULT_PERIOD_END = "2026-12-11";
 
@@ -319,6 +322,15 @@ const solveInputValidator = v.object({
   ),
   windowHoursPerTa: v.optional(v.record(v.string(), v.number())),
   maxPerTaByDuty: v.optional(v.record(v.string(), v.number())),
+  windowMinBlockMin: v.optional(v.record(v.string(), v.number())),
+  windowBlackouts: v.optional(
+    v.record(
+      v.string(),
+      v.array(
+        v.object({ day: dayValidator, startMin: v.number(), endMin: v.number() }),
+      ),
+    ),
+  ),
   lockedWindowBlocks: v.optional(
     v.array(
       v.object({
@@ -391,7 +403,7 @@ export const loadSolverInput = internalQuery({
   args: { periodRef: v.id("staffingPeriods") },
   returns: solveInputValidator,
   handler: async (ctx, args): Promise<SolveInput> => {
-    await requireCoordinator(ctx, args.periodRef);
+    const { period } = await requireCoordinator(ctx, args.periodRef);
 
     const dutyTypes = await ctx.db
       .query("dutyTypes")
@@ -432,10 +444,56 @@ export const loadSolverInput = internalQuery({
 
     const maxPerTaByDuty: Record<string, number> = {};
     const windowHoursPerTa: Record<string, number> = {};
+    const windowMinBlockMin: Record<string, number> = {};
     for (const d of dutyTypes) {
       if (d.maxPerTa !== undefined && d.maxPerTa > 0) maxPerTaByDuty[d._id as string] = d.maxPerTa;
       // Absent means the default the duty-type screen displays, never zero.
-      if (d.mode === "window") windowHoursPerTa[d._id as string] = d.hoursPerTa ?? 2;
+      if (d.mode === "window") {
+        windowHoursPerTa[d._id as string] = d.hoursPerTa ?? 2;
+        windowMinBlockMin[d._id as string] = d.minBlockMinutes ?? DEFAULT_MIN_BLOCK_MIN;
+      }
+    }
+
+    // Hours a window may not be cut into, per window duty type. A lecture is
+    // not a shift in this app — nobody is staffed on it — so it has to come
+    // off the course's own meetings rather than out of the shift table.
+    const windowBlackouts: Record<string, Array<{ day: Day; startMin: number; endMin: number }>> = {};
+    const windowDuties = dutyTypes.filter((d) => d.mode === "window");
+    if (windowDuties.some((d) => (d.noOverlapDutyRefs?.length ?? 0) > 0 || d.noOverlapLectures)) {
+      const lectureRanges: Array<{ day: Day; startMin: number; endMin: number }> = [];
+      if (windowDuties.some((d) => d.noOverlapLectures)) {
+        const sections = await ctx.db
+          .query("sections")
+          .withIndex("by_course", (q) => q.eq("courseRef", period.courseRef))
+          .collect();
+        const seen = new Set<string>();
+        for (const section of sections) {
+          for (const m of section.meetings) {
+            if ((m.kind ?? section.type) !== "lecture") continue;
+            // One lecture is listed on every section that attends it.
+            const key = `${m.day}|${m.startMin}|${m.endMin}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            lectureRanges.push({ day: m.day, startMin: m.startMin, endMin: m.endMin });
+          }
+        }
+      }
+      for (const d of windowDuties) {
+        const avoid = new Set((d.noOverlapDutyRefs ?? []).map((id) => id as string));
+        const ranges: Array<{ day: Day; startMin: number; endMin: number }> = [];
+        if (avoid.size > 0) {
+          for (const shift of shiftDocs) {
+            if (shift.windowRef !== undefined) continue;
+            if (!avoid.has(shift.dutyTypeRef as string)) continue;
+            if (shift.day === undefined || shift.startMin === undefined || shift.endMin === undefined) {
+              continue;
+            }
+            ranges.push({ day: shift.day, startMin: shift.startMin, endMin: shift.endMin });
+          }
+        }
+        if (d.noOverlapLectures) ranges.push(...lectureRanges);
+        if (ranges.length > 0) windowBlackouts[d._id as string] = ranges;
+      }
     }
 
     const availability: SolveInput["availability"] = [];
@@ -506,6 +564,8 @@ export const loadSolverInput = internalQuery({
       lockedAssignments,
       windowHoursPerTa,
       maxPerTaByDuty,
+      windowMinBlockMin,
+      windowBlackouts,
       lockedWindowBlocks,
       periodStart: DEFAULT_PERIOD_START,
       periodEnd: DEFAULT_PERIOD_END,
@@ -1083,6 +1143,183 @@ export const taDetail = query({
         reason: e.reason,
       })),
     };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// shiftCandidates — who could take this slot, best first
+// ---------------------------------------------------------------------------
+
+const candidateFitValidator = v.union(
+  v.literal("available"),
+  v.literal("prefer_not"),
+  v.literal("unavailable"),
+);
+
+/**
+ * Every TA in the period ranked against one shift.
+ *
+ * The board can only afford a count ("3 TAs available"); picking somebody
+ * from it meant guessing, or opening each TA in turn. This is the same rule
+ * the solver uses ({@link fitWindow}), said per person, so the panel and the
+ * generator can never disagree about who is free.
+ */
+export const shiftCandidates = query({
+  args: { shiftRef: v.id("shifts") },
+  returns: v.array(
+    v.object({
+      taProfileRef: v.id("taProfiles"),
+      name: v.string(),
+      fit: candidateFitValidator,
+      /** Assigned to this shift already. */
+      assigned: v.boolean(),
+      /** Another shift at the same hour, named. */
+      clash: v.union(v.null(), v.string()),
+      /** Away on this date — one-off events only. */
+      away: v.boolean(),
+      /** Already holds this duty type's per-TA maximum. */
+      atCap: v.boolean(),
+      weeklyHours: v.number(),
+      maxHoursPerWeek: v.number(),
+      /** False when the TA never submitted, so "available" is an assumption. */
+      submitted: v.boolean(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const shift = await ctx.db.get(args.shiftRef);
+    if (!shift) throw new ConvexError("Shift not found");
+    await requireCoordinator(ctx, shift.periodRef);
+
+    const duty = await ctx.db.get(shift.dutyTypeRef);
+    const periodShifts = await ctx.db
+      .query("shifts")
+      .withIndex("by_period", (q) => q.eq("periodRef", shift.periodRef))
+      .collect();
+    const shiftById = new Map(periodShifts.map((s) => [s._id as string, s]));
+    const dutyTypes = await ctx.db
+      .query("dutyTypes")
+      .withIndex("by_period", (q) => q.eq("periodRef", shift.periodRef))
+      .collect();
+    const dutyNames = new Map(dutyTypes.map((d) => [d._id as string, d.name]));
+
+    // Everything at the same hour on the same weekday, so a candidate who is
+    // already standing somewhere else at that time says so by name.
+    const clashing = new Map<string, Doc<"shifts">>();
+    if (shift.day !== undefined && shift.startMin !== undefined && shift.endMin !== undefined) {
+      for (const s of periodShifts) {
+        if (s._id === shift._id) continue;
+        if (s.day !== shift.day) continue;
+        if (s.startMin === undefined || s.endMin === undefined) continue;
+        // A one-off only clashes with the same date; a weekly one clashes
+        // with anything on that weekday.
+        if (s.recurrence === "once" && shift.recurrence === "once" && s.date !== shift.date) {
+          continue;
+        }
+        if (minutesOverlap(s.startMin, s.endMin, shift.startMin, shift.endMin)) {
+          clashing.set(s._id as string, s);
+        }
+      }
+    }
+
+    const weeks = weeksBetween(DEFAULT_PERIOD_START, DEFAULT_PERIOD_END);
+    const profiles = await ctx.db
+      .query("taProfiles")
+      .withIndex("by_period", (q) => q.eq("periodRef", shift.periodRef))
+      .collect();
+
+    type Candidate = {
+      taProfileRef: Id<"taProfiles">;
+      name: string;
+      fit: "available" | "prefer_not" | "unavailable";
+      assigned: boolean;
+      clash: string | null;
+      away: boolean;
+      atCap: boolean;
+      weeklyHours: number;
+      maxHoursPerWeek: number;
+      submitted: boolean;
+    };
+    const out: Candidate[] = [];
+    for (const profile of profiles) {
+      const user = await ctx.db.get(profile.userRef);
+      const blocks = await ctx.db
+        .query("availabilityBlocks")
+        .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
+        .collect();
+      const assignments = await ctx.db
+        .query("assignments")
+        .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
+        .collect();
+
+      let weeklyHours = 0;
+      let sameDutyCount = 0;
+      let clash: string | null = null;
+      let assigned = false;
+      for (const a of assignments) {
+        const other = shiftById.get(a.shiftRef as string);
+        if (!other) continue;
+        weeklyHours += weeklyHoursOf(other, a.hoursAllocated, weeks);
+        if (other._id === shift._id) assigned = true;
+        if (other.dutyTypeRef === shift.dutyTypeRef && other._id !== shift._id) {
+          sameDutyCount += 1;
+        }
+        if (clash === null && clashing.has(a.shiftRef as string)) {
+          clash =
+            other.sectionRef !== undefined
+              ? ((await ctx.db.get(other.sectionRef))?.sectionNumber ??
+                (dutyNames.get(other.dutyTypeRef as string) ?? "another shift"))
+              : (other.description ??
+                dutyNames.get(other.dutyTypeRef as string) ??
+                "another shift");
+        }
+      }
+
+      let away = false;
+      if (shift.date !== undefined) {
+        const exceptions = await ctx.db
+          .query("dateExceptions")
+          .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
+          .collect();
+        away = exceptions.some(
+          (x) => x.startDate <= shift.date! && shift.date! <= x.endDate,
+        );
+      }
+
+      const fit =
+        shift.day !== undefined && shift.startMin !== undefined && shift.endMin !== undefined
+          ? fitWindow(blocks, shift.day, shift.startMin, shift.endMin)
+          : "available";
+
+      out.push({
+        taProfileRef: profile._id,
+        name: user?.preferredName || user?.name || "Unknown",
+        fit,
+        assigned,
+        clash,
+        away,
+        atCap:
+          duty?.maxPerTa !== undefined &&
+          duty.maxPerTa > 0 &&
+          sameDutyCount >= duty.maxPerTa,
+        weeklyHours: round1(weeklyHours),
+        maxHoursPerWeek: profile.maxHoursPerWeek,
+        submitted: profile.availabilitySubmittedAt !== undefined,
+      });
+    }
+
+    const rank = (c: Candidate) =>
+      (c.fit === "unavailable" ? 4 : 0) +
+      (c.away ? 2 : 0) +
+      (c.clash !== null ? 2 : 0) +
+      (c.atCap ? 1 : 0) +
+      (c.fit === "prefer_not" ? 1 : 0);
+    out.sort(
+      (a, b) =>
+        rank(a) - rank(b) ||
+        a.weeklyHours - b.weeklyHours ||
+        a.name.localeCompare(b.name),
+    );
+    return out;
   },
 });
 

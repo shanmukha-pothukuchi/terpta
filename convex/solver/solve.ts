@@ -61,6 +61,8 @@ type WindowShift = Extract<SolverShift, { kind: "window" }>;
 
 /** Office-hour blocks are cut on a half-hour grid. */
 const SLOT = 30;
+/** Shortest office-hour block when the duty type does not say otherwise. */
+const DEFAULT_MIN_BLOCK = 60;
 const DAY_ORDER: Record<Day, number> = { M: 0, Tu: 1, W: 2, Th: 3, F: 4 };
 
 interface Load {
@@ -765,6 +767,23 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
   const unfilled: SolveDiagnostics["unfilledWindowHours"] = [];
   if (ctx.windowShifts.length === 0) return unfilled;
   const hoursPerTa = ctx.input.windowHoursPerTa ?? {};
+  const minBlockByDuty = ctx.input.windowMinBlockMin ?? {};
+  const blackoutByDuty = ctx.input.windowBlackouts ?? {};
+
+  /** Shortest block worth holding, snapped to the half-hour grid. */
+  const minBlockOf = (dutyId: string): number => {
+    const raw = minBlockByDuty[dutyId] ?? DEFAULT_MIN_BLOCK;
+    return Math.max(SLOT, Math.round(raw / SLOT) * SLOT);
+  };
+  // Nobody comes to office hours held during the lecture, and the TA holding
+  // them is usually in it. This is a rule about the hour, not about one TA:
+  // `busy` below only knows the TA's own shifts.
+  const blockedByDuty = (dutyId: string, day: Day, s: number, e: number): boolean => {
+    for (const b of blackoutByDuty[dutyId] ?? []) {
+      if (b.day === day && timeOverlap(s, e, b.startMin, b.endMin)) return true;
+    }
+    return false;
+  };
 
   const occupancy = new Map<string, Int32Array>();
   for (const w of ctx.windowShifts) {
@@ -827,11 +846,16 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
         .reduce((n, b) => n + (b.endMin - b.startMin), 0);
       let need = targetMin - held;
       const style = ta.officeHoursStyle ?? "few_long";
+      const minBlock = minBlockOf(dutyId);
       // "few_long" reaches for two-hour blocks and settles for less;
-      // "many_short" never holds more than an hour at a stretch.
-      const sizes = style === "few_long" ? [120, 90, 60, 30] : [60, 30];
+      // "many_short" never holds more than an hour at a stretch. Neither goes
+      // below the minimum the coordinator set, even if that means the last
+      // sliver of a TA's requirement goes unplaced and gets reported.
+      const maxSize = Math.max(style === "few_long" ? 120 : 60, minBlock);
+      const sizes: number[] = [];
+      for (let s = maxSize; s >= minBlock; s -= SLOT) sizes.push(s);
 
-      while (need >= SLOT) {
+      while (need >= minBlock) {
         let best: { w: WindowShift; s: number; e: number; score: number } | null = null;
         for (const size of sizes) {
           if (size > need) continue;
@@ -847,6 +871,7 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
                 }
               }
               if (!room) continue;
+              if (blockedByDuty(dutyId, w.day, start, end)) continue;
               if (!ctx.coversWindow(ta.id, w.day, start, end)) continue;
               if (ctx.overlapsUnavail(ta.id, w.day, start, end)) continue;
               if (busy(ta.id, w.day, start, end)) continue;
@@ -872,6 +897,45 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
         place(chosen.w, ta.id, chosen.s, chosen.e, false);
         need -= chosen.e - chosen.s;
       }
+
+      // A requirement that is not a whole number of blocks strands its last
+      // sliver: two and a half hours with an hour minimum places two and
+      // drops the rest, week after week. Grow a block by the remainder
+      // instead, so long as it stays under the ceiling the TA asked for.
+      if (need > 0 && need < minBlock && need % SLOT === 0) {
+        for (const b of blocksOf.get(ta.id) ?? []) {
+          if (b.dutyTypeId !== dutyId || b.locked) continue;
+          // A TA who asked for fewer, longer blocks will not mind one being
+          // longer still. One who asked for short ones would, so they keep
+          // the ceiling and the remainder is reported instead.
+          if (style === "many_short" && b.endMin - b.startMin + need > maxSize) continue;
+          const w = ctx.shiftById.get(b.windowShiftId);
+          if (!w || w.kind !== "window") continue;
+          const end = b.endMin + need;
+          if (end > w.endMin) continue;
+          const occ = occupancy.get(w.id)!;
+          let room = true;
+          for (let i = slotIndex(w, b.endMin); i < slotIndex(w, end); i++) {
+            if (occ[i] >= w.requiredCount) {
+              room = false;
+              break;
+            }
+          }
+          if (!room) continue;
+          if (blockedByDuty(dutyId, w.day, b.endMin, end)) continue;
+          if (!ctx.coversWindow(ta.id, w.day, b.endMin, end)) continue;
+          if (ctx.overlapsUnavail(ta.id, w.day, b.endMin, end)) continue;
+          if (busy(ta.id, w.day, b.endMin, end)) continue;
+          const load = state.loads.get(ta.id)!;
+          if (weeklyHoursOf(ctx, load) + need / 60 > ta.maxHoursPerWeek + 1e-9) continue;
+          for (let i = slotIndex(w, b.endMin); i < slotIndex(w, end); i++) occ[i] += 1;
+          b.endMin = end;
+          load.weeklyMin += need;
+          need = 0;
+          break;
+        }
+      }
+
       if (need >= SLOT) {
         unfilled.push({ taProfileId: ta.id, dutyTypeId: dutyId, missingHours: round4(need / 60) });
       }

@@ -85,6 +85,13 @@ export interface SolverLockedAssignment {
   hoursAllocated?: number; // async only
 }
 
+/** A weekday time range, used for blackout windows. */
+export interface SolverTimeRange {
+  day: Day;
+  startMin: number;
+  endMin: number;
+}
+
 /** An office-hour block the coordinator has pinned; the solver builds around it. */
 export interface SolverLockedWindowBlock {
   windowShiftId: string;
@@ -104,6 +111,13 @@ export interface SolveInput {
   windowHoursPerTa?: Record<string, number>;
   /** Most sync shifts of a duty type one TA may be given, by duty type id. */
   maxPerTaByDuty?: Record<string, number>;
+  /** Shortest office-hour block in minutes, by window duty type id. Default 60. */
+  windowMinBlockMin?: Record<string, number>;
+  /**
+   * Times office hours of a window duty type may not be cut into, whoever
+   * would hold them — lectures, discussions, anything the coordinator picked.
+   */
+  windowBlackouts?: Record<string, SolverTimeRange[]>;
   lockedWindowBlocks?: SolverLockedWindowBlock[];
   periodStart: string; // ISO date
   periodEnd: string; // ISO date

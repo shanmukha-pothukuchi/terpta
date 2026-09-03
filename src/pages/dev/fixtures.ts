@@ -8,6 +8,7 @@
 import type { Id, TableNames } from "../../../convex/_generated/dataModel";
 import type { DayCode } from "../../lib/format";
 import type { BuilderFixture } from "../coordinator/Builder";
+import type { ShiftCandidate } from "../coordinator/builder/ShiftDrawer";
 import type {
   BoardData,
   DutyType,
@@ -74,6 +75,14 @@ export const dutyTypes: DutyType[] = [
   dutyType("dt-oh", "Office Hours", "sync", "#7D93B2", 2),
   dutyType("dt-grading", "Grading", "async", "#3DD68C", 3),
   dutyType("dt-exam", "Exam Proctoring", "sync", "#F5A524", 2),
+  // No shifts of its own: it is here so the duty-types screen renders the
+  // window row with its hours-per-TA field and its rules popover.
+  {
+    ...dutyType("dt-oh-window", "Office Hour Windows", "window", "#2F6FED", 0),
+    hoursPerTa: 2,
+    minBlockMinutes: 60,
+    noOverlapLectures: true,
+  },
 ];
 const [DT_DISC, DT_OH, DT_GRADING, DT_EXAM] = dutyTypes;
 
@@ -233,6 +242,73 @@ function rosterRow(
     ...opts,
   };
 }
+
+/** Shift-panel candidates: one of each state the list has to render. */
+/** The unfilled 0107 discussion — the shift panel preview opens on it. */
+export const PANEL_SHIFT_ID = fid<"shifts">("shift-disc-0107");
+
+export const shiftCandidates: ShiftCandidate[] = [
+  {
+    taProfileRef: fid<"taProfiles">("ta-priya"),
+    name: "Priya Shah",
+    fit: "available",
+    assigned: false,
+    clash: null,
+    away: false,
+    atCap: false,
+    weeklyHours: 1.7,
+    maxHoursPerWeek: 10,
+    submitted: true,
+  },
+  {
+    taProfileRef: fid<"taProfiles">("ta-alex"),
+    name: "Alex Rivera",
+    fit: "available",
+    assigned: false,
+    clash: null,
+    away: false,
+    atCap: false,
+    weeklyHours: 0.8,
+    maxHoursPerWeek: 12,
+    submitted: false,
+  },
+  {
+    taProfileRef: fid<"taProfiles">("ta-sarah"),
+    name: "Sarah Kim",
+    fit: "prefer_not",
+    assigned: false,
+    clash: null,
+    away: false,
+    atCap: true,
+    weeklyHours: 4.8,
+    maxHoursPerWeek: 10,
+    submitted: true,
+  },
+  {
+    taProfileRef: fid<"taProfiles">("ta-marcus"),
+    name: "Marcus Johnson",
+    fit: "available",
+    assigned: false,
+    clash: "0104",
+    away: false,
+    atCap: false,
+    weeklyHours: 11,
+    maxHoursPerWeek: 10,
+    submitted: true,
+  },
+  {
+    taProfileRef: fid<"taProfiles">("ta-emma"),
+    name: "Emma Wilson",
+    fit: "unavailable",
+    assigned: false,
+    clash: null,
+    away: false,
+    atCap: false,
+    weeklyHours: 3.5,
+    maxHoursPerWeek: 10,
+    submitted: true,
+  },
+];
 
 export const roster: RosterRow[] = [
   rosterRow("ta-priya", "Priya Shah", "pshah@umd.edu", {

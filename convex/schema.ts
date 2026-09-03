@@ -103,6 +103,18 @@ export default defineSchema({
     /** "window" only: office hours each TA must hold per week. */
     hoursPerTa: v.optional(v.number()),
     /**
+     * "window" only: the shortest block the solver may cut, in minutes.
+     * Absent means 60 — half-hour office hours are not worth a TA's trip.
+     */
+    minBlockMinutes: v.optional(v.number()),
+    /**
+     * "window" only: duty types whose shift times office hours must stay
+     * clear of, for everybody — not just the TA holding them.
+     */
+    noOverlapDutyRefs: v.optional(v.array(v.id("dutyTypes"))),
+    /** "window" only: also stay clear of the course's lecture meetings. */
+    noOverlapLectures: v.optional(v.boolean()),
+    /**
      * Sync only: the most shifts of this kind the solver may give one TA.
      * Absent means no cap. A coordinator placing someone by hand is not
      * bound by it.

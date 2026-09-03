@@ -79,7 +79,12 @@ export function AssignChip({
       {...listeners}
       {...attributes}
       title={tooltip}
-      onClick={onOpen}
+      // The slot behind the chip opens the shift panel, so a click meant for
+      // the TA must not do both.
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen?.();
+      }}
       className="group inline-flex cursor-grab select-none items-center gap-[5px] whitespace-nowrap rounded-[6px] text-ink transition-shadow duration-150"
       style={{
         height: size === "sm" ? 20 : 22,
