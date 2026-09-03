@@ -593,6 +593,7 @@ export function BuilderScreen({
               <DiagnosticsPanel
                 model={model}
                 highlight={highlight}
+                week={week}
                 onToggle={(key) => setHighlight((h) => (h === key ? null : key))}
                 onClear={() => setHighlight(null)}
               />

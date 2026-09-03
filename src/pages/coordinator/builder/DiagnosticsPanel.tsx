@@ -1,3 +1,4 @@
+import type { Id } from "../../../../convex/_generated/dataModel";
 import {
   firstName,
   shiftLongLabel,
@@ -5,10 +6,13 @@ import {
   type BuilderModel,
   type Highlight,
 } from "./model";
+import { weekSeats, type WeekOverlay } from "./weekOverlay";
 
 export interface DiagnosticsPanelProps {
   model: BuilderModel;
   highlight: Highlight;
+  /** The selected week, for the one row that depends on it. */
+  week?: WeekOverlay | null;
   onToggle: (key: Exclude<Highlight, null | `ta:${string}`>) => void;
   onClear: () => void;
 }
@@ -28,6 +32,7 @@ interface DiagRow {
 export function DiagnosticsPanel({
   model,
   highlight,
+  week = null,
   onToggle,
   onClear,
 }: DiagnosticsPanelProps) {
@@ -42,6 +47,19 @@ export function DiagnosticsPanel({
         s.requiredCount - (model.assignmentsByShift.get(s._id as string)?.length ?? 0);
       return `${shiftLongLabel(model, s)} · ${shiftWhen(s)} · ${missing} open`;
     });
+
+  // Seats empty on the day rather than on the template: an assigned TA who
+  // is away with nobody standing in. Only meaningful once a week is chosen.
+  const shortItems = week
+    ? [...model.weekly, ...model.events].flatMap((s) => {
+        const seats = weekSeats(week, s, model.assignmentsByShift.get(s._id as string) ?? []);
+        if (seats.short === 0 || seats.away.length === 0) return [];
+        const who = seats.away
+          .map((a) => firstName(model.taName(a.taProfileRef as Id<"taProfiles">)))
+          .join(", ");
+        return [`${shiftLongLabel(model, s)} · ${shiftWhen(s)} · ${who} away, no sub`];
+      })
+    : [];
 
   const conflictItems: string[] = [];
   for (const list of model.conflictsByAssignment.values()) {
@@ -65,6 +83,9 @@ export function DiagnosticsPanel({
 
   const rows: DiagRow[] = [
     { key: "unfilled", label: "Unfilled shifts", count: unfilledItems.length, items: unfilledItems, dot: "#E21833" },
+    ...(week
+      ? [{ key: "short" as const, label: "Short this week", count: shortItems.length, items: shortItems, dot: "#F5A524" }]
+      : []),
     { key: "conflict", label: "Conflicts", count: conflictItems.length, items: conflictItems, dot: "#E21833" },
     { key: "over", label: "Over hours cap", count: overItems.length, items: overItems, dot: "#F5A524" },
     { key: "under", label: "Under 30% of cap", count: underItems.length, items: underItems, dot: "#F5A524" },

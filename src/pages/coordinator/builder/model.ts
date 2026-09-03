@@ -23,6 +23,8 @@ export type TaDetailData = NonNullable<
 export type Highlight =
   | null
   | "unfilled"
+  /** Somebody assigned is away in the selected week and nobody stands in. */
+  | "short"
   | "conflict"
   | "over"
   | "under"

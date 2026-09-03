@@ -12,6 +12,7 @@
  */
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { DayCode } from "../../../lib/format";
+import { dateOfDayInWeek, isDateInRange } from "../../../lib/week";
 
 export interface WeekAbsence {
   taProfileRef: Id<"taProfiles">;
@@ -133,4 +134,78 @@ export function isAwayOnDay(
   return overlay.absences.find(
     (a) => String(a.taProfileRef) === id && a.dates.includes(date),
   );
+}
+
+/** The little the week logic needs to know about a shift. */
+export interface SeatShift {
+  _id: Id<"shifts"> | string;
+  recurrence?: "weekly" | "once";
+  day?: DayCode;
+  date?: string;
+  requiredCount: number;
+}
+
+/** What one shift looks like on its date in the selected week. */
+export interface WeekSeats {
+  /** The date it meets this week, or null if it does not. */
+  date: string | null;
+  /** Assignees who are away that day. */
+  away: Array<{ taProfileRef: string; reason: string | null }>;
+  /** Assignees who are coming. */
+  present: number;
+  /** A recorded stand-in, by profile id, if any. */
+  coverTaRef: string | null;
+  /** Seats with nobody in them on the day: required minus present minus cover. */
+  short: number;
+}
+
+/**
+ * Who is actually in the room for a shift on its date this week.
+ *
+ * The board and the diagnostics used to answer this differently: the board
+ * from the overlay, the panel from the standing roster, which cannot know
+ * that the only TA on Tuesday is away. A slot could be dashed red while the
+ * panel counted it as fine. One function, both callers.
+ */
+export function weekSeats(
+  overlay: WeekOverlay | null,
+  shift: SeatShift,
+  assignments: Array<{ taProfileRef: Id<"taProfiles"> | string }>,
+): WeekSeats {
+  const none: WeekSeats = {
+    date: null,
+    away: [],
+    present: assignments.length,
+    coverTaRef: null,
+    short: 0,
+  };
+  if (!overlay) return none;
+  let date: string | null = null;
+  if (shift.recurrence === "weekly" && shift.day) {
+    if (overlay.dormantShiftIds.has(String(shift._id))) return none;
+    date = dateOfDayInWeek(overlay.weekStart, shift.day);
+  } else if (shift.recurrence === "once" && shift.date) {
+    if (!isDateInRange(shift.date, overlay.weekStart, overlay.weekEnd)) return none;
+    date = shift.date;
+  }
+  if (!date) return none;
+
+  const coverage = overlay.coverages.find(
+    (c) => String(c.shiftRef) === String(shift._id) && c.date === date,
+  );
+  const away: WeekSeats["away"] = [];
+  for (const a of assignments) {
+    const id = String(a.taProfileRef);
+    const absence = overlay.absences.find(
+      (x) => String(x.taProfileRef) === id && x.dates.includes(date),
+    );
+    if (absence) away.push({ taProfileRef: id, reason: absence.reason });
+    else if (coverage && String(coverage.absentTaRef) === id) {
+      away.push({ taProfileRef: id, reason: null });
+    }
+  }
+  const present = assignments.length - away.length;
+  const coverTaRef = coverage?.coverTaRef ? String(coverage.coverTaRef) : null;
+  const short = Math.max(0, shift.requiredCount - present - (coverTaRef ? 1 : 0));
+  return { date, away, present, coverTaRef, short };
 }

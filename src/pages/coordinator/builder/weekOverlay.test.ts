@@ -6,6 +6,7 @@ import {
   coverageDropTarget,
   coverageFor,
   isAwayOnDay,
+  weekSeats,
   type WeekOverlayInput,
 } from "./weekOverlay";
 import { dateOfDayInWeek } from "../../../lib/week";
@@ -162,5 +163,58 @@ describe("coverageDropTarget", () => {
         isMove: false,
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("weekSeats", () => {
+  const shift = {
+    _id: sid("shift-disc-0104"),
+    recurrence: "weekly" as const,
+    day: "W" as const,
+    requiredCount: 1,
+  };
+  const priya = { taProfileRef: tid("ta-priya") };
+  const shan = { taProfileRef: tid("ta-shan") };
+
+  it("counts an assignee away that day as a missing seat", () => {
+    // Priya is away Wed 2026-09-16 in the fixture overlay.
+    const seats = weekSeats(overlay, shift, [priya]);
+    expect(seats.date).toBe("2026-09-16");
+    expect(seats.away).toHaveLength(1);
+    expect(seats.present).toBe(0);
+    expect(seats.short).toBe(1);
+  });
+
+  it("is not short when a co-assignee is coming", () => {
+    expect(weekSeats(overlay, shift, [priya, shan]).short).toBe(0);
+  });
+
+  it("lets a recorded stand-in fill the seat", () => {
+    const covered = buildWeekOverlay({
+      ...input,
+      coverages: [
+        {
+          _id: cid("c"),
+          shiftRef: sid("shift-disc-0104"),
+          date: "2026-09-16",
+          day: "W",
+          absentTaRef: tid("ta-priya"),
+          absentName: "Priya",
+          coverTaRef: tid("ta-ravi"),
+          coverName: "Ravi",
+        },
+      ],
+    });
+    const seats = weekSeats(covered, shift, [priya]);
+    expect(seats.coverTaRef).toBe("ta-ravi");
+    expect(seats.short).toBe(0);
+  });
+
+  it("ignores a shift out of term this week", () => {
+    expect(weekSeats(overlay, { ...shift, _id: sid("shift-dormant") }, []).date).toBeNull();
+  });
+
+  it("is inert without a week", () => {
+    expect(weekSeats(null, shift, [priya]).short).toBe(0);
   });
 });

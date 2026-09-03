@@ -4,6 +4,7 @@ import { CalendarOff, UserRoundCheck, UserRoundX } from "lucide-react";
 import {
   coverageFor,
   isAwayOnDay,
+  weekSeats,
   type WeekOverlay,
 } from "./weekOverlay";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -165,10 +166,11 @@ function Slot({
   // Short on the day itself: nobody assigned is coming and no stand-in was
   // recorded. An assigned TA who is away used to keep the seat looking taken,
   // so a meeting with literally nobody in the room read as fully staffed.
-  const shortThisWeek =
-    week !== null &&
-    week !== undefined &&
-    present.length + (recordedCover ? 1 : 0) < shift.requiredCount;
+  // Same rule as the "Short this week" diagnostic: somebody assigned is away
+  // and the seat is not filled. A slot nobody was ever assigned to is
+  // "unfilled", not short, and is counted there instead.
+  const seats = weekSeats(week ?? null, shift, assigned);
+  const shortThisWeek = seats.short > 0 && seats.away.length > 0;
   const unfilled = missing > 0 || shortThisWeek;
 
   const coverNote = coverage
@@ -209,6 +211,7 @@ function Slot({
 
   let ring = "none";
   if (highlight === "unfilled" && unfilled) ring = "0 0 0 2px rgba(255,255,255,0.55)";
+  if (highlight === "short" && shortThisWeek) ring = "0 0 0 2px rgba(255,255,255,0.55)";
   if (isOver) ring = "0 0 0 2px rgba(255,255,255,0.35)";
 
   return (
