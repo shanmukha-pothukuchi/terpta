@@ -33,6 +33,7 @@ import {
   formatMeeting,
   formatTimeRange,
   shortShiftName,
+  termName,
   type DayCode,
 } from "../../lib/format";
 import {
@@ -40,6 +41,7 @@ import {
   Button,
   Card,
   EmptyState,
+  IconButton,
   Input,
   PageHeader,
   ProgressBar,
@@ -89,14 +91,6 @@ function addDaysIso(iso: string, days: number): string {
 }
 
 const DAY_INDEX: Record<DayCode, number> = { M: 0, Tu: 1, W: 2, Th: 3, F: 4 };
-
-/** "202608" -> "Fall 2026" (best effort). */
-function termName(term: string): string {
-  const y = term.slice(0, 4);
-  const season =
-    { "01": "Spring", "05": "Summer", "08": "Fall", "12": "Winter" }[term.slice(4)] ?? "";
-  return season ? `${season} ${y}` : term;
-}
 
 /** Active period for the signed-in TA (context selection, else listMine). */
 function useMyTaPeriod() {
@@ -641,19 +635,20 @@ export function HoursView({
                                         : "Edit this entry"
                                     }
                                   >
-                                    <button
-                                      type="button"
+                                    <IconButton
+                                      size="sm"
                                       onClick={() => beginEdit(log)}
                                       aria-label={`Edit ${formatDate(log.date)} entry`}
-                                      className="cursor-pointer rounded-[5px] p-1 text-faint transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-ink"
                                     >
-                                      <Pencil size={13} strokeWidth={1.5} aria-hidden />
-                                    </button>
+                                      <Pencil size={15} strokeWidth={1.5} aria-hidden />
+                                    </IconButton>
                                   </Tooltip>
                                   {onDeleteLog ? (
                                     <Tooltip label="Delete this entry">
-                                      <button
-                                        type="button"
+                                      <IconButton
+                                        size="sm"
+                                        variant="danger"
+                                        disabled={busy}
                                         onClick={() => {
                                           setRowBusy(id);
                                           void onDeleteLog(id).finally(() =>
@@ -661,10 +656,9 @@ export function HoursView({
                                           );
                                         }}
                                         aria-label={`Delete ${formatDate(log.date)} entry`}
-                                        className="cursor-pointer rounded-[5px] p-1 text-faint transition-colors hover:bg-[rgba(226,24,51,0.18)] hover:text-[#F4A3AE]"
                                       >
-                                        <Trash2 size={13} strokeWidth={1.5} aria-hidden />
-                                      </button>
+                                        <Trash2 size={15} strokeWidth={1.5} aria-hidden />
+                                      </IconButton>
                                     </Tooltip>
                                   ) : null}
                                 </>

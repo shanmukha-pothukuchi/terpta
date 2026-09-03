@@ -29,6 +29,11 @@ import { BuilderScreen } from "../coordinator/Builder";
 import { RosterView } from "../coordinator/Roster";
 import { ShiftsView } from "../coordinator/Shifts";
 import {
+  DEFAULT_STAFF_KINDS,
+  PeriodSetupView,
+  type SectionKind,
+} from "../coordinator/PeriodSetup";
+import {
   HoursView as CoordinatorHoursView,
   type HoursFilters,
 } from "../coordinator/Hours";
@@ -174,6 +179,58 @@ function RosterPreview() {
         inviting={false}
         onInvite={noop}
         onRemove={noop}
+      />
+    </PageFrame>
+  );
+}
+
+/**
+ * Period setup with a course whose sections carry BOTH their lecture and
+ * their discussion times — the shape that used to staff lectures as
+ * discussions.
+ */
+function PeriodSetupPreview() {
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(["sec-p-0101", "sec-p-0102"]),
+  );
+  const [staffKinds, setStaffKinds] = useState<Set<SectionKind>>(
+    () => new Set(DEFAULT_STAFF_KINDS),
+  );
+  const [deadline, setDeadline] = useState("2026-09-14");
+  return (
+    <PageFrame>
+      <PeriodSetupView
+        periods={fx.setupPeriods}
+        course="CMSC330"
+        onCourseChange={noop}
+        term="202608"
+        onTermChange={noop}
+        importing={false}
+        onImport={noop}
+        importResult={fx.setupImportResult}
+        sections={fx.setupSections}
+        selected={selected}
+        onToggleSection={(id) =>
+          setSelected((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+          })
+        }
+        staffKinds={staffKinds}
+        onToggleStaffKind={(kind) =>
+          setStaffKinds((prev) => {
+            const next = new Set(prev);
+            if (next.has(kind)) next.delete(kind);
+            else next.add(kind);
+            return next;
+          })
+        }
+        deadline={deadline}
+        onDeadlineChange={setDeadline}
+        creating={false}
+        onCreate={noop}
       />
     </PageFrame>
   );
@@ -350,6 +407,10 @@ const SCREENS: Record<string, { label: string; element: ReactNode }> = {
   "builder-publish": { label: "Builder — publish modal", element: <BuilderPreview publish /> },
   roster: { label: "Coordinator roster", element: <RosterPreview /> },
   shifts: { label: "Coordinator shifts", element: <ShiftsPreview /> },
+  "period-setup": {
+    label: "Coordinator period setup",
+    element: <PeriodSetupPreview />,
+  },
   "hours-approval": { label: "Coordinator hours approval", element: <HoursApprovalPreview /> },
   schedule: { label: "TA schedule", element: <SchedulePreview /> },
   "ta-hours": { label: "TA hour logging", element: <TaHoursPreview /> },

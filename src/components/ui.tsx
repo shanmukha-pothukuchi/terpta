@@ -78,6 +78,56 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 
 /* ------------------------------------------------------------------ */
+/* IconButton — square, icon-only actions in dense rows                */
+/* ------------------------------------------------------------------ */
+
+export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  /** Required: an icon alone never says what it does. */
+  "aria-label": string;
+  variant?: "ghost" | "secondary" | "danger";
+  /** 32px by default. "sm" is 28px, for tighter table rows. */
+  size?: "md" | "sm";
+}
+
+/**
+ * Icon-only buttons were being hand-rolled as `p-1` around a 13px icon, which
+ * gave a ~21px target that is hard to hit and easy to miss entirely — the
+ * trash and flag actions read as decoration. This keeps them square, at least
+ * 28px, and gives them a visible resting border so they read as buttons.
+ */
+export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
+  function IconButton({ variant = "secondary", size = "md", className, children, ...rest }, ref) {
+    return (
+      <button
+        ref={ref}
+        type={rest.type ?? "button"}
+        className={cx(
+          "inline-flex shrink-0 items-center justify-center rounded-[8px]",
+          "cursor-pointer select-none transition-colors duration-100",
+          "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(255,255,255,0.08)]",
+          "disabled:opacity-50 disabled:cursor-not-allowed",
+          size === "md" ? "size-8" : "size-7",
+          ICON_BUTTON_VARIANTS[variant],
+          className,
+        )}
+        {...rest}
+      >
+        {children}
+      </button>
+    );
+  },
+);
+
+const ICON_BUTTON_VARIANTS: Record<"ghost" | "secondary" | "danger", string> = {
+  ghost:
+    "border border-transparent text-muted hover:bg-[rgba(255,255,255,0.06)] hover:text-ink",
+  secondary:
+    "border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] text-muted hover:bg-[rgba(255,255,255,0.08)] hover:text-ink",
+  danger:
+    "border border-[rgba(226,24,51,0.28)] bg-[rgba(226,24,51,0.08)] text-[#ff8b9b] hover:bg-[rgba(226,24,51,0.18)]",
+};
+
+/* ------------------------------------------------------------------ */
 /* Inputs — focus: border white/28 + 3px white/5 halo                  */
 /* ------------------------------------------------------------------ */
 

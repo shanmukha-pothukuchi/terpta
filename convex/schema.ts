@@ -9,11 +9,24 @@ export const dayValidator = v.union(
   v.literal("F"),
 );
 
+export const sectionTypeValidator = v.union(
+  v.literal("lecture"),
+  v.literal("discussion"),
+  v.literal("lab"),
+);
+
 export const meetingValidator = v.object({
   day: dayValidator,
   startMin: v.number(),
   endMin: v.number(),
   room: v.string(),
+  /**
+   * What this meeting is. A UMD section holds both its lecture and its
+   * discussion times, so the section's own type cannot say which times a TA
+   * should be staffed on. Optional: rows written before this field existed
+   * have no kind, and are read as the section's type.
+   */
+  kind: v.optional(sectionTypeValidator),
 });
 
 export const roleValidator = v.union(v.literal("ta"), v.literal("coordinator"));
@@ -161,6 +174,13 @@ export default defineSchema({
   swapRequests: defineTable({
     periodRef: v.id("staffingPeriods"),
     assignmentRef: v.id("assignments"),
+    /**
+     * The shift the assignment pointed at, snapshotted at request time.
+     * Approving a permanent swap with no suggested TA deletes the assignment,
+     * which used to take the shift's identity with it — the coordinator's log
+     * then read "Shan wants out of Duty". The shift itself survives.
+     */
+    shiftRef: v.optional(v.id("shifts")),
     requesterRef: v.id("taProfiles"),
     suggestedTaRef: v.optional(v.id("taProfiles")),
     reason: v.string(),

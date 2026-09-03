@@ -12,6 +12,7 @@ import {
 import { RefreshCw, Send, TriangleAlert, Undo2, Wand2 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { termName } from "../../lib/format";
 import { usePeriod } from "../../lib/period";
 import {
   Badge,
@@ -162,7 +163,7 @@ export function BuilderScreen({
     board,
     status: periodInfo?.period.status,
     courseLabel: periodInfo?.course
-      ? `${periodInfo.course.courseId} · ${periodInfo.period.term}`
+      ? `${periodInfo.course.courseId} · ${termName(periodInfo.period.term)}`
       : "",
   };
 

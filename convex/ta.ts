@@ -479,6 +479,7 @@ export const requestSwap = mutation({
     return await ctx.db.insert("swapRequests", {
       periodRef: shift.periodRef,
       assignmentRef: assignment._id,
+      shiftRef: shift._id,
       requesterRef: profile._id,
       suggestedTaRef: args.suggestedTaRef,
       reason: args.reason.trim(),
@@ -527,7 +528,8 @@ export const listMySwaps = query({
     const out = [];
     for (const swap of rows) {
       const assignment = await ctx.db.get(swap.assignmentRef);
-      const shift = assignment ? await ctx.db.get(assignment.shiftRef) : null;
+      const shiftRef = swap.shiftRef ?? assignment?.shiftRef;
+      const shift = shiftRef ? await ctx.db.get(shiftRef) : null;
       let label = "";
       if (shift) {
         const dutyType = await ctx.db.get(shift.dutyTypeRef);

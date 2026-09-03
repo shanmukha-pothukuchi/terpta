@@ -20,6 +20,7 @@ import type { PaletteTa } from "../../components/CommandPalette";
 import type { PeriodEntry } from "../../lib/period";
 import type { ScheduleViewProps } from "../ta/Schedule";
 import type { HoursViewProps as TaHoursViewProps } from "../ta/Hours";
+import type { PeriodSetupViewProps } from "../coordinator/PeriodSetup";
 
 const fid = <T extends TableNames>(s: string) => s as Id<T>;
 const T0 = 1756800000000; // fixture _creationTime
@@ -606,3 +607,68 @@ export const coverageNotices: ScheduleViewProps["coverage"] = [
 export const TA_WEEK_START = "2026-09-14";
 
 export type { TaHoursViewProps };
+
+/* ------------------------------------------------------------------ */
+/* Period setup                                                        */
+/* ------------------------------------------------------------------ */
+
+/* CMSC330's real shape: one section holds a Tu/Th lecture AND a Friday
+   discussion, so "which meetings do TAs staff?" is not rhetorical — staffing
+   the whole section used to put the lecture on the shift board too. */
+function setupSection(
+  id: string,
+  number: string,
+  instructor: string,
+): SetupSection {
+  return {
+    _id: fid<"sections">(id),
+    _creationTime: T0,
+    courseRef: fid<"courses">("course-cmsc330"),
+    sectionNumber: number,
+    type: "discussion",
+    instructors: [instructor],
+    meetings: [
+      { day: "Tu", startMin: 570, endMin: 645, room: "IRB 0324", kind: "lecture" },
+      { day: "Th", startMin: 570, endMin: 645, room: "IRB 0324", kind: "lecture" },
+      { day: "F", startMin: 540, endMin: 590, room: "IRB 1207", kind: "discussion" },
+    ],
+  };
+}
+
+type SetupSection = NonNullable<PeriodSetupViewProps["sections"]>[number];
+
+export const setupSections: SetupSection[] = [
+  setupSection("sec-p-0101", "0101", "Anwar Mamat"),
+  setupSection("sec-p-0102", "0102", "Anwar Mamat"),
+  setupSection("sec-p-0201", "0201", "Cliff Bakalian"),
+];
+
+export const setupImportResult: PeriodSetupViewProps["importResult"] = {
+  courseRef: fid<"courses">("course-cmsc330"),
+  courseName: "Organization of Programming Languages",
+  sectionRefs: setupSections.map((s) => s._id),
+  source: "umdio",
+  sectionsImported: setupSections.length,
+};
+
+export const setupPeriods: PeriodSetupViewProps["periods"] = [
+  {
+    period: {
+      _id: PERIOD_ID,
+      _creationTime: T0,
+      courseRef: fid<"courses">("course-cmsc132"),
+      term: "202608",
+      coordinatorRef: fid<"users">("user-coord"),
+      collectionDeadline: "2026-09-14",
+      status: "generated",
+    },
+    course: {
+      _id: fid<"courses">("course-cmsc132"),
+      _creationTime: T0,
+      courseId: "CMSC132",
+      term: "202608",
+      name: "Object-Oriented Programming II",
+    },
+    taProfileId: null,
+  },
+];

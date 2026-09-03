@@ -102,3 +102,18 @@ export function shortShiftName(name: string, dutyTypeName: string): string {
   const rest = trimmed.slice(prefix.length).replace(/^[\s·:-]+/, "");
   return rest.length > 0 ? rest : trimmed;
 }
+
+/**
+ * "202608" -> "Fall 2026". UMD term codes are the year followed by the month
+ * the semester starts in, which is not something to show a coordinator: the
+ * course switcher used to read "202608 · Generated".
+ *
+ * Returns the code unchanged when it is not a term code, so a label never
+ * silently becomes blank.
+ */
+export function termName(term: string): string {
+  const m = term.match(/^(\d{4})(\d{2})$/);
+  if (!m) return term;
+  const season = { "01": "Spring", "05": "Summer", "08": "Fall", "12": "Winter" }[m[2]];
+  return season ? `${season} ${m[1]}` : term;
+}

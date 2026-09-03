@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { CalendarPlus, Download } from "lucide-react";
+import { CalendarPlus, Check, Download, Plus } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import {
@@ -85,6 +85,23 @@ const SECTION_TYPE_LABEL: Record<SectionRow["type"], string> = {
   lecture: "Lectures",
 };
 
+export type SectionKind = SectionRow["type"];
+
+/** Discussions and labs first — the times a TA normally runs. */
+const STAFF_KIND_OPTIONS: Array<{ value: SectionKind; label: string; noun: string }> = [
+  { value: "discussion", label: "Discussions", noun: "discussion" },
+  { value: "lab", label: "Labs", noun: "lab" },
+  { value: "lecture", label: "Lectures", noun: "lecture" },
+];
+
+export const DEFAULT_STAFF_KINDS: SectionKind[] = ["discussion", "lab"];
+
+/** ["a","b","c"] -> "a, b and c". */
+function joinWords(words: string[]): string {
+  if (words.length <= 1) return words[0] ?? "";
+  return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+}
+
 /* ------------------------------------------------------------------ */
 /* Pure view — renders from props so a dev harness can feed fixtures.  */
 /* ------------------------------------------------------------------ */
@@ -103,6 +120,9 @@ export interface PeriodSetupViewProps {
   sections: SectionRow[] | undefined;
   selected: ReadonlySet<string>;
   onToggleSection: (id: string) => void;
+  /** Which meeting kinds become shifts. */
+  staffKinds: ReadonlySet<SectionKind>;
+  onToggleStaffKind: (kind: SectionKind) => void;
   deadline: string;
   onDeadlineChange: (v: string) => void;
   creating: boolean;
@@ -121,6 +141,8 @@ export function PeriodSetupView({
   sections,
   selected,
   onToggleSection,
+  staffKinds,
+  onToggleStaffKind,
   deadline,
   onDeadlineChange,
   creating,
@@ -228,11 +250,7 @@ export function PeriodSetupView({
                     <div key={type}>
                       <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.06em] text-faint">
                         {SECTION_TYPE_LABEL[type]}
-                        {type === "discussion" ? (
-                          <span className="ml-2 normal-case tracking-normal text-faint">
-                            checked sections get a weekly Discussion shift
-                          </span>
-                        ) : null}
+
                       </p>
                       <div className="overflow-hidden rounded-[10px] border border-line">
                         {groupByInstructor(rows).map(({ instructor, sections: group }) => {
@@ -273,12 +291,31 @@ export function PeriodSetupView({
                               className="size-3.5 shrink-0 cursor-pointer accent-umd"
                             />
                             <span className="w-12 font-mono font-medium">{s.sectionNumber}</span>
-                            <span className="truncate font-mono text-[11.5px] text-muted">
-                              {s.meetings.length === 0
-                                ? "no meetings"
-                                : s.meetings
-                                    .map((m) => formatMeeting(m.day, m.startMin, m.endMin))
-                                    .join(" · ")}
+                            {/* A section lists both its lecture and its
+                                discussion times; dim the ones that will not
+                                become shifts so the split is visible here. */}
+                            <span className="min-w-0 truncate font-mono text-[11.5px]">
+                              {s.meetings.length === 0 ? (
+                                <span className="text-muted">no meetings</span>
+                              ) : (
+                                s.meetings.map((m, i) => {
+                                  const staffed = staffKinds.has(m.kind ?? s.type);
+                                  return (
+                                    <span
+                                      key={`${m.day}-${m.startMin}-${i}`}
+                                      className={staffed ? "text-muted" : "text-faint/60"}
+                                      title={
+                                        staffed
+                                          ? `Staffed as ${m.kind ?? s.type}`
+                                          : `${m.kind ?? s.type} — not staffed`
+                                      }
+                                    >
+                                      {i > 0 ? " · " : ""}
+                                      {formatMeeting(m.day, m.startMin, m.endMin)}
+                                    </span>
+                                  );
+                                })
+                              )}
                             </span>
                             <span className="flex-1" />
                             <span className="font-mono text-[11.5px] text-faint">
@@ -295,6 +332,53 @@ export function PeriodSetupView({
                 })}
               </div>
             )
+          ) : null}
+
+          {imported ? (
+            <div className="flex flex-col gap-2 border-t border-line pt-4">
+              <Label htmlFor="ps-staff-kinds" className="mb-0">
+                Which meetings do TAs staff?
+              </Label>
+              {/* A UMD section holds its lecture and its discussion times
+                  together, so without this every lecture was turned into a
+                  Discussion shift alongside the real one. */}
+              <div id="ps-staff-kinds" className="flex flex-wrap items-center gap-2">
+                {STAFF_KIND_OPTIONS.map((k) => {
+                  const on = staffKinds.has(k.value);
+                  return (
+                    <button
+                      key={k.value}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={on}
+                      onClick={() => onToggleStaffKind(k.value)}
+                      className={
+                        "flex h-8 cursor-pointer items-center gap-1.5 rounded-[9px] border px-3 text-[12.5px] transition-colors duration-100 " +
+                        (on
+                          ? "border-transparent bg-[rgba(255,255,255,0.09)] font-medium text-ink shadow-[inset_0_0_0_1px_rgba(255,255,255,0.10)]"
+                          : "border-line text-muted hover:text-ink")
+                      }
+                    >
+                      {on ? (
+                        <Check size={13} strokeWidth={1.5} aria-hidden />
+                      ) : (
+                        <Plus size={13} strokeWidth={1.5} aria-hidden />
+                      )}
+                      {k.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[12px] text-faint">
+                {staffKinds.size === 0
+                  ? "Nothing selected — the period starts with no shifts, and you can add them by hand."
+                  : `Only the ${joinWords(
+                      STAFF_KIND_OPTIONS.filter((o) => staffKinds.has(o.value)).map(
+                        (o) => o.noun,
+                      ),
+                    )} times of the checked sections become shifts.`}
+              </p>
+            </div>
           ) : null}
 
           <div className="flex items-end gap-3 border-t border-line pt-4">
@@ -339,6 +423,9 @@ export default function PeriodSetup() {
   const [initializedFor, setInitializedFor] = useState<Id<"courses"> | null>(null);
   const [deadline, setDeadline] = useState("");
   const [creating, setCreating] = useState(false);
+  const [staffKinds, setStaffKinds] = useState<Set<SectionKind>>(
+    () => new Set(DEFAULT_STAFF_KINDS),
+  );
 
   const sections = useQuery(
     api.periods.listSections,
@@ -377,6 +464,7 @@ export default function PeriodSetup() {
         term,
         collectionDeadline: deadline,
         sectionRefs: [...selected] as Id<"sections">[],
+        staffMeetingKinds: [...staffKinds],
       });
       toast("Staffing period created — collecting availability", {
         link: { label: "Invite TAs", to: "/coordinator/roster" },
@@ -384,6 +472,7 @@ export default function PeriodSetup() {
       setImportResult(null);
       setInitializedFor(null);
       setSelected(new Set());
+      setStaffKinds(new Set(DEFAULT_STAFF_KINDS));
       setDeadline("");
     } catch (e) {
       toast(errorMessage(e), { tone: "error" });
@@ -399,6 +488,15 @@ export default function PeriodSetup() {
       onCourseChange={setCourse}
       term={term}
       onTermChange={setTerm}
+      staffKinds={staffKinds}
+      onToggleStaffKind={(kind) =>
+        setStaffKinds((prev) => {
+          const next = new Set(prev);
+          if (next.has(kind)) next.delete(kind);
+          else next.add(kind);
+          return next;
+        })
+      }
       importing={importing}
       onImport={() => void onImport()}
       importResult={importResult}

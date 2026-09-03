@@ -10,6 +10,7 @@ import {
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { termName } from "./format";
 import { useCurrentUser } from "./useCurrentUser";
 
 /**
@@ -98,11 +99,11 @@ export function PeriodProvider({ children }: { children: ReactNode }) {
           periodId: period._id,
           courseId,
           courseName: course?.name ?? "",
-          term: period.term,
+          term: termName(period.term),
           status: period.status,
           collectionDeadline: period.collectionDeadline,
           taProfileId,
-          label: `${courseId} · ${period.term}`,
+          label: `${courseId} · ${termName(period.term)}`,
         };
       });
   }, [mine]);

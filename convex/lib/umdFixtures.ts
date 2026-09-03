@@ -51,6 +51,12 @@ export type NormalizedMeeting = {
   startMin: number;
   endMin: number;
   room: string;
+  /**
+   * What this particular meeting is. A UMD section carries both: CMSC330-0101
+   * is a Tu/Th lecture AND a Friday discussion. Classifying only the section
+   * meant the lecture times were staffed as discussions.
+   */
+  kind: SectionType;
 };
 
 export type SectionType = "lecture" | "discussion" | "lab";
@@ -109,14 +115,28 @@ export function normalizeUmdioMeetings(
     const endMin = parseUmdTime(m.end_time);
     if (startMin === null || endMin === null || endMin <= startMin) continue;
     const room = `${m.building ?? ""} ${m.room ?? ""}`.trim();
+    const kind = classifyClasstype(m.classtype);
     for (const day of splitDays(m.days)) {
-      out.push({ day, startMin, endMin, room });
+      out.push({ day, startMin, endMin, room, kind });
     }
   }
   return out;
 }
 
-/** Discussion if any meeting is a Discussion, else lab, else lecture. */
+/** umd.io's per-meeting `classtype`: "" is a lecture. */
+export function classifyClasstype(classtype: string | undefined): SectionType {
+  const t = (classtype ?? "").toLowerCase();
+  if (t.includes("discussion")) return "discussion";
+  if (t.includes("lab")) return "lab";
+  return "lecture";
+}
+
+/**
+ * What the section as a whole is, for grouping: discussion if any meeting is
+ * one, else lab, else lecture. Never use this to decide which *times* to
+ * staff — a section labelled "discussion" still has lecture meetings in it.
+ * {@link NormalizedMeeting.kind} is the per-meeting answer.
+ */
 export function classifyUmdioSection(section: UmdioSection): SectionType {
   const types = section.meetings.map((m) => (m.classtype ?? "").toLowerCase());
   if (types.some((t) => t.includes("discussion"))) return "discussion";

@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { umdioSource } from "./umdio";
-import { parseUmdTime, splitDays } from "./umdFixtures";
+import {
+  classifyClasstype,
+  normalizeUmdioMeetings,
+  parseUmdTime,
+  splitDays,
+} from "./umdFixtures";
 
 function stubFetch(handler: (url: string) => { ok?: boolean; status?: number; body: unknown }) {
   vi.stubGlobal("fetch", async (url: string) => {
@@ -72,5 +77,44 @@ describe("umd.io time and day parsing", () => {
     expect(splitDays("MWF")).toEqual(["M", "W", "F"]);
     expect(splitDays("F")).toEqual(["F"]);
     expect(splitDays("MTuWThF")).toEqual(["M", "Tu", "W", "Th", "F"]);
+  });
+});
+
+describe("per-meeting classification", () => {
+  it("reads umd.io classtype per meeting, treating \"\" as a lecture", () => {
+    expect(classifyClasstype("")).toBe("lecture");
+    expect(classifyClasstype(undefined)).toBe("lecture");
+    expect(classifyClasstype("Discussion")).toBe("discussion");
+    expect(classifyClasstype("Lab")).toBe("lab");
+    expect(classifyClasstype("LAB SESSION")).toBe("lab");
+  });
+
+  it("keeps each meeting's own kind when a section holds both", () => {
+    // CMSC330-0101 is a Tu/Th lecture AND a Friday discussion. Staffing the
+    // whole section as a discussion is what put lectures on the shift board.
+    const meetings = normalizeUmdioMeetings([
+      {
+        days: "TuTh",
+        room: "0324",
+        building: "IRB",
+        classtype: "",
+        start_time: "9:30am",
+        end_time: "10:45am",
+      },
+      {
+        days: "F",
+        room: "1207",
+        building: "IRB",
+        classtype: "Discussion",
+        start_time: "9:00am",
+        end_time: "9:50am",
+      },
+    ]);
+    expect(meetings.map((m) => [m.day, m.kind])).toEqual([
+      ["Tu", "lecture"],
+      ["Th", "lecture"],
+      ["F", "discussion"],
+    ]);
+    expect(meetings.filter((m) => m.kind === "discussion")).toHaveLength(1);
   });
 });

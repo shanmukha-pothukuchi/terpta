@@ -1,7 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { dayValidator, meetingValidator } from "./schema";
+import { dayValidator, meetingValidator, sectionTypeValidator } from "./schema";
 import { requireCoordinator, requireUser } from "./lib/auth";
 
 const periodStatusValidator = v.union(
@@ -59,11 +59,18 @@ const DEFAULT_DUTY_TYPES: Array<{
   { name: "Grading", mode: "async", color: "#0d9488", defaultHoursCredit: 1 },
 ];
 
+/** What a staffed meeting is called on the shift it creates. */
+const KIND_LABEL = {
+  lecture: "Lecture",
+  discussion: "Discussion",
+  lab: "Lab",
+} as const;
+
 /**
  * Create a staffing period (coordinator role required; the caller becomes the
- * owner). Seeds the four default duty types and one weekly sync Discussion
- * shift per meeting of each provided discussion section. Starts in
- * "collecting" so TAs can submit availability immediately.
+ * owner). Seeds the four default duty types and one weekly sync shift per
+ * staffed meeting of each provided section — see `staffMeetingKinds`. Starts
+ * in "collecting" so TAs can submit availability immediately.
  */
 export const create = mutation({
   args: {
@@ -71,6 +78,13 @@ export const create = mutation({
     term: v.string(),
     collectionDeadline: v.string(),
     sectionRefs: v.array(v.id("sections")),
+    /**
+     * Which meeting kinds become shifts. A UMD section carries its lecture
+     * and its discussion times together, so without this every lecture got
+     * staffed as a discussion. Defaults to discussions and labs — the times
+     * a TA actually runs.
+     */
+    staffMeetingKinds: v.optional(v.array(sectionTypeValidator)),
   },
   returns: v.id("staffingPeriods"),
   handler: async (ctx, args) => {
@@ -98,22 +112,26 @@ export const create = mutation({
       if (dt.name === "Discussion") discussionDutyTypeRef = ref;
     }
 
+    const staffKinds = new Set(args.staffMeetingKinds ?? ["discussion", "lab"]);
+
     for (const sectionRef of args.sectionRefs) {
       const section = await ctx.db.get(sectionRef);
       if (!section) throw new ConvexError("Section not found");
       if (section.courseRef !== args.courseRef) {
         throw new ConvexError("Section belongs to a different course");
       }
-      if (section.type !== "discussion" || discussionDutyTypeRef === null) {
-        continue;
-      }
+      if (discussionDutyTypeRef === null) continue;
       for (const meeting of section.meetings) {
+        // Fall back to the section's own type only for meetings imported
+        // before per-meeting kinds existed.
+        const kind = meeting.kind ?? section.type;
+        if (!staffKinds.has(kind)) continue;
         await ctx.db.insert("shifts", {
           periodRef,
           dutyTypeRef: discussionDutyTypeRef,
           requiredCount: 1,
           sectionRef,
-          description: `Discussion ${section.sectionNumber}`,
+          description: `${KIND_LABEL[kind]} ${section.sectionNumber}`,
           recurrence: "weekly",
           day: meeting.day,
           startMin: meeting.startMin,
@@ -368,7 +386,10 @@ export const listSwaps = query({
         }
       }
       const assignment = await ctx.db.get(swap.assignmentRef);
-      const shift = assignment ? await ctx.db.get(assignment.shiftRef) : null;
+      // The shift outlives the assignment, so a resolved swap still names
+      // what it was about.
+      const shiftRef = swap.shiftRef ?? assignment?.shiftRef;
+      const shift = shiftRef ? await ctx.db.get(shiftRef) : null;
       const dutyType = shift ? await ctx.db.get(shift.dutyTypeRef) : null;
       out.push({
         _id: swap._id,

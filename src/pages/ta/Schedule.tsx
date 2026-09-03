@@ -31,6 +31,7 @@ import {
   formatMeeting,
   formatTimeRange,
   shortShiftName,
+  termName,
   DAY_CODES,
   DAY_SHORT,
   type DayCode,
@@ -41,6 +42,7 @@ import {
   Button,
   Card,
   EmptyState,
+  IconButton,
   PageHeader,
   ProgressBar,
   Spinner,
@@ -130,14 +132,6 @@ function todayIso(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
-/** "202608" -> "Fall 2026" (best effort). */
-function termName(term: string): string {
-  const y = term.slice(0, 4);
-  const season =
-    { "01": "Spring", "05": "Summer", "08": "Fall", "12": "Winter" }[term.slice(4)] ?? "";
-  return season ? `${season} ${y}` : term;
 }
 
 /** Active period for the signed-in TA: context selection, else first period
@@ -623,14 +617,13 @@ export function ScheduleView({
                     </Badge>
                     {s.status === "pending" && onCancelSwap ? (
                       <Tooltip label="Withdraw this request">
-                        <button
-                          type="button"
+                        <IconButton
+                          size="sm"
                           onClick={() => onCancelSwap(s.id)}
                           aria-label={`Withdraw swap request for ${s.label}`}
-                          className="shrink-0 cursor-pointer rounded-[5px] p-1 text-faint transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-ink"
                         >
-                          <X size={13} strokeWidth={1.5} aria-hidden />
-                        </button>
+                          <X size={15} strokeWidth={1.5} aria-hidden />
+                        </IconButton>
                       </Tooltip>
                     ) : null}
                   </div>

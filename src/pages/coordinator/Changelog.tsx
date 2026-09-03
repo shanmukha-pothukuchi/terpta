@@ -15,7 +15,7 @@ import {
   type BadgeTone,
 } from "../../components/ui";
 import { usePeriod } from "../../lib/period";
-import { formatDate, formatTimeRange } from "../../lib/format";
+import { formatDate, formatTimeRange, shortShiftName } from "../../lib/format";
 import { errorMessage } from "../../lib/errorMessage";
 
 export type ChangeEntry = FunctionReturnType<typeof api.periods.getChangelog>[number];
@@ -32,6 +32,9 @@ const ACTION_LABEL: Record<string, string> = {
   "assignment.unlock": "Unlocked an assignment",
   "swap.approve": "Approved a swap request",
   "swap.decline": "Declined a swap request",
+  "coverage.fill": "Picked a one-off fill-in",
+  "coverage.autofill": "Auto-filled a one-off slot",
+  "coverage.clear": "Cleared a one-off fill-in",
 };
 
 const SWAP_TONE: Record<SwapRow["status"], BadgeTone> = {
@@ -92,8 +95,34 @@ export function diffLines(before: unknown, after: unknown): DiffLine[] {
   return [{ key: "value", before: fmtValue(before), after: fmtValue(after) }];
 }
 
+const SWAP_STATUS_LABEL: Record<SwapRow["status"], string> = {
+  pending: "Pending",
+  approved: "Approved",
+  declined: "Declined",
+  cancelled: "Withdrawn",
+};
+
+/** "Just Thu, Oct 8" / "Rest of the term" — how long an approval lasts. */
+function swapScopeLabel(swap: SwapRow): string {
+  if (swap.scope !== "date") return "rest of the term";
+  return swap.swapDate ? `just ${formatDate(swap.swapDate)}` : "one date";
+}
+
+/**
+ * Which shift, when it meets, and — when the assignment has since been
+ * deleted — say that rather than degrading to the bare duty type. The row
+ * used to read "Shan wants out of Duty", which names nothing.
+ */
 function swapShiftLabel(swap: SwapRow): string {
-  const base = swap.description ?? swap.dutyTypeName;
+  if (swap.assignmentGone && !swap.description && swap.dutyTypeName === "Duty") {
+    return "a deleted assignment";
+  }
+  const detail = swap.description
+    ? shortShiftName(swap.description, swap.dutyTypeName)
+    : "";
+  const base = detail
+    ? `${swap.dutyTypeName} ${detail}`
+    : (swap.description ?? swap.dutyTypeName);
   if (swap.recurrence === "weekly" && swap.day && swap.startMin !== undefined && swap.endMin !== undefined) {
     return `${base} · ${swap.day} ${formatTimeRange(swap.startMin, swap.endMin)}`;
   }
@@ -181,11 +210,7 @@ export function ChangelogView({
               className="flex items-start gap-3 border-b border-[rgba(255,255,255,0.04)] px-3.5 py-3 last:border-b-0"
             >
               <Badge tone={SWAP_TONE[swap.status]} className="shrink-0">
-                {swap.status === "pending"
-                  ? "Pending"
-                  : swap.status === "approved"
-                    ? "Approved"
-                    : "Declined"}
+                {SWAP_STATUS_LABEL[swap.status]}
               </Badge>
               <div className="min-w-0 flex-1">
                 <p className="text-[12.5px]">
@@ -194,6 +219,9 @@ export function ChangelogView({
                   <span className="font-mono text-[12px] text-[#C9C9CF]">
                     {swapShiftLabel(swap)}
                   </span>
+                  {/* Approving is not reversible, so the row has to say
+                      whether it hands the shift over for good. */}
+                  <span className="text-muted"> for {swapScopeLabel(swap)}</span>
                   {swap.suggestedTaName ? (
                     <span className="text-muted">
                       {" "}

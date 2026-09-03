@@ -8,6 +8,7 @@ import {
   Badge,
   Button,
   EmptyState,
+  IconButton,
   Input,
   Label,
   Modal,
@@ -311,11 +312,10 @@ export function HoursView({
                   ) : (
                     <span className="text-[11.5px] text-faint">—</span>
                   )}
-                  <div className="flex items-center justify-end gap-0.5">
+                  <div className="flex items-center justify-end gap-1">
                     <Tooltip label={flagged ? "Edit flag reason" : "Flag for follow-up"}>
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                      <IconButton
+                        variant="secondary"
                         aria-label={
                           flagged
                             ? `Edit flag reason for ${log.taName}'s log`
@@ -325,35 +325,33 @@ export function HoursView({
                           setFlagTarget(log);
                           setFlagNote(log.flagNote ?? "");
                         }}
-                        className="w-7 shrink-0 px-0"
+                        size="sm"
                       >
-                        <Flag size={14} strokeWidth={1.5} aria-hidden />
-                      </Button>
+                        <Flag size={15} strokeWidth={1.5} aria-hidden />
+                      </IconButton>
                     </Tooltip>
                     {flagged ? (
                       <Tooltip label="Unflag — back to submitted">
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <IconButton
+                          variant="secondary"
                           aria-label={`Unflag log from ${log.taName}`}
                           onClick={() => onUnflag?.(log.hourLogId)}
-                          className="w-7 shrink-0 px-0"
+                          size="sm"
                         >
-                          <FlagOff size={14} strokeWidth={1.5} aria-hidden />
-                        </Button>
+                          <FlagOff size={15} strokeWidth={1.5} aria-hidden />
+                        </IconButton>
                       </Tooltip>
                     ) : null}
                     {log.status === "approved" ? (
                       <Tooltip label="Unapprove — back to submitted">
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <IconButton
+                          variant="secondary"
                           aria-label={`Unapprove log from ${log.taName}`}
                           onClick={() => onUnapprove?.(log.hourLogId)}
-                          className="w-7 shrink-0 px-0"
+                          size="sm"
                         >
-                          <Undo2 size={14} strokeWidth={1.5} aria-hidden />
-                        </Button>
+                          <Undo2 size={15} strokeWidth={1.5} aria-hidden />
+                        </IconButton>
                       </Tooltip>
                     ) : null}
                   </div>
