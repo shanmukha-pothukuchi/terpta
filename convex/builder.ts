@@ -10,7 +10,7 @@ import {
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireCoordinator } from "./lib/auth";
-import { dayValidator } from "./schema";
+import { dayValidator, meetingValidator } from "./schema";
 import { solve } from "./solver/solve";
 import type {
   Day,
@@ -672,14 +672,10 @@ const boardValidator = v.object({
     v.object({
       _id: v.id("sections"),
       sectionNumber: v.string(),
-      meetings: v.array(
-        v.object({
-          day: dayValidator,
-          startMin: v.number(),
-          endMin: v.number(),
-          room: v.string(),
-        }),
-      ),
+      // The schema's own meeting shape, not a copy of it. A copy here missed
+      // the per-meeting `kind` when it was added, and every board with an
+      // imported course failed return validation until the two agreed.
+      meetings: v.array(meetingValidator),
     }),
   ),
 });
