@@ -53,9 +53,9 @@ function termLabel(term: string): string {
 }
 
 const SOURCE_NOTE: Record<ImportResult["source"], string> = {
-  umdio: "live from umd.io",
-  cache: "from the 24h umd.io cache",
-  fixture: "umd.io is down — bundled fixture data",
+  jupiterp: "live from Jupiterp",
+  cache: "from the 24h Jupiterp cache",
+  fixture: "Jupiterp is down — bundled fixture data",
 };
 
 const NO_INSTRUCTOR = "Instructor TBA";
@@ -190,7 +190,7 @@ export function PeriodSetupView({
       <Surface className="overflow-hidden">
         <div className="flex h-10 items-center gap-2.5 border-b border-line px-3.5">
           <span className="text-[13px] font-medium text-ink">New staffing period</span>
-          <span className="text-[12px] text-faint">sections come straight from Testudo via umd.io</span>
+          <span className="text-[12px] text-faint">sections come straight from Testudo via Jupiterp, current semester</span>
         </div>
         <div className="flex flex-col gap-4 p-4">
           <div className="flex items-end gap-3">
@@ -242,7 +242,7 @@ export function PeriodSetupView({
               <div className="flex flex-col gap-3">
                 {SECTION_TYPE_ORDER.map((type) => {
                   const rows = sections.filter((s) => s.type === type);
-                  // Headers only earn their space when umd.io actually gave us names.
+                  // Headers only earn their space when the source actually gave us names.
                   const showInstructors = rows.some((s) => s.instructors?.length);
                   if (rows.length === 0) return null;
                   return (
@@ -445,7 +445,7 @@ export default function PeriodSetup() {
       const result = await importCourse({ courseId: course.trim(), term });
       setImportResult(result);
       if (result.source === "fixture") {
-        toast("umd.io is down — imported bundled fixture sections", { tone: "info" });
+        toast("Jupiterp is down — imported bundled fixture sections", { tone: "info" });
       }
     } catch (e) {
       toast(errorMessage(e), { tone: "error" });

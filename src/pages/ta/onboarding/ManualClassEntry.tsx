@@ -3,7 +3,7 @@
  *
  * Per the design reference this now lives on step 2, next to the grid it
  * affects, headed `Don't see a class?` — it is no longer only the fallback for
- * an unreachable umd.io. Writes bare meetings into `classes.manual`;
+ * an unreachable Jupiterp. Writes bare meetings into `classes.manual`;
  * lockedMeetings() folds them into the grid alongside the imports.
  */
 import { useEffect, useId, useState } from "react";

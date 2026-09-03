@@ -76,7 +76,7 @@ export interface Step1CoursesProps {
   onChange: (next: ClassesValue) => void;
   /** Debounced course autocomplete. Returns [] when the query is too short. */
   onSearch: (query: string) => Promise<Array<{ courseId: string; name: string }>>;
-  /** Imports a course and returns its sections. Rejects if umd.io is down. */
+  /** Imports a course and returns its sections. Rejects if Jupiterp is down. */
   onImportCourse: (
     courseId: string,
   ) => Promise<{ courseName: string; sections: EnrollableSection[] }>;

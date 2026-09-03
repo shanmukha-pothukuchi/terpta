@@ -19,7 +19,7 @@ import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_syncUser from "../lib/syncUser.js";
 import type * as lib_umdFixtures from "../lib/umdFixtures.js";
-import type * as lib_umdio from "../lib/umdio.js";
+import type * as lib_jupiterp from "../lib/jupiterp.js";
 import type * as periods from "../periods.js";
 import type * as roster from "../roster.js";
 import type * as seed from "../seed.js";
@@ -50,7 +50,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/syncUser": typeof lib_syncUser;
   "lib/umdFixtures": typeof lib_umdFixtures;
-  "lib/umdio": typeof lib_umdio;
+  "lib/jupiterp": typeof lib_jupiterp;
   periods: typeof periods;
   roster: typeof roster;
   seed: typeof seed;

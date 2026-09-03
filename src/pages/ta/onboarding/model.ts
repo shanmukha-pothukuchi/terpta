@@ -36,7 +36,7 @@ export interface ClassMeeting {
   room: string;
 }
 
-/** A section of a course the TA is enrolled in, as umd.io describes it. */
+/** A section of a course the TA is enrolled in, as the Schedule of Classes describes it. */
 export interface EnrollableSection {
   _id: Id<"sections">;
   sectionNumber: string;
@@ -222,7 +222,7 @@ export interface SchedulableSection {
   _id: Id<"sections">;
   sectionNumber: string;
   meetings: Array<{ day: DayCode; startMin: number; endMin: number }>;
-  /** Instructor of record, when umd.io supplied one. */
+  /** Instructor of record, when the source supplied one. */
   instructors?: string[];
 }
 

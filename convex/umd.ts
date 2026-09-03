@@ -26,7 +26,7 @@ import {
   type UmdioCourse,
   type UmdioSection,
 } from "./lib/umdFixtures";
-import { departmentOf, umdioSource } from "./lib/umdio";
+import { departmentOf, jupiterpSource } from "./lib/jupiterp";
 
 // ---------------------------------------------------------------------------
 // umdCache internal helpers (actions cannot touch ctx.db)
@@ -35,7 +35,7 @@ import { departmentOf, umdioSource } from "./lib/umdio";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function cacheKey(courseId: string, term: string): string {
-  return `umdio:${courseId.toUpperCase()}:${term}`;
+  return `jupiterp:${courseId.toUpperCase()}:${term}`;
 }
 
 export const getCacheEntry = internalQuery({
@@ -185,7 +185,7 @@ export const upsertCourseAndSections = internalMutation({
 // ---------------------------------------------------------------------------
 
 type RawPayload = {
-  source: "umdio" | "fixture";
+  source: "jupiterp" | "fixture";
   course: UmdioCourse;
   sections: UmdioSection[];
 };
@@ -214,7 +214,7 @@ const importResultValidator = v.object({
   courseRef: v.id("courses"),
   courseName: v.string(),
   sectionRefs: v.array(v.id("sections")),
-  source: v.union(v.literal("umdio"), v.literal("cache"), v.literal("fixture")),
+  source: v.union(v.literal("jupiterp"), v.literal("cache"), v.literal("fixture")),
   sectionsImported: v.number(),
 });
 
@@ -222,7 +222,7 @@ interface ImportResult {
   courseRef: Id<"courses">;
   courseName: string;
   sectionRefs: Id<"sections">[];
-  source: "umdio" | "cache" | "fixture";
+  source: "jupiterp" | "cache" | "fixture";
   sectionsImported: number;
 }
 
@@ -258,21 +258,21 @@ export const importCourseUnchecked = internalAction({
       await ctx.runQuery(internal.umd.getCacheEntry, { key });
 
     let payload: RawPayload | null = null;
-    let resultSource: "umdio" | "cache" | "fixture";
+    let resultSource: "jupiterp" | "cache" | "fixture";
 
     if (cached && now - cached.fetchedAt < CACHE_TTL_MS) {
       payload = cached.payload as RawPayload;
       resultSource = payload.source === "fixture" ? "fixture" : "cache";
     } else {
       try {
-        const course = await umdioSource.fetchCourse(courseId, term);
-        const sections = await umdioSource.fetchSections(courseId, term);
-        payload = { source: "umdio", course, sections };
-        resultSource = "umdio";
+        const course = await jupiterpSource.fetchCourse(courseId, term);
+        const sections = await jupiterpSource.fetchSections(courseId, term);
+        payload = { source: "jupiterp", course, sections };
+        resultSource = "jupiterp";
         await ctx.runMutation(internal.umd.setCacheEntry, { key, payload });
       } catch (err) {
-        // umd.io is known-flaky (frequent 502s). Prefer a stale cache over
-        // fixtures, and fixtures over failing outright.
+        // Prefer a stale cache over fixtures, and fixtures over failing
+        // outright, so a source outage never blocks setting up a course.
         if (cached) {
           payload = cached.payload as RawPayload;
           resultSource = payload.source === "fixture" ? "fixture" : "cache";
@@ -288,7 +288,7 @@ export const importCourseUnchecked = internalAction({
             resultSource = "fixture";
           } else {
             throw new ConvexError(
-              `umd.io unavailable — enter sections manually (${err instanceof Error ? err.message : String(err)})`,
+              `Jupiterp unavailable — enter sections manually (${err instanceof Error ? err.message : String(err)})`,
             );
           }
         }
@@ -395,7 +395,7 @@ export const searchCourses = action({
     if (!dept) return []; // fewer than two letters is not worth a round trip
 
     const term = args.term.trim();
-    const key = `umdio:dept:${dept}:${term}`;
+    const key = `jupiterp:dept:${dept}:${term}`;
     const now = Date.now();
     const cached: { payload: unknown; fetchedAt: number } | null =
       await ctx.runQuery(internal.umd.getCacheEntry, { key });
@@ -405,7 +405,7 @@ export const searchCourses = action({
       courses = cached.payload as Array<{ courseId: string; name: string }>;
     } else {
       try {
-        courses = await umdioSource.fetchDepartmentCourses(dept, term);
+        courses = await jupiterpSource.fetchDepartmentCourses(dept, term);
       } catch {
         // Autocomplete is a convenience; the caller falls back to manual entry.
         return cached ? (cached.payload as Array<{ courseId: string; name: string }>) : [];
@@ -441,7 +441,7 @@ export const importForEnrollment = action({
   returns: v.object({
     courseRef: v.id("courses"),
     courseName: v.string(),
-    source: v.union(v.literal("umdio"), v.literal("cache"), v.literal("fixture")),
+    source: v.union(v.literal("jupiterp"), v.literal("cache"), v.literal("fixture")),
     sections: v.array(
       v.object({
         _id: v.id("sections"),
@@ -458,7 +458,7 @@ export const importForEnrollment = action({
   ): Promise<{
     courseRef: Id<"courses">;
     courseName: string;
-    source: "umdio" | "cache" | "fixture";
+    source: "jupiterp" | "cache" | "fixture";
     sections: Array<{
       _id: Id<"sections">;
       sectionNumber: string;

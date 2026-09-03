@@ -59,7 +59,7 @@ export async function previewImport(courseId: string) {
 }
 
 export async function previewImportFailure(): Promise<never> {
-  throw new Error("umd.io unavailable");
+  throw new Error("Jupiterp unavailable");
 }
 
 export const classesValue: ClassesValue = {

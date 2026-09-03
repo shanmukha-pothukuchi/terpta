@@ -146,7 +146,7 @@ const discussionShifts: ShiftRow[] = SECTION_SEEDS.map((s, i) =>
     // 0107 has almost nobody free — it is the unfilled slot in the mock.
     s.number === "0107" ? 1 : 3 + (i % 3),
     fid<"sections">(s.id),
-    // Sections split across two instructors of record, as umd.io reports them.
+    // Sections split across two instructors of record, as the source reports them.
     Number(s.number) < 105 ? "Anwar Mamat" : "Cliff Bakalian",
     // Real descriptions repeat the duty type, which is what used to push the
     // section number out of a narrow day column.
@@ -777,7 +777,7 @@ export const setupImportResult: PeriodSetupViewProps["importResult"] = {
   courseRef: fid<"courses">("course-cmsc330"),
   courseName: "Organization of Programming Languages",
   sectionRefs: setupSections.map((s) => s._id),
-  source: "umdio",
+  source: "jupiterp",
   sectionsImported: setupSections.length,
 };
 

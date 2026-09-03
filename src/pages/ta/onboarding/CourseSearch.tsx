@@ -2,7 +2,7 @@
    Committed courses live inside the same bordered row the user types in, and
    the field takes both halves of "CMSC330 0201", so a TA lands on the section
    they are actually in rather than whichever one the course lists first.
-   Purely presentational: it never talks to Convex or umd.io itself.
+   Purely presentational: it never talks to Convex or Jupiterp itself.
 
    parseCourseQuery() decides the phase. While the course code is incomplete
    ("CMSC3") the dropdown suggests courses, and picking one only fills the code
