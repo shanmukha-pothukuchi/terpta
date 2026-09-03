@@ -151,16 +151,22 @@ function AvailabilityPreview() {
 function BuilderPreview({
   drawer,
   publish,
+  week,
 }: {
   drawer?: boolean;
   publish?: boolean;
+  week?: boolean;
 }) {
   return (
     <Frame>
       <div className="px-6 py-5">
         <BuilderScreen
           periodRef={fx.PERIOD_ID}
-          fixture={fx.builderFixture}
+          fixture={
+            week
+              ? { ...fx.builderFixture, week: fx.builderWeek }
+              : fx.builderFixture
+          }
           fixtureDetail={drawer ? fx.danielDetail : undefined}
           initialDrawerTa={drawer ? fx.danielId : null}
           initialPublishOpen={publish ?? false}
@@ -449,6 +455,10 @@ const SCREENS: Record<string, { label: string; element: ReactNode }> = {
   builder: { label: "Builder — default", element: <BuilderPreview /> },
   "builder-drawer": { label: "Builder — TA drawer (Daniel)", element: <BuilderPreview drawer /> },
   "builder-publish": { label: "Builder — publish modal", element: <BuilderPreview publish /> },
+  "builder-week": {
+    label: "Builder — one week (subs, absences, out-of-term)",
+    element: <BuilderPreview week />,
+  },
   roster: { label: "Coordinator roster", element: <RosterPreview /> },
   shifts: { label: "Coordinator shifts", element: <ShiftsPreview /> },
   "duty-types": {

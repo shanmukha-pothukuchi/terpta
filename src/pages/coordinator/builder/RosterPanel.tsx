@@ -1,7 +1,6 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CalendarOff, GripVertical, TriangleAlert } from "lucide-react";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { Tooltip } from "../../../components/ui";
 import { firstName, type BuilderModel, type Highlight, type RosterRow } from "./model";
 
 export interface RosterPanelProps {
@@ -83,20 +82,26 @@ function RosterRowView({
       >
         {/* "No availability" is a separate signal — it must not replace the
             numbers, or an assigned TA's real load disappears behind a word. */}
+        {/* Native `title` rather than the styled tooltip: the panel clips its
+            overflow, so an absolutely-positioned tooltip on a row near the
+            edge renders as a clipped dark sliver instead of readable text. */}
         {row.status === "missing" ? (
-          <Tooltip label="No availability submitted" className="shrink-0 items-center">
-            <TriangleAlert size={11} strokeWidth={1.5} className="text-warn" />
-          </Tooltip>
+          <span
+            title="No availability submitted"
+            aria-label="No availability submitted"
+            className="flex shrink-0 items-center"
+          >
+            <TriangleAlert size={11} strokeWidth={1.5} className="text-warn" aria-hidden />
+          </span>
         ) : null}
         {away ? (
-          <Tooltip label="Away for part of this week">
-            <CalendarOff
-              size={11}
-              strokeWidth={1.5}
-              className="shrink-0 text-warn"
-              aria-label="Away this week"
-            />
-          </Tooltip>
+          <span
+            title="Away for part of this week"
+            aria-label="Away for part of this week"
+            className="flex shrink-0 items-center"
+          >
+            <CalendarOff size={11} strokeWidth={1.5} className="text-warn" aria-hidden />
+          </span>
         ) : null}
         <span className="min-w-12 truncate">{`${hours} / ${cap}h`}</span>
       </span>

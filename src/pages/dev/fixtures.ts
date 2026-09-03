@@ -22,6 +22,8 @@ import type { ScheduleViewProps } from "../ta/Schedule";
 import type { HoursViewProps as TaHoursViewProps } from "../ta/Hours";
 import type { PeriodSetupViewProps } from "../coordinator/PeriodSetup";
 import type { CoveragePanelViewProps } from "../coordinator/builder/CoveragePanel";
+import type { WeekOverlayInput } from "../coordinator/builder/weekOverlay";
+import { dateOfDayInWeek } from "../../lib/week";
 
 const fid = <T extends TableNames>(s: string) => s as Id<T>;
 const T0 = 1756800000000; // fixture _creationTime
@@ -360,6 +362,55 @@ export const builderFixture: BuilderFixture = {
   board,
   status: "generated",
   courseLabel: "CMSC132 · Fall 2026",
+};
+
+/** Monday of the mock week — the same week the TA schedule fixture uses. */
+export const BUILDER_WEEK_START = "2026-09-14";
+
+/**
+ * One week where the template is not the truth: a covered absence, an
+ * uncovered one, and a shift out of term. Every marker the board can draw for
+ * a week, so the preview shows all three side by side.
+ */
+export const builderWeek: WeekOverlayInput = {
+  weekStart: BUILDER_WEEK_START,
+  weekEnd: dateOfDayInWeek(BUILDER_WEEK_START, "F"),
+  dormantShiftRefs: [ohTuesday._id],
+  eventShiftRefs: [],
+  absences: [
+    {
+      taProfileRef: MARCUS.taProfileRef,
+      name: "Marcus Webb",
+      reason: "Interview",
+      dates: [dateOfDayInWeek(BUILDER_WEEK_START, discussionShifts[2].day as DayCode)],
+    },
+    {
+      taProfileRef: PRIYA.taProfileRef,
+      name: "Priya Shah",
+      reason: "Conference travel",
+      dates: [dateOfDayInWeek(BUILDER_WEEK_START, discussionShifts[0].day as DayCode)],
+    },
+  ],
+  coverages: [
+    {
+      shiftRef: discussionShifts[0]._id,
+      date: dateOfDayInWeek(BUILDER_WEEK_START, discussionShifts[0].day as DayCode),
+      day: discussionShifts[0].day as DayCode,
+      absentTaRef: PRIYA.taProfileRef,
+      absentName: "Priya Shah",
+      coverTaRef: DANIEL.taProfileRef,
+      coverName: "Daniel Chen",
+    },
+    {
+      shiftRef: discussionShifts[2]._id,
+      date: dateOfDayInWeek(BUILDER_WEEK_START, discussionShifts[2].day as DayCode),
+      day: discussionShifts[2].day as DayCode,
+      absentTaRef: MARCUS.taProfileRef,
+      absentName: "Marcus Webb",
+      coverTaRef: null,
+      coverName: null,
+    },
+  ],
 };
 
 /** Drawer payload for Daniel Chen (his Tue OH assignment conflicts). */

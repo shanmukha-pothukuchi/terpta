@@ -1,11 +1,16 @@
 import type { ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { CalendarOff, UserRoundCheck } from "lucide-react";
-import { Tooltip } from "../../../components/ui";
-import { coverageFor, type WeekOverlay } from "./weekOverlay";
+import { CalendarOff, UserRoundCheck, UserRoundX } from "lucide-react";
+import {
+  coverageFor,
+  isAwayOnDay,
+  type WeekCoverage,
+  type WeekOverlay,
+} from "./weekOverlay";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { DAY_CODES, DAY_SHORT, formatTimeRange } from "../../../lib/format";
 import type { DayCode } from "../../../lib/format";
+import { dateOfDayInWeek } from "../../../lib/week";
 import { laneStyle, type LaneSpan } from "../../../lib/lanes";
 import { AssignChip } from "./AssignChip";
 import {
@@ -44,6 +49,40 @@ function hourLabel(min: number, first: boolean): string {
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
   if (first || h24 === 12) return `${h12} ${h24 < 12 ? "AM" : "PM"}`;
   return String(h12);
+}
+
+/**
+ * Why this slot differs from the template this week, said in words.
+ *
+ * An icon on its own cannot tell "somebody is standing in" apart from "nobody
+ * is" — which is the entire point of the marker — so the sub's name, or the
+ * fact that there isn't one, goes on the board. The hover text is a native
+ * `title`: the slot clips its overflow, and the styled tooltip is positioned
+ * inside it, so it rendered as a clipped dark sliver above the block.
+ */
+function CoverBadge({ coverage, note }: { coverage: WeekCoverage; note: string }) {
+  const covered = coverage.coverName !== null;
+  const Icon = covered ? UserRoundCheck : UserRoundX;
+  return (
+    <span
+      title={note}
+      aria-label={note}
+      className={
+        "ml-auto flex min-w-0 shrink-0 items-center gap-[3px] rounded-[4px] px-[3px] " +
+        (covered ? "text-ok" : "text-warn")
+      }
+      style={{
+        background: covered ? "rgba(61,214,140,0.12)" : "rgba(245,165,36,0.14)",
+      }}
+    >
+      <Icon size={11} strokeWidth={1.5} className="shrink-0" aria-hidden />
+      {/* Never dropped in a narrow lane: the icon alone is the ambiguity this
+          badge exists to remove. The time beside it truncates first instead. */}
+      <span className="max-w-[72px] truncate">
+        {covered ? firstName(coverage.coverName ?? "") : "No sub"}
+      </span>
+    </span>
+  );
 }
 
 function Slot({
@@ -139,26 +178,21 @@ function Slot({
         >
           {label}
         </span>
-        <span className="truncate text-faint">{timeText}</span>
+        {/* A split lane cannot hold time and badge both; truncation turns the
+            time into "1..", which says less than the row's own position does. */}
+        {narrow && coverage ? null : (
+          <span className="truncate text-faint">{timeText}</span>
+        )}
         {dormant ? (
-          <CalendarOff
-            size={11}
-            strokeWidth={1.5}
-            className="ml-auto shrink-0 text-faint"
-            aria-hidden
-          />
-        ) : coverNote ? (
-          <Tooltip label={coverNote}>
-            <UserRoundCheck
-              size={11}
-              strokeWidth={1.5}
-              className={
-                "ml-auto shrink-0 " +
-                (coverage?.coverName ? "text-ok" : "text-warn")
-              }
-              aria-label={coverNote}
-            />
-          </Tooltip>
+          <span
+            title="Not running this week"
+            className="ml-auto flex shrink-0 items-center gap-[3px] text-faint"
+          >
+            <CalendarOff size={11} strokeWidth={1.5} aria-hidden />
+            {narrow ? null : <span>Off</span>}
+          </span>
+        ) : coverage && coverNote ? (
+          <CoverBadge coverage={coverage} note={coverNote} />
         ) : narrow ? null : (
           <span className="ml-auto truncate" style={{ color: hint.color }}>
             {hint.text}
@@ -173,6 +207,22 @@ function Slot({
           const under = model.underTaIds.has(a.taProfileRef as string);
           const load = model.loadByTa.get(a.taProfileRef as string);
           const name = firstName(model.taName(a.taProfileRef));
+          // Away this week: either an absence the coordinator has not acted on
+          // yet, or one they have — the assignment survives a date-scoped swap,
+          // so without this the board still reads as if the TA were coming.
+          const absence = week
+            ? isAwayOnDay(week, a.taProfileRef, shift.day, (d) =>
+                dateOfDayInWeek(week.weekStart, d),
+              )
+            : undefined;
+          const away =
+            absence !== undefined ||
+            String(coverage?.absentTaRef ?? "") === String(a.taProfileRef);
+          const awayNote = away
+            ? coverage?.coverName
+              ? `${name} is away — ${coverage.coverName} covers`
+              : `${name} is away${absence?.reason ? ` — ${absence.reason}` : ""} · no sub yet`
+            : null;
           const lit =
             (highlight === "conflict" && conflict) ||
             (highlight === "over" && over) ||
@@ -193,8 +243,10 @@ function Slot({
               conflict={conflict}
               overCap={over}
               highlighted={lit}
+              away={away}
               locked={a.locked}
               tooltip={
+                awayNote ||
                 conflicts.map((c) => c.detail).join(" · ") ||
                 (over && load
                   ? `${name} is over cap (${load.weeklyHours}/${load.maxHoursPerWeek}h)`
@@ -269,6 +321,18 @@ export function WeekGrid({
           }
           label="Unfilled"
         />
+        {week ? (
+          <>
+            <Legend
+              swatch={<UserRoundCheck size={11} strokeWidth={1.5} className="text-ok" />}
+              label="Sub covering"
+            />
+            <Legend
+              swatch={<UserRoundX size={11} strokeWidth={1.5} className="text-warn" />}
+              label="Away, no sub"
+            />
+          </>
+        ) : null}
       </div>
       <div className="grid h-[30px] items-center border-b border-[rgba(255,255,255,0.06)] [grid-template-columns:44px_repeat(5,1fr)]">
         <div />

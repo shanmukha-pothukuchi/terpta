@@ -45,6 +45,7 @@ import { CoveragePanel } from "./builder/CoveragePanel";
 import {
   awayTaIds,
   buildWeekOverlay,
+  type WeekOverlayInput,
 } from "./builder/weekOverlay";
 import { TaDrawer } from "./builder/TaDrawer";
 import { PublishModal } from "./builder/PublishModal";
@@ -57,6 +58,8 @@ export interface BuilderFixture {
   board: BoardData;
   status: "draft" | "collecting" | "generated" | "published";
   courseLabel: string;
+  /** DEV harness: week overlay, since the week query is skipped under a fixture. */
+  week?: WeekOverlayInput;
 }
 
 class BuilderErrorBoundary extends Component<
@@ -140,7 +143,9 @@ export function BuilderScreen({
   const [generating, setGenerating] = useState(false);
   const [addedTaIds, setAddedTaIds] = useState<string[]>([]);
   const [dragName, setDragName] = useState<string | null>(null);
-  const [weekStart, setWeekStart] = useState(thisMonday);
+  const [weekStart, setWeekStart] = useState(
+    () => fixture?.week?.weekStart ?? thisMonday(),
+  );
 
   const undoStack = useRef<Array<() => Promise<void>>>([]);
   const [undoCount, setUndoCount] = useState(0);
@@ -180,10 +185,11 @@ export function BuilderScreen({
     api.weeks.builderWeek,
     skip ? "skip" : { periodRef, weekStart },
   );
-  const week = useMemo(
-    () => (weekData ? buildWeekOverlay(weekData) : null),
-    [weekData],
-  );
+  const fixtureWeek = fixture?.week;
+  const week = useMemo(() => {
+    const input = fixtureWeek ?? weekData;
+    return input ? buildWeekOverlay(input) : null;
+  }, [fixtureWeek, weekData]);
 
   const model: BuilderModel | null = useMemo(() => {
     if (!data.shifts || !data.dutyTypes || !data.roster || !data.board) return null;

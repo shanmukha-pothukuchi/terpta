@@ -19,6 +19,8 @@ export interface AssignChipProps {
   conflict?: boolean;
   overCap?: boolean;
   highlighted?: boolean;
+  /** Away on this shift's day in the selected week — struck through, dimmed. */
+  away?: boolean;
   locked: boolean;
   tooltip?: string;
   onOpen?: () => void;
@@ -43,6 +45,7 @@ export function AssignChip({
   conflict = false,
   overCap = false,
   highlighted = false,
+  away = false,
   locked,
   tooltip,
   onOpen,
@@ -64,6 +67,10 @@ export function AssignChip({
     bg = "rgba(226,24,51,0.14)";
     ring = "inset 0 0 0 1px rgba(226,24,51,0.7), 0 0 10px rgba(226,24,51,0.25)";
   }
+  if (away) {
+    bg = "rgba(255,255,255,0.04)";
+    ring = "inset 0 0 0 1px rgba(245,165,36,0.45)";
+  }
   if (highlighted) ring += ", 0 0 0 2px rgba(255,255,255,0.55)";
 
   return (
@@ -83,7 +90,7 @@ export function AssignChip({
         opacity: isDragging ? 0.35 : 1,
       }}
     >
-      <span>{name}</span>
+      <span className={away ? "text-muted line-through" : undefined}>{name}</span>
       {conflict && (
         <TriangleAlert size={11} strokeWidth={1.5} className="shrink-0 text-[#F4A3AE]" />
       )}
