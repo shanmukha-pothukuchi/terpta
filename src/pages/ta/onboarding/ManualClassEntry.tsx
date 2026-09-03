@@ -1,6 +1,11 @@
-/* Manual class times — the fallback when umd.io is unreachable (or the course
-   simply is not in the schedule of classes). Writes bare meetings into
-   value.manual; lockedMeetings() folds them into the grid alongside imports. */
+/**
+ * Hand-typed class times.
+ *
+ * Per the design reference this now lives on step 2, next to the grid it
+ * affects, headed `Don't see a class?` — it is no longer only the fallback for
+ * an unreachable umd.io. Writes bare meetings into `classes.manual`;
+ * lockedMeetings() folds them into the grid alongside the imports.
+ */
 import { useEffect, useId, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button, Input, Label, Select } from "../../../components/ui";
@@ -67,11 +72,20 @@ export function ManualClassEntry({ value, onChange, forceOpen }: ManualClassEntr
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <section className="flex min-w-0 flex-col gap-2.5">
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <h3 className="shrink-0 text-[13px] font-medium text-ink">
+          Don't see a class?
+        </h3>
+        <p className="min-w-0 text-[12px] text-faint">
+          Type the time and we'll lock it on your grid too.
+        </p>
+      </div>
+
       {value.length > 0 ? (
         <div className="overflow-hidden rounded-[10px] border border-line bg-surface">
           <div className="flex h-8 items-center gap-2 border-b border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.02)] px-3">
-            <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-faint">
+            <span className="text-[11px] font-medium tracking-[0.06em] text-faint uppercase">
               Added by hand
             </span>
             <span className="font-mono text-[11px] text-faint">{value.length}</span>
@@ -183,6 +197,6 @@ export function ManualClassEntry({ value, onChange, forceOpen }: ManualClassEntr
           Add a class time manually
         </Button>
       )}
-    </div>
+    </section>
   );
 }

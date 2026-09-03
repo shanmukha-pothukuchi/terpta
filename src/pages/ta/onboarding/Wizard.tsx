@@ -6,22 +6,16 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { EmptyState, FullPageSpinner, PageHeader, toast } from "../../../components/ui";
 import { errorMessage } from "../../../lib/errorMessage";
-import { formatDate, type DayCode } from "../../../lib/format";
+import type { DayCode } from "../../../lib/format";
 import { usePeriod } from "../../../lib/period";
-import {
-  blocksToGrid,
-  buildLockedGrid,
-  SLOT_MIN,
-  type AvailabilityData,
-} from "../availability/model";
+import type { AvailabilityData } from "../availability/model";
 import { WizardChrome } from "./WizardChrome";
-import { Step1Basics } from "./Step1Basics";
-import { Step2Classes } from "./Step2Classes";
-import { Step3Availability } from "./Step3Availability";
-import { Step4Preferences } from "./Step4Preferences";
-import { DoneScreen } from "./DoneScreen";
+import { Step1Courses } from "./Step1Courses";
+import { Step2Availability } from "./Step2Availability";
+import { Step3Preferences } from "./Step3Preferences";
 import {
   emptyWizardState,
+  syncAsyncFromDuties,
   WIZARD_STEPS,
   type ClassesValue,
   type EnrollableSection,
@@ -29,35 +23,6 @@ import {
 } from "./model";
 
 const CONVEX_ID_RE = /^[a-z0-9]{20,}$/;
-
-/** Percent of the paintable week marked as anything other than unavailable. */
-export function markedPercent(data: AvailabilityData): number {
-  const grid = blocksToGrid(data.manualBlocks);
-  const locked = buildLockedGrid(data.importedBlocks);
-  let paintable = 0;
-  let marked = 0;
-  for (let d = 0; d < grid.length; d++) {
-    for (let s = 0; s < grid[d].length; s++) {
-      if (locked[d][s]) continue;
-      paintable++;
-      if (grid[d][s] !== "unavailable") marked++;
-    }
-  }
-  return paintable === 0 ? 0 : Math.round((marked / paintable) * 100);
-}
-
-/** Hours marked available or prefer-not, for the done screen's summary. */
-function markedHours(data: AvailabilityData): number {
-  const grid = blocksToGrid(data.manualBlocks);
-  const locked = buildLockedGrid(data.importedBlocks);
-  let slots = 0;
-  for (let d = 0; d < grid.length; d++) {
-    for (let s = 0; s < grid[d].length; s++) {
-      if (!locked[d][s] && grid[d][s] !== "unavailable") slots++;
-    }
-  }
-  return (slots * SLOT_MIN) / 60;
-}
 
 export default function TaOnboardingWizard() {
   const [params] = useSearchParams();
@@ -108,7 +73,6 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
 
   const searchCourses = useAction(api.umd.searchCourses);
   const importForEnrollment = useAction(api.umd.importForEnrollment);
-  const updateContact = useMutation(api.users.updateContact);
   const saveProfile = useMutation(api.ta.saveProfile);
   const saveAvailability = useMutation(api.ta.saveAvailability);
   const addDateException = useMutation(api.ta.addDateException);
@@ -116,32 +80,26 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
   const completeOnboarding = useMutation(api.ta.completeOnboarding);
 
   const [stepIndex, setStepIndex] = useState(0);
-  const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const [state, setState] = useState<WizardState>(emptyWizardState);
   const [hydrated, setHydrated] = useState(false);
 
   const term = info?.period.term ?? "";
 
-  // Seed the form from whatever is already saved, exactly once.
-  if (!hydrated && me !== undefined && profile !== undefined) {
+  // Seed from whatever is already saved, exactly once.
+  if (!hydrated && profile !== undefined) {
     setHydrated(true);
-    setState((prev) => ({
-      basics: {
-        preferredName: me?.preferredName ?? me?.name.split(" ")[0] ?? "",
-        phone: me?.phone ?? "",
-      },
-      classes: prev.classes,
-      preferences: profile
-        ? {
-            maxHoursPerWeek: profile.maxHoursPerWeek,
-            syncAsyncPreference: profile.syncAsyncPreference,
-            dutyTypePrefs: profile.dutyTypePrefs,
-            sectionPrefs: profile.sectionPrefs,
-            noSectionPreference: profile.sectionPrefs.length === 0,
-          }
-        : prev.preferences,
-    }));
+    if (profile) {
+      setState((prev) => ({
+        classes: prev.classes,
+        preferences: {
+          maxHoursPerWeek: profile.maxHoursPerWeek,
+          dutyTypePrefs: profile.dutyTypePrefs,
+          sectionPrefs: profile.sectionPrefs,
+        },
+      }));
+    }
   }
 
   const availabilityData: AvailabilityData | null = useMemo(() => {
@@ -170,7 +128,7 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
     };
   }, [availability, info]);
 
-  /** Discussion sections TAs can see: the ones the period's shifts reference. */
+  /** Staffed sections TAs can see: the ones the period's shifts reference. */
   const sectionOptions = useMemo(() => {
     const map = new Map<
       string,
@@ -178,7 +136,6 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
         _id: Id<"sections">;
         sectionNumber: string;
         meetings: Array<{ day: DayCode; startMin: number; endMin: number }>;
-        instructors?: string[];
       }
     >();
     for (const s of shifts ?? []) {
@@ -192,16 +149,13 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
           ? [{ day: s.day as DayCode, startMin: s.startMin, endMin: s.endMin }]
           : [];
       const existing = map.get(key);
-      if (existing) {
-        existing.meetings.push(...meeting);
-      } else {
+      if (existing) existing.meetings.push(...meeting);
+      else
         map.set(key, {
           _id: s.sectionRef,
           sectionNumber: (s.description ?? "").replace(/\D+/g, "") || "Section",
           meetings: meeting,
-          instructors: s.sectionInstructors,
         });
-      }
     }
     return [...map.values()].sort((a, b) =>
       a.sectionNumber.localeCompare(b.sectionNumber),
@@ -225,42 +179,43 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
         periodRef: periodId,
         maxHoursPerWeek: next.preferences.maxHoursPerWeek,
         enrolledSectionRefs,
-        syncAsyncPreference: next.preferences.syncAsyncPreference,
+        syncAsyncPreference: syncAsyncFromDuties(
+          next.preferences.dutyTypePrefs,
+          dutyTypes ?? [],
+        ),
         dutyTypePrefs: next.preferences.dutyTypePrefs,
-        sectionPrefs: next.preferences.noSectionPreference
-          ? []
-          : next.preferences.sectionPrefs,
+        sectionPrefs: next.preferences.sectionPrefs,
         manualClassMeetings,
       });
+      setSavedAt(Date.now());
     },
-    [periodId, saveProfile],
+    [periodId, saveProfile, dutyTypes],
   );
 
-  const advance = useCallback(async (work?: () => Promise<void>) => {
+  /**
+   * Nothing gates Continue, so every step saves what it has on the way out and
+   * the last one hands off to the live app — the reference has no completion
+   * screen; submitting availability there is the real finish.
+   */
+  const onContinue = useCallback(() => {
     setSaving(true);
-    try {
-      if (work) await work();
-      setStepIndex((i) => Math.min(i + 1, WIZARD_STEPS.length - 1));
-    } catch (e) {
-      toast(errorMessage(e), { tone: "error" });
-    } finally {
-      setSaving(false);
-    }
-  }, []);
-
-  const finish = useCallback(async () => {
-    setSaving(true);
-    try {
-      await persistProfile(state);
-      if (profile) await completeOnboarding({ taProfileRef: profile._id });
-      setDone(true);
-      toast("Setup saved", { tone: "success" });
-    } catch (e) {
-      toast(errorMessage(e), { tone: "error" });
-    } finally {
-      setSaving(false);
-    }
-  }, [persistProfile, state, profile, completeOnboarding]);
+    void (async () => {
+      try {
+        await persistProfile(state);
+        if (stepIndex < WIZARD_STEPS.length - 1) {
+          setStepIndex((i) => i + 1);
+        } else {
+          if (profile) await completeOnboarding({ taProfileRef: profile._id });
+          toast("Setup saved");
+          navigate("/ta/availability");
+        }
+      } catch (e) {
+        toast(errorMessage(e), { tone: "error" });
+      } finally {
+        setSaving(false);
+      }
+    })();
+  }, [persistProfile, state, stepIndex, profile, completeOnboarding, navigate]);
 
   if (me === undefined || info === undefined || profile === undefined) {
     return <FullPageSpinner label="Loading your setup…" />;
@@ -279,83 +234,24 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
     );
   }
 
-  if (done) {
-    return (
-      <DoneScreen
-        publishDateLabel={formatDate(info.period.collectionDeadline)}
-        coursesAdded={state.classes.courses.length + state.classes.manual.length}
-        hoursMarked={availabilityData ? markedHours(availabilityData) : 0}
-        maxHoursPerWeek={state.preferences.maxHoursPerWeek}
-        topPreferences={state.preferences.dutyTypePrefs
-          .map((id) => dutyTypes?.find((d) => d._id === id)?.name)
-          .filter((n): n is string => Boolean(n))
-          .slice(0, 3)}
-        onGoToSchedule={() => navigate("/ta/schedule")}
-        onEditAvailability={() => navigate("/ta/availability")}
-      />
-    );
-  }
-
   const setClasses = (classes: ClassesValue) => setState((s) => ({ ...s, classes }));
-  const percent = availabilityData ? markedPercent(availabilityData) : 0;
+  const identity = me ? `${me.preferredName || me.name} · ${me.email}` : undefined;
+  const savedAgoLabel =
+    savedAt === null ? "not saved yet" : `saved ${describeAgo(savedAt)}`;
 
   return (
     <WizardChrome
       stepIndex={stepIndex}
       saving={saving}
-      onBack={stepIndex > 0 ? () => setStepIndex((i) => i - 1) : undefined}
-      onContinue={() => {
-        if (stepIndex === 0) {
-          void advance(async () => {
-            await updateContact({
-              preferredName: state.basics.preferredName,
-              phone: state.basics.phone,
-            });
-          });
-        } else if (stepIndex === 1) {
-          void advance(() => persistProfile(state));
-        } else if (stepIndex === 2) {
-          void advance();
-        } else {
-          void finish();
-        }
-      }}
-      continueLabel={stepIndex === WIZARD_STEPS.length - 1 ? "Finish" : "Continue"}
-      continueDisabled={
-        (stepIndex === 1 && !state.classes.confirmedComplete) ||
-        (stepIndex === 2 && percent === 0)
-      }
-      continueHint={
-        stepIndex === 1
-          ? "Confirm you have added all your classes"
-          : stepIndex === 2
-            ? "Paint at least some availability first"
-            : undefined
-      }
-      onSkip={
-        stepIndex === 1
-          ? () => setStepIndex(2)
-          : stepIndex === 3
-            ? () => void finish()
-            : undefined
-      }
+      identity={identity}
+      onContinue={onContinue}
     >
       {stepIndex === 0 && (
-        <Step1Basics
-          value={state.basics}
-          onChange={(basics) => setState((s) => ({ ...s, basics }))}
-          firstName={state.basics.preferredName || me?.name.split(" ")[0] || "there"}
-          courseLabel={
-            info.course ? `${info.course.courseId} · ${info.period.term}` : "Your course"
-          }
-        />
-      )}
-      {stepIndex === 1 && (
-        <Step2Classes
+        <Step1Courses
           value={state.classes}
           onChange={setClasses}
-          onSearch={(query) => searchCourses({ query, term })}
-          onImportCourse={async (courseId) => {
+          onSearch={(query: string) => searchCourses({ query, term })}
+          onImportCourse={async (courseId: string) => {
             const r = await importForEnrollment({ courseId, term });
             return {
               courseName: r.courseName,
@@ -364,18 +260,20 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
           }}
         />
       )}
-      {stepIndex === 2 &&
+      {stepIndex === 1 &&
         (availabilityData && profile ? (
-          <Step3Availability
+          <Step2Availability
             data={availabilityData}
-            markedPercent={percent}
-            showFirstVisitHint
+            classes={state.classes}
+            onClassesChange={setClasses}
+            savedAgoLabel={savedAgoLabel}
             onSave={async (blocks, submitted) => {
               await saveAvailability({
                 taProfileRef: profile._id,
                 blocks,
                 submitted: submitted || undefined,
               });
+              setSavedAt(Date.now());
             }}
             onAddException={async (x) => {
               await addDateException({ taProfileRef: profile._id, ...x });
@@ -389,14 +287,21 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
         ) : (
           <FullPageSpinner label="Preparing your grid…" />
         ))}
-      {stepIndex === 3 && (
-        <Step4Preferences
+      {stepIndex === 2 && (
+        <Step3Preferences
           value={state.preferences}
           onChange={(preferences) => setState((s) => ({ ...s, preferences }))}
           dutyTypes={dutyTypes ?? []}
           sections={sectionOptions}
+          classes={state.classes}
         />
       )}
     </WizardChrome>
   );
+}
+
+function describeAgo(at: number): string {
+  const mins = Math.floor((Date.now() - at) / 60000);
+  if (mins < 1) return "just now";
+  return `${mins} min ago`;
 }

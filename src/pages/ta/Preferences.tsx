@@ -10,7 +10,13 @@
  */
 import { useMemo, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { CalendarDays, SlidersHorizontal, TriangleAlert, UserRoundPlus } from "lucide-react";
+import {
+  CalendarDays,
+  SlidersHorizontal,
+  TriangleAlert,
+  UserRound,
+  UserRoundPlus,
+} from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { usePeriod } from "../../lib/period";
@@ -18,27 +24,32 @@ import { errorMessage } from "../../lib/errorMessage";
 import type { DayCode } from "../../lib/format";
 import {
   Button,
+  Card,
   EmptyState,
+  Input,
+  Label,
   PageHeader,
   SegmentedControl,
   Spinner,
   toast,
 } from "../../components/ui";
-import { Step4Preferences, type Step4Section } from "./onboarding/Step4Preferences";
-// Owned by another agent — this module may not exist yet.
-import { Step2Classes } from "./onboarding/Step2Classes";
+import { Step3Preferences } from "./onboarding/Step3Preferences";
+import { Step1Courses } from "./onboarding/Step1Courses";
 import {
   DEFAULT_HOURS,
+  syncAsyncFromDuties,
   type ClassesValue,
   type EnrollableSection,
   type PreferencesValue,
+  type SchedulableSection,
 } from "./onboarding/model";
 
-type TabKey = "classes" | "preferences";
+type TabKey = "classes" | "preferences" | "details";
 
 const TABS = [
   { value: "classes" as const, label: "Classes", icon: CalendarDays },
   { value: "preferences" as const, label: "Preferences", icon: SlidersHorizontal },
+  { value: "details" as const, label: "Your details", icon: UserRound },
 ];
 
 const PAGE_DESCRIPTION = "Update your classes and how you'd like to be scheduled.";
@@ -64,7 +75,7 @@ interface EditorProps {
     mode: "sync" | "async";
     color: string;
   }>;
-  sections: Step4Section[];
+  sections: SchedulableSection[];
 }
 
 function PreferencesEditor({ periodRef, term, profile, dutyTypes, sections }: EditorProps) {
@@ -115,10 +126,12 @@ function PreferencesEditor({ periodRef, term, profile, dutyTypes, sections }: Ed
       await saveProfile({
         periodRef,
         maxHoursPerWeek: prefs.maxHoursPerWeek,
-        syncAsyncPreference: prefs.syncAsyncPreference,
+        // The reference drops the sync/async control, so the axis the solver
+        // needs is derived from which duty types they picked.
+        syncAsyncPreference: syncAsyncFromDuties(prefs.dutyTypePrefs, dutyTypes),
         enrolledSectionRefs: enrolledFromClasses,
         dutyTypePrefs: prefs.dutyTypePrefs,
-        sectionPrefs: prefs.noSectionPreference ? [] : prefs.sectionPrefs,
+        sectionPrefs: prefs.sectionPrefs,
         // The label rides along in `room` so it survives a reload.
         manualClassMeetings: classes.manual.map((m) => ({
           day: m.day,
@@ -161,10 +174,9 @@ function PreferencesEditor({ periodRef, term, profile, dutyTypes, sections }: Ed
             </p>
           </div>
 
-          <Step2Classes
+          <Step1Courses
             value={classes}
             onChange={setClasses}
-            hideCompletionCheck
             onSearch={(query: string) => searchCourses({ query, term })}
             onImportCourse={async (courseId: string) => {
               const r = await importForEnrollment({ courseId, term });
@@ -175,13 +187,16 @@ function PreferencesEditor({ periodRef, term, profile, dutyTypes, sections }: Ed
             }}
           />
         </div>
-      ) : (
-        <Step4Preferences
+      ) : tab === "preferences" ? (
+        <Step3Preferences
           value={prefs}
           onChange={setPrefs}
           dutyTypes={dutyTypes}
           sections={sections}
+          classes={classes}
         />
+      ) : (
+        <YourDetails />
       )}
 
       <div className="mt-4 flex items-center justify-end">
@@ -218,8 +233,8 @@ export default function TaPreferences() {
    * coordinator-only), so the staffed course's discussion sections are
    * recovered from the period's section-backed shifts.
    */
-  const sections = useMemo<Step4Section[]>(() => {
-    const map = new Map<string, Step4Section>();
+  const sections = useMemo<SchedulableSection[]>(() => {
+    const map = new Map<string, SchedulableSection>();
     for (const s of shifts ?? []) {
       if (!s.sectionRef) continue;
       const key = String(s.sectionRef);
@@ -327,5 +342,71 @@ export default function TaPreferences() {
       }))}
       sections={sections}
     />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Your details — preferred name and phone                             */
+/*                                                                     */
+/* The reference onboarding has no welcome step, so the two contact     */
+/* fields it used to collect are edited here instead of being lost.     */
+/* ------------------------------------------------------------------ */
+
+function YourDetails() {
+  const me = useQuery(api.users.current, {});
+  const updateContact = useMutation(api.users.updateContact);
+  const [preferredName, setPreferredName] = useState<string | null>(null);
+  const [phone, setPhone] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  if (me === undefined) return <Spinner label="Loading your details…" />;
+  if (me === null) return null;
+
+  const nameValue = preferredName ?? me.preferredName ?? me.name.split(" ")[0] ?? "";
+  const phoneValue = phone ?? me.phone ?? "";
+
+  return (
+    <Card title="Your details">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="pref-name">Preferred name</Label>
+          <Input
+            id="pref-name"
+            value={nameValue}
+            onChange={(e) => setPreferredName(e.target.value)}
+            className="max-w-72"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="pref-phone">
+            Phone number <span className="font-normal text-faint">Optional</span>
+          </Label>
+          <Input
+            id="pref-phone"
+            value={phoneValue}
+            onChange={(e) => setPhone(e.target.value)}
+            className="max-w-72 font-mono"
+          />
+          <p className="text-[12px] text-faint">
+            For exam-day reminders. Only your coordinator sees it.
+          </p>
+        </div>
+        <div className="flex justify-end">
+          <Button
+            variant="primary"
+            loading={saving}
+            onClick={() => {
+              setSaving(true);
+              void updateContact({ preferredName: nameValue, phone: phoneValue })
+                .then(() => toast("Details saved"))
+                .catch((e) => toast(errorMessage(e), { tone: "error" }))
+                .finally(() => setSaving(false));
+            }}
+          >
+            Save details
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }

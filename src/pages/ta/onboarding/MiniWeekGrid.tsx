@@ -1,73 +1,75 @@
-/* Mini week grid — read-only preview of the class times step 2 has locked in.
-   Shares GRID_START_MIN / GRID_END_MIN / SLOT_MIN with the full availability
-   grid so the two line up column-for-column; rows are half CELL_PX so the
-   whole week fits the 360px sidebar. */
+/* Mini week grid — the read-only week at the foot of the import preview card.
+   Mon–Fri only, 8a–8p, one 24px band per hour (288px body) over a mono hour
+   rail. Blocks carry a per-block opacity so a ghosted (highlighted but not yet
+   committed) course reads as a ghost here too, the same way it does in the
+   dashed rows above it.
+
+   It draws no card chrome of its own — ImportPreviewCard owns that. */
 import { DAY_CODES, DAY_SHORT, formatTime, formatTimeRange } from "../../../lib/format";
-import {
-  CELL_PX,
-  GRID_END_MIN,
-  GRID_START_MIN,
-  SLOT_COUNT,
-  SLOT_MIN,
-  dayIndex,
-  slotRange,
-} from "../availability/model";
-import type { ClassMeeting } from "./model";
+import { GRID_END_MIN, GRID_START_MIN, dayIndex } from "../availability/model";
+import type { DayCode } from "../../../lib/format";
 
 function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-/** Half the paint grid's row height — this preview is compact by design. */
-export const MINI_CELL_PX = CELL_PX / 2;
+/** One hour band, matching the reference's 36px-over-8h proportion at 12h. */
+export const MINI_HOUR_PX = 24;
 
-const SLOTS_PER_HOUR = 60 / SLOT_MIN;
+const SPAN_MIN = GRID_END_MIN - GRID_START_MIN;
+const BODY_PX = (SPAN_MIN / 60) * MINI_HOUR_PX; // 288
 
-/** 8a … 7p — one label per hour boundary down the left gutter. */
+/** 8a … 7p — one label per hour boundary down the left rail. */
 const HOUR_STARTS = Array.from(
-  { length: Math.floor((GRID_END_MIN - GRID_START_MIN) / 60) },
+  { length: Math.floor(SPAN_MIN / 60) },
   (_, i) => GRID_START_MIN + i * 60,
 );
 
-const COLS = "grid grid-cols-[30px_repeat(5,minmax(0,1fr))]";
+const COLS = "grid grid-cols-[34px_repeat(5,minmax(0,1fr))]";
+
+/** A block on the mini grid. `opacity` ghosts un-committed previews. */
+export interface MiniBlock {
+  day: DayCode;
+  startMin: number;
+  endMin: number;
+  /** Course code — mono, truncated to the column. */
+  label: string;
+  room?: string;
+  /** 1 (or omitted) for committed; ~0.55 for a ghosted preview. */
+  opacity?: number;
+  /** Draws the dashed, unfilled treatment used by preview rows. */
+  preview?: boolean;
+}
 
 export interface MiniWeekGridProps {
-  /** Flattened meetings, as returned by lockedMeetings(value). */
-  meetings: Array<ClassMeeting & { label: string }>;
+  blocks: MiniBlock[];
   className?: string;
 }
 
-/**
- * Mon–Fri × 8a–8p preview. Every meeting renders as an absolutely positioned
- * block in the imported-class tint, matching AvailabilityGrid's locked cells.
- */
-export function MiniWeekGrid({ meetings, className }: MiniWeekGridProps) {
-  const empty = meetings.length === 0;
+export function MiniWeekGrid({ blocks, className }: MiniWeekGridProps) {
+  const empty = blocks.length === 0;
 
   return (
-    <div className={cx("overflow-hidden rounded-[12px] border border-line bg-surface", className)}>
+    <div className={cx("select-none", className)}>
       {/* Day header */}
-      <div className={cx(COLS, "h-[26px] items-center border-b border-line")}>
+      <div className={cx(COLS, "mb-1.5")}>
         <div />
         {DAY_CODES.map((day) => (
-          <div
-            key={day}
-            className="truncate border-l border-white/[0.06] pl-[6px] text-[11.5px] font-medium text-[#C9C9CF]"
-          >
+          <div key={day} className="truncate pl-[5px] text-[11px] font-medium text-faint">
             {DAY_SHORT[day]}
           </div>
         ))}
       </div>
 
       {/* Week body */}
-      <div className={cx(COLS, "relative select-none")}>
-        {/* Hour gutter */}
-        <div>
+      <div className={cx(COLS, "relative gap-x-[3px]")} style={{ height: BODY_PX }}>
+        {/* Hour rail */}
+        <div className="relative">
           {HOUR_STARTS.map((min) => (
             <div
               key={min}
-              className="box-border pr-[4px] pt-px text-right font-mono text-[9.5px] leading-none text-faint"
-              style={{ height: SLOTS_PER_HOUR * MINI_CELL_PX }}
+              className="absolute right-[6px] font-mono text-[10px] leading-none text-faint"
+              style={{ top: ((min - GRID_START_MIN) / 60) * MINI_HOUR_PX + 1 }}
             >
               {formatTime(min, { compact: true })}
             </div>
@@ -76,38 +78,43 @@ export function MiniWeekGrid({ meetings, className }: MiniWeekGridProps) {
 
         {/* Day columns */}
         {DAY_CODES.map((day, d) => (
-          <div key={day} className="relative border-l border-white/[0.06]">
-            {Array.from({ length: SLOT_COUNT }, (_, s) => (
-              <div
-                key={s}
-                className="box-border border-b"
-                style={{
-                  height: MINI_CELL_PX,
-                  borderBottomColor: s % 2 ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.035)",
-                }}
-              />
-            ))}
-
-            {/* Imported + manual class blocks — classblue tint, same as the full grid */}
-            {meetings
-              .filter((m) => dayIndex(m.day) === d)
-              .map((m, i) => {
-                const [s0, s1] = slotRange(m.startMin, m.endMin);
-                if (s1 <= s0) return null;
+          <div
+            key={day}
+            className="relative overflow-hidden rounded-[3px]"
+            style={{
+              backgroundImage: `repeating-linear-gradient(to bottom, transparent 0 ${
+                MINI_HOUR_PX - 1
+              }px, rgba(255,255,255,0.06) ${MINI_HOUR_PX - 1}px ${MINI_HOUR_PX}px)`,
+            }}
+          >
+            {blocks
+              .filter((b) => dayIndex(b.day) === d)
+              .map((b, i) => {
+                const start = Math.max(GRID_START_MIN, b.startMin);
+                const end = Math.min(GRID_END_MIN, b.endMin);
+                if (end <= start) return null;
+                const top = ((start - GRID_START_MIN) / 60) * MINI_HOUR_PX;
+                const height = ((end - start) / 60) * MINI_HOUR_PX;
                 return (
                   <div
-                    key={`${m.label}-${m.startMin}-${i}`}
-                    title={`${m.label} · ${formatTimeRange(m.startMin, m.endMin)}${
-                      m.room ? ` · ${m.room}` : ""
+                    key={`${b.label}-${b.startMin}-${i}`}
+                    title={`${b.label} · ${formatTimeRange(b.startMin, b.endMin)}${
+                      b.room ? ` · ${b.room}` : ""
                     }`}
-                    className="absolute left-[2px] right-[2px] overflow-hidden rounded-[4px] bg-[rgba(125,147,178,0.16)] px-[3px] shadow-[inset_0_0_0_1px_rgba(125,147,178,0.35)]"
+                    className={cx(
+                      "absolute left-0 right-0 overflow-hidden rounded-[4px] px-[4px]",
+                      b.preview
+                        ? "border border-dashed border-[rgba(125,147,178,0.55)]"
+                        : "bg-[rgba(125,147,178,0.16)] shadow-[inset_0_0_0_1px_rgba(125,147,178,0.35)]",
+                    )}
                     style={{
-                      top: s0 * MINI_CELL_PX + 1,
-                      height: (s1 - s0) * MINI_CELL_PX - 2,
+                      top,
+                      height: Math.max(height - 1, 10),
+                      opacity: b.opacity ?? 1,
                     }}
                   >
-                    <span className="block truncate font-mono text-[10.5px] font-medium leading-[13px] text-[#B7C6DC]">
-                      {m.label}
+                    <span className="block truncate font-mono text-[10px] font-medium leading-[13px] text-[#B7C6DC]">
+                      {b.label}
                     </span>
                   </div>
                 );

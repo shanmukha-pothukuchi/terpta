@@ -1,101 +1,104 @@
-/* Wizard chrome — the frame every onboarding step renders inside.
-   Owns the 4-step progress bar, the step label and the footer actions, so
-   the step components stay pure (value + onChange over their own slice). */
+import { ArrowRight } from "lucide-react";
 import type { ReactNode } from "react";
-import { ArrowLeft } from "lucide-react";
-import { Button, Tooltip } from "../../../components/ui";
-import { WIZARD_STEPS, stepLabel } from "./model";
+import { Button } from "../../../components/ui";
+import { WIZARD_STEPS } from "./model";
 
 export interface WizardChromeProps {
-  /** 0-based index into {@link WIZARD_STEPS}. */
+  /** 0-based. */
   stepIndex: number;
   children: ReactNode;
-  /** Omitted (or ignored) on step 0 — there is nowhere to go back to. */
-  onBack?: () => void;
   onContinue: () => void;
-  continueLabel?: string;
-  continueDisabled?: boolean;
-  /** Tooltip copy explaining why Continue is disabled. */
-  continueHint?: string;
-  /** Renders the "Skip for now" text link when provided. */
-  onSkip?: () => void;
   saving?: boolean;
+  /** Shown top-right, e.g. "Priya S. · pshah@umd.edu". */
+  identity?: string;
 }
 
+/**
+ * Onboarding frame per design/terpta-onboarding-ref/onboarding-spec.md: a top
+ * bar carrying the wordmark, a centred numbered stepper and the signed-in
+ * identity, over a generously padded body. No sidebar, no Back, no Skip and
+ * nothing gates Continue — the reference deliberately keeps the path forward
+ * unobstructed, and finishing lands the TA in the live app.
+ */
 export function WizardChrome({
   stepIndex,
   children,
-  onBack,
   onContinue,
-  continueLabel = "Continue",
-  continueDisabled,
-  continueHint,
-  onSkip,
   saving,
-}: WizardChromeProps): JSX.Element {
-  const total = WIZARD_STEPS.length;
-  const index = Math.min(Math.max(stepIndex, 0), total - 1);
-  const pct = ((index + 1) / total) * 100;
-  const label = stepLabel(index);
-  const showBack = index > 0 && Boolean(onBack);
-
-  const continueButton = (
-    <Button
-      variant="primary"
-      onClick={onContinue}
-      disabled={continueDisabled}
-      loading={saving}
-    >
-      {continueLabel}
-    </Button>
-  );
+  identity,
+}: WizardChromeProps) {
+  const step = WIZARD_STEPS[stepIndex];
 
   return (
-    <div className="mx-auto flex w-full max-w-[880px] flex-col gap-7 px-5 py-8 sm:gap-8 sm:py-10">
-      {/* Progress */}
-      <div className="flex flex-col gap-2">
-        <div
-          role="progressbar"
-          aria-label={label}
-          aria-valuemin={1}
-          aria-valuemax={total}
-          aria-valuenow={index + 1}
-          className="h-[3px] w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]"
-        >
-          <div
-            className="h-full rounded-full bg-umd transition-[width] duration-200 ease-out"
-            style={{ width: `${pct}%` }}
-          />
+    <div className="flex min-h-screen flex-col bg-page">
+      <header className="flex h-[60px] shrink-0 items-center justify-between gap-4 border-b border-line px-5 sm:px-8">
+        <div className="flex shrink-0 items-center gap-2.5">
+          <span aria-hidden className="size-5 rounded-[5px] bg-umd" />
+          <span className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
+            TerpTA
+          </span>
         </div>
-        <p className="font-mono text-[11.5px] leading-none text-faint">{label}</p>
+
+        <ol className="flex min-w-0 shrink items-center" aria-label="Setup progress">
+          {WIZARD_STEPS.map((s, i) => {
+            const active = i === stepIndex;
+            const done = i < stepIndex;
+            return (
+              <li key={s.key} className="flex items-center">
+                {i > 0 && (
+                  <span
+                    aria-hidden
+                    className="mx-1.5 h-px w-4 bg-line-strong sm:mx-2 sm:w-8"
+                  />
+                )}
+                <span
+                  className="flex items-center gap-2"
+                  aria-current={active ? "step" : undefined}
+                >
+                  <span
+                    aria-hidden
+                    className={
+                      "flex size-5 items-center justify-center rounded-full font-mono text-[11px] " +
+                      (active || done
+                        ? "bg-ink text-page"
+                        : "border border-line-strong text-faint")
+                    }
+                  >
+                    {i + 1}
+                  </span>
+                  <span
+                    className={
+                      "whitespace-nowrap text-[13px] " +
+                      // Below sm only the active label has room.
+                      (active
+                        ? "font-semibold text-ink"
+                        : "hidden text-faint sm:inline")
+                    }
+                  >
+                    {s.title}
+                  </span>
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+
+        <span className="hidden min-w-0 shrink truncate text-[13px] text-muted lg:block">
+          {identity ?? ""}
+        </span>
+      </header>
+
+      <div className="flex-1 px-6 py-10 lg:px-[120px] lg:py-[72px]">
+        {children}
       </div>
 
-      {/* Step body */}
-      <div className="min-w-0">{children}</div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-3 border-t border-line pt-5">
-        {onSkip ? (
-          <button
-            type="button"
-            onClick={onSkip}
-            className="cursor-pointer text-[12.5px] text-muted underline underline-offset-[3px] transition-colors hover:text-ink"
-          >
-            Skip for now
-          </button>
-        ) : null}
-        <div className="flex-1" />
-        {showBack ? (
-          <Button variant="secondary" onClick={onBack}>
-            <ArrowLeft size={14} strokeWidth={1.5} aria-hidden />
-            Back
+      <div className="shrink-0 px-6 pb-10 lg:px-[120px] lg:pb-[72px]">
+        <div className="flex items-center justify-end">
+          <Button variant="neutral" onClick={onContinue} loading={saving}>
+            {step.continueLabel}
+            <ArrowRight size={14} strokeWidth={1.5} aria-hidden />
           </Button>
-        ) : null}
-        {continueDisabled && continueHint ? (
-          <Tooltip label={continueHint}>{continueButton}</Tooltip>
-        ) : (
-          continueButton
-        )}
+        </div>
       </div>
     </div>
   );

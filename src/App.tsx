@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useConvexAuth } from "convex/react";
 import { useAuth } from "@workos-inc/authkit-react";
@@ -38,10 +38,12 @@ function HandoffFailed({ onSignOut }: { onSignOut: () => void }) {
 }
 
 /**
- * Auth-gated layout: everything except /login and /callback renders inside
- * this. Unauthenticated users are sent to /login.
+ * Auth gate without the app shell.
+ *
+ * Onboarding uses this directly: the design reference deliberately hides the
+ * sidebar during setup, so the wizard needs the gate but not the chrome.
  */
-export default function App() {
+export function RequireAuth({ children }: { children: ReactNode }) {
   const { isLoading: convexLoading, isAuthenticated } = useConvexAuth();
   const { isLoading: authKitLoading, user } = useAuth();
   const signOut = useSignOut();
@@ -62,7 +64,7 @@ export default function App() {
     return (
       <ErrorBoundary>
         <EnsureUserSynced />
-        <AppShell />
+        {children}
       </ErrorBoundary>
     );
   }
@@ -76,5 +78,17 @@ export default function App() {
     <HandoffFailed onSignOut={() => void signOut()} />
   ) : (
     <FullPageSpinner label="Signing you in…" />
+  );
+}
+
+/**
+ * Auth-gated layout: everything except /login, /callback and onboarding
+ * renders inside this.
+ */
+export default function App() {
+  return (
+    <RequireAuth>
+      <AppShell />
+    </RequireAuth>
   );
 }

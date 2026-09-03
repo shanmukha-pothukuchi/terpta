@@ -26,7 +26,7 @@ function cx(...parts: Array<string | false | null | undefined>) {
 /* Button — 32px tall, radius 9px, 13px text                           */
 /* ------------------------------------------------------------------ */
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+export type ButtonVariant = "primary" | "neutral" | "secondary" | "ghost" | "danger";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -37,6 +37,10 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary:
     "bg-umd text-white border border-[rgba(255,255,255,0.10)] hover:bg-[#f22239] active:bg-[#c9152d]",
+  // Prominent but not red: for paths that move you forward without committing
+  // anything, so UMD red stays reserved for the real submit actions.
+  neutral:
+    "bg-[#EDEDEF] text-[#0B0B0E] border border-transparent hover:bg-white active:bg-[#DCDCDF]",
   secondary:
     "bg-[rgba(255,255,255,0.04)] text-ink border border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.07)]",
   ghost:

@@ -74,13 +74,11 @@ export const classesValue: ClassesValue = {
   manual: [
     { key: "m1", label: "MATH241 lecture", day: "Tu", startMin: 660, endMin: 710 },
   ],
-  confirmedComplete: false,
 };
 
 export const emptyClassesValue: ClassesValue = {
   courses: [],
   manual: [],
-  confirmedComplete: false,
 };
 
 export const dutyTypes = [
@@ -113,8 +111,6 @@ export const staffedSections = [
 
 export const preferencesValue: PreferencesValue = {
   maxHoursPerWeek: 10,
-  syncAsyncPreference: 0.35,
   dutyTypePrefs: [did("dt-disc"), did("dt-oh")],
   sectionPrefs: [sid("sec-132-0101")],
-  noSectionPreference: false,
 };

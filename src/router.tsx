@@ -1,5 +1,5 @@
 import { createBrowserRouter } from "react-router-dom";
-import App from "./App";
+import App, { RequireAuth } from "./App";
 import Login from "./pages/Login";
 import Callback from "./pages/Callback";
 import Home from "./pages/Home";
@@ -32,12 +32,20 @@ export const router = createBrowserRouter(
           },
         ]
       : []),
+    // Onboarding is auth-gated but deliberately outside the app shell.
+    {
+      path: "/ta/onboarding",
+      element: (
+        <RequireAuth>
+          <TaOnboardingWizard />
+        </RequireAuth>
+      ),
+    },
     {
       path: "/",
       element: <App />,
       children: [
         { index: true, element: <Home /> },
-        { path: "ta/onboarding", element: <TaOnboardingWizard /> },
         { path: "ta/preferences", element: <TaPreferences /> },
         { path: "ta/availability", element: <TaAvailability /> },
         { path: "ta/schedule", element: <TaSchedule /> },

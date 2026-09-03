@@ -108,6 +108,11 @@ export interface AvailabilityEditorProps {
     reason: string;
   }) => Promise<void>;
   onRemoveException?: (id: string) => Promise<void>;
+  /**
+   * Drop the editor's own title and meta line. The onboarding wizard supplies
+   * its own header, and two stacked titles read as a mistake.
+   */
+  hideHeader?: boolean;
 }
 
 /**
@@ -120,6 +125,7 @@ export function AvailabilityEditor({
   onSave,
   onAddException,
   onRemoveException,
+  hideHeader,
 }: AvailabilityEditorProps) {
   const toast = useToast();
 
@@ -254,7 +260,7 @@ export function AvailabilityEditor({
     <div className="flex flex-col gap-4">
       {/* Header */}
       <div className="flex items-end gap-3 sm:items-center sm:gap-[14px]">
-        <div className="flex flex-col gap-[3px]">
+        <div className={"flex flex-col gap-[3px]" + (hideHeader ? " sr-only" : "")}>
           <h1 className="text-[24px] font-semibold leading-[1.15] tracking-[-0.02em] sm:text-[20px] sm:leading-[1.2]">
             Availability
           </h1>
