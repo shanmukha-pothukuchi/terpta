@@ -1,5 +1,5 @@
 import { useDraggable } from "@dnd-kit/core";
-import { Lock, LockOpen, TriangleAlert, X } from "lucide-react";
+import { CalendarOff, Lock, LockOpen, TriangleAlert, X } from "lucide-react";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 /** Payload carried by every drag source (chips and roster names). */
@@ -90,7 +90,14 @@ export function AssignChip({
         opacity: isDragging ? 0.35 : 1,
       }}
     >
-      <span className={away ? "text-muted line-through" : undefined}>{name}</span>
+      <span>{name}</span>
+      {/* Not struck through: a line through a name you just dropped in reads
+          as "that did not take", when it means "they are away that day". The
+          calendar mark plus the amber ring says the state without denying the
+          assignment. */}
+      {away && (
+        <CalendarOff size={11} strokeWidth={1.5} className="shrink-0 text-warn" aria-hidden />
+      )}
       {conflict && (
         <TriangleAlert size={11} strokeWidth={1.5} className="shrink-0 text-[#F4A3AE]" />
       )}

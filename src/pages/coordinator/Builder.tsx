@@ -439,7 +439,7 @@ export function BuilderScreen({
           {/* The board is a repeating template. Paging to a week reveals what
               is actually true of it: who is away, who is standing in, which
               shifts are out of term. */}
-          {!fixture && (
+          {(!fixture || fixture.week) && (
             <WeekNav weekStart={weekStart} onChange={setWeekStart} compact />
           )}
           {week && week.absences.length > 0 && (
