@@ -112,6 +112,7 @@ export const upsertCourseAndSections = internalMutation({
         sectionNumber: v.string(),
         type: sectionTypeValidator,
         meetings: v.array(meetingValidator),
+        instructors: v.array(v.string()),
       }),
     ),
   },
@@ -156,6 +157,7 @@ export const upsertCourseAndSections = internalMutation({
         await ctx.db.patch(existing._id, {
           type: incoming.type,
           meetings: incoming.meetings,
+          instructors: incoming.instructors,
         });
         sectionRefs.push(existing._id);
       } else {
@@ -165,6 +167,7 @@ export const upsertCourseAndSections = internalMutation({
             sectionNumber: incoming.sectionNumber,
             type: incoming.type,
             meetings: incoming.meetings,
+            instructors: incoming.instructors,
           }),
         );
       }
@@ -191,6 +194,7 @@ function normalizePayload(payload: RawPayload): {
     sectionNumber: string;
     type: SectionType;
     meetings: NormalizedMeeting[];
+    instructors: string[];
   }[];
 } {
   return {
@@ -199,6 +203,7 @@ function normalizePayload(payload: RawPayload): {
       sectionNumber: s.number,
       type: classifyUmdioSection(s),
       meetings: normalizeUmdioMeetings(s.meetings),
+      instructors: (s.instructors ?? []).filter((n) => n.trim().length > 0),
     })),
   };
 }

@@ -209,7 +209,14 @@ function countAvailableTas(shift: Doc<"shifts">, tas: TaAvailability[]): number 
  */
 export const list = query({
   args: { periodRef: v.id("staffingPeriods") },
-  returns: v.array(v.object({ ...shiftFields, availableTaCount: v.number() })),
+  returns: v.array(
+    v.object({
+      ...shiftFields,
+      availableTaCount: v.number(),
+      /** Instructor(s) of the section this shift covers, when it covers one. */
+      sectionInstructors: v.optional(v.array(v.string())),
+    }),
+  ),
   handler: async (ctx, args) => {
     const { user } = await requireUser(ctx);
     const period = await ctx.db.get(args.periodRef);
@@ -256,9 +263,22 @@ export const list = query({
       });
     }
 
+    // Sections are usually organised by instructor of record, so surface the
+    // name alongside every section-backed shift. Cached per section: a period
+    // has far more shifts than sections.
+    const instructorsBySection = new Map<string, string[] | undefined>();
+    for (const shift of shifts) {
+      if (!shift.sectionRef || instructorsBySection.has(shift.sectionRef)) continue;
+      const section = await ctx.db.get(shift.sectionRef);
+      instructorsBySection.set(shift.sectionRef, section?.instructors);
+    }
+
     return shifts.map((shift) => ({
       ...shift,
       availableTaCount: countAvailableTas(shift, tas),
+      sectionInstructors: shift.sectionRef
+        ? instructorsBySection.get(shift.sectionRef)
+        : undefined,
     }));
   },
 });

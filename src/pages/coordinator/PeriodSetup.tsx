@@ -64,6 +64,24 @@ const SOURCE_NOTE: Record<ImportResult["source"], string> = {
   fixture: "umd.io is down — bundled fixture data",
 };
 
+const NO_INSTRUCTOR = "Instructor TBA";
+
+/**
+ * Sections are usually organised by instructor of record, so group them that
+ * way while keeping every section individually selectable. Order follows the
+ * first section number in each group, so the list still reads 0101, 0201, ...
+ */
+function groupByInstructor(rows: SectionRow[]) {
+  const groups = new Map<string, SectionRow[]>();
+  for (const row of rows) {
+    const key = row.instructors?.length ? row.instructors.join(", ") : NO_INSTRUCTOR;
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(row);
+    else groups.set(key, [row]);
+  }
+  return [...groups.entries()].map(([instructor, sections]) => ({ instructor, sections }));
+}
+
 const SECTION_TYPE_ORDER: SectionRow["type"][] = ["discussion", "lab", "lecture"];
 
 const SECTION_TYPE_LABEL: Record<SectionRow["type"], string> = {
@@ -208,6 +226,8 @@ export function PeriodSetupView({
               <div className="flex flex-col gap-3">
                 {SECTION_TYPE_ORDER.map((type) => {
                   const rows = sections.filter((s) => s.type === type);
+                  // Headers only earn their space when umd.io actually gave us names.
+                  const showInstructors = rows.some((s) => s.instructors?.length);
                   if (rows.length === 0) return null;
                   return (
                     <div key={type}>
@@ -220,7 +240,33 @@ export function PeriodSetupView({
                         ) : null}
                       </p>
                       <div className="overflow-hidden rounded-[10px] border border-line">
-                        {rows.map((s) => (
+                        {groupByInstructor(rows).map(({ instructor, sections: group }) => {
+                          const allSelected = group.every((s) => selected.has(s._id));
+                          return (
+                        <div key={instructor}>
+                          {showInstructors ? (
+                            <div className="flex h-8 items-center gap-2 border-b border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.02)] px-3">
+                              <span className="truncate text-[11.5px] font-medium text-ink">
+                                {instructor}
+                              </span>
+                              <span className="font-mono text-[11px] text-faint">
+                                {group.length}
+                              </span>
+                              <span className="flex-1" />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  group.forEach((s) => {
+                                    if (selected.has(s._id) === allSelected) onToggleSection(s._id);
+                                  })
+                                }
+                                className="cursor-pointer text-[11.5px] text-muted underline underline-offset-2 hover:text-ink"
+                              >
+                                {allSelected ? "Clear" : "Select all"}
+                              </button>
+                            </div>
+                          ) : null}
+                          {group.map((s) => (
                           <label
                             key={s._id}
                             className="flex h-9 cursor-pointer items-center gap-3 border-b border-[rgba(255,255,255,0.04)] px-3 text-[12.5px] last:border-b-0 hover:bg-[rgba(255,255,255,0.03)]"
@@ -244,7 +290,10 @@ export function PeriodSetupView({
                               {s.meetings[0]?.room ?? ""}
                             </span>
                           </label>
-                        ))}
+                          ))}
+                        </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );

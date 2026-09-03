@@ -279,6 +279,7 @@ const sectionDoc = v.object({
   sectionNumber: v.string(),
   type: v.union(v.literal("lecture"), v.literal("discussion"), v.literal("lab")),
   meetings: v.array(meetingValidator),
+  instructors: v.optional(v.array(v.string())),
 });
 
 /** All sections of a course, sorted by section number. Coordinator only. */

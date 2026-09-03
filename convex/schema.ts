@@ -45,6 +45,9 @@ export default defineSchema({
     sectionNumber: v.string(), // e.g. "0101"
     type: v.union(v.literal("lecture"), v.literal("discussion"), v.literal("lab")),
     meetings: v.array(meetingValidator),
+    // Instructor(s) of record, from umd.io. Optional: rows imported before
+    // this field existed, and any hand-entered section, have none.
+    instructors: v.optional(v.array(v.string())),
   }).index("by_course", ["courseRef"]),
 
   staffingPeriods: defineTable({

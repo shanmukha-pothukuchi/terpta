@@ -75,6 +75,8 @@ export interface SectionOption {
   label: string;
   type: "lecture" | "discussion" | "lab";
   meetings: SectionMeeting[];
+  /** Instructor of record, when umd.io supplied one. */
+  instructor?: string;
 }
 
 export interface OnboardingDutyType {
@@ -573,11 +575,16 @@ export function OnboardingView({
                                   <span className="shrink-0 font-mono text-[12.5px] text-ink">
                                     {opt.label}
                                   </span>
-                                  <span className="min-w-0 truncate font-mono text-[11.5px] text-muted">
+                                  <span className="min-w-0 shrink truncate font-mono text-[11.5px] text-muted">
                                     {opt.meetings
                                       .map((m) => formatMeeting(m.day, m.startMin, m.endMin))
                                       .join(" · ")}
                                   </span>
+                                  {opt.instructor ? (
+                                    <span className="min-w-0 truncate text-[11.5px] text-faint">
+                                      {opt.instructor}
+                                    </span>
+                                  ) : null}
                                   {selected ? (
                                     <Check
                                       size={14}
@@ -840,6 +847,9 @@ export default function TaOnboarding() {
           label: s.description ?? "Section",
           type: "discussion",
           meetings: [...meeting],
+          instructor: s.sectionInstructors?.length
+            ? s.sectionInstructors.join(", ")
+            : undefined,
         });
       }
     }

@@ -140,6 +140,7 @@ export const run = internalMutation({
       const sectionRef = await ctx.db.insert("sections", {
         courseRef,
         sectionNumber: fixtureSection.number,
+        instructors: fixtureSection.instructors,
         type: "discussion",
         meetings,
       });

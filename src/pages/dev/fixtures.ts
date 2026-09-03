@@ -109,6 +109,7 @@ function weeklyShift(
   requiredCount: number,
   availableTaCount: number,
   sectionRef?: Id<"sections">,
+  instructor?: string,
 ): ShiftRow {
   return {
     _id: fid<"shifts">(id),
@@ -116,6 +117,7 @@ function weeklyShift(
     periodRef: PERIOD_ID,
     dutyTypeRef,
     requiredCount,
+    sectionInstructors: instructor ? [instructor] : undefined,
     sectionRef,
     recurrence: "weekly",
     day,
@@ -136,6 +138,8 @@ const discussionShifts: ShiftRow[] = SECTION_SEEDS.map((s, i) =>
     // 0107 has almost nobody free — it is the unfilled slot in the mock.
     s.number === "0107" ? 1 : 3 + (i % 3),
     fid<"sections">(s.id),
+    // Sections split across two instructors of record, as umd.io reports them.
+    Number(s.number) < 105 ? "Anwar Mamat" : "Cliff Bakalian",
   ),
 );
 
@@ -154,6 +158,7 @@ const examShift: ShiftRow = {
   startMin: 1140,
   endMin: 1260,
   availableTaCount: 4,
+  sectionInstructors: undefined,
 };
 
 const gradingPool: ShiftRow = {
@@ -166,6 +171,7 @@ const gradingPool: ShiftRow = {
   hoursRequired: 40,
   dueDate: "2026-12-14",
   availableTaCount: 6,
+  sectionInstructors: undefined,
 };
 
 export const shifts: ShiftRow[] = [
