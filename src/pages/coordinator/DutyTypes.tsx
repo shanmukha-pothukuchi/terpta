@@ -254,12 +254,17 @@ function DraftRow({
           aria-label="New duty type name"
           className="h-7 max-w-56"
         />
-        <Button variant="primary" size="sm" onClick={save} disabled={name.trim().length === 0}>
-          Add
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          Cancel
-        </Button>
+        {/* Ghost buttons have no visible box, so their 10px padding reads as
+            extra gap: 8px of flex gap became a 28px hole between "Add" and
+            "Cancel". Tighten both for the pair to look evenly spaced. */}
+        <div className="flex items-center gap-1">
+          <Button variant="primary" size="sm" onClick={save} disabled={name.trim().length === 0}>
+            Add
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onCancel} className="px-2">
+            Cancel
+          </Button>
+        </div>
       </div>
       <ModeToggle value={mode} onChange={setMode} />
       <ColorSwatchPicker value={color} onChange={setColor} />

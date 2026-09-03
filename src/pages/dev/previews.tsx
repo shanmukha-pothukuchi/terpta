@@ -28,6 +28,7 @@ import { availabilityFixture } from "../ta/availability/model";
 import { BuilderScreen } from "../coordinator/Builder";
 import { RosterView } from "../coordinator/Roster";
 import { ShiftsView } from "../coordinator/Shifts";
+import { DutyTypesView } from "../coordinator/DutyTypes";
 import { CoveragePanelView } from "../coordinator/builder/CoveragePanel";
 import {
   DEFAULT_STAFF_KINDS,
@@ -256,6 +257,20 @@ function CoveragePreview() {
   );
 }
 
+function DutyTypesPreview() {
+  return (
+    <PageFrame>
+      <DutyTypesView
+        periodSelected
+        dutyTypes={fx.dutyTypes}
+        onCreate={noop}
+        onUpdate={noop}
+        onRemove={noop}
+      />
+    </PageFrame>
+  );
+}
+
 function ShiftsPreview() {
   return (
     <PageFrame>
@@ -427,6 +442,10 @@ const SCREENS: Record<string, { label: string; element: ReactNode }> = {
   "builder-publish": { label: "Builder — publish modal", element: <BuilderPreview publish /> },
   roster: { label: "Coordinator roster", element: <RosterPreview /> },
   shifts: { label: "Coordinator shifts", element: <ShiftsPreview /> },
+  "duty-types": {
+    label: "Coordinator duty types",
+    element: <DutyTypesPreview />,
+  },
   coverage: {
     label: "Builder — one-off coverage panel",
     element: <CoveragePreview />,
