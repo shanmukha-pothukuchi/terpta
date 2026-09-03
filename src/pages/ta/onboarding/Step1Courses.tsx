@@ -230,19 +230,6 @@ export function Step1Courses({
     });
   }, []);
 
-  const handleChangeSections = useCallback(
-    (courseId: string, selectedSectionIds: Id<"sections">[]) => {
-      const current = valueRef.current;
-      changeRef.current({
-        ...current,
-        courses: current.courses.map((c) =>
-          c.courseId === courseId ? { ...c, selectedSectionIds } : c,
-        ),
-      });
-    },
-    [],
-  );
-
   const metaFor = useCallback(
     (courseId: string) => {
       void cacheTick;
@@ -383,11 +370,7 @@ export function Step1Courses({
 
       {/* Right — live import preview. The one card on the screen. */}
       <div className="min-w-0">
-        <ImportPreviewCard
-          rows={rows}
-          courses={value.courses}
-          onChangeSections={handleChangeSections}
-        />
+        <ImportPreviewCard rows={rows} />
       </div>
     </div>
   );
