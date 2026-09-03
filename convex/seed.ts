@@ -364,3 +364,37 @@ async function insertBlock(
     source: "manual",
   });
 }
+
+/**
+ * Admin cleanup: drop a `users` row by WorkOS id.
+ *
+ * For accounts synced by mistake (a test sign-in, a wrong-domain account that
+ * slipped in before the gate). Refuses rows that other documents still point
+ * at, so it cannot orphan assignments or changelog entries.
+ */
+export const removeUserByWorkosId = internalMutation({
+  args: { workosId: v.string() },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_workos_id", (q) => q.eq("workosId", args.workosId))
+      .unique();
+    if (!user) return "no such user";
+
+    const profiles = await ctx.db
+      .query("taProfiles")
+      .withIndex("by_user_period", (q) => q.eq("userRef", user._id))
+      .collect();
+    if (profiles.length > 0) {
+      return `refused: user has ${profiles.length} TA profile(s)`;
+    }
+    const periods = await ctx.db.query("staffingPeriods").collect();
+    if (periods.some((p) => p.coordinatorRef === user._id)) {
+      return "refused: user coordinates a staffing period";
+    }
+
+    await ctx.db.delete(user._id);
+    return `deleted ${user.email}`;
+  },
+});

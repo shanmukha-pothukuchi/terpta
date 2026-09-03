@@ -22,7 +22,10 @@ export function useAuthFromAuthKit() {
         return (
           (await getAccessToken({ forceRefresh: forceRefreshToken })) ?? null
         );
-      } catch {
+      } catch (error) {
+        // Returning null logs the user out, so make the cause visible rather
+        // than leaving a silent redirect back to /login.
+        console.error("AuthKit: could not get an access token for Convex", error);
         return null;
       }
     },

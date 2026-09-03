@@ -16,15 +16,17 @@ export function isAllowedEmail(email: string): boolean {
 export async function requireUser(ctx: QueryCtx | MutationCtx) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Not signed in");
-  const email = identity.email;
-  if (!email || !isAllowedEmail(email)) {
-    throw new Error("TerpTA is restricted to umd.edu and terpmail.umd.edu accounts");
-  }
   const user = await ctx.db
     .query("users")
     .withIndex("by_workos_id", (q) => q.eq("workosId", identity.subject))
     .unique();
   if (!user) throw new Error("User record not synced yet — try again in a moment");
+  // WorkOS AuthKit access tokens carry no `email` claim, so the domain check
+  // runs against the address on the users row, which only ever comes from the
+  // WorkOS Management API (webhook or users.syncSelf) — never from the client.
+  if (!isAllowedEmail(user.email)) {
+    throw new Error("TerpTA is restricted to umd.edu and terpmail.umd.edu accounts");
+  }
   return { user, identity };
 }
 
