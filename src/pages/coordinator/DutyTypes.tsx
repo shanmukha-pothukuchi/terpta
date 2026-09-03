@@ -408,9 +408,24 @@ export function DutyTypesView({
           </>
         }
       >
+        {/* Deleting this takes its shifts with it, so the count is named
+            before the fact rather than discovered afterwards. */}
         <p className="text-[12.5px] text-muted">
-          Delete <span className="font-medium text-ink">{pendingDelete?.name}</span>? This fails if
-          any shifts still reference it — delete or reassign those shifts first.
+          Delete <span className="font-medium text-ink">{pendingDelete?.name}</span>
+          {pendingDelete && pendingDelete.shiftCount > 0 ? (
+            <>
+              {" and its "}
+              <span className="font-medium text-ink">
+                {pendingDelete.shiftCount} shift
+                {pendingDelete.shiftCount === 1 ? "" : "s"}
+              </span>
+              ? Their assignments, one-off fill-ins and pending swap requests go
+              with them. Logged hours are never deleted — if any shift has hours
+              on it, nothing is removed and you keep the duty type.
+            </>
+          ) : (
+            "? Nothing uses it yet."
+          )}
         </p>
       </Modal>
     </div>

@@ -1,6 +1,13 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireCoordinator, requireUser } from "./lib/auth";
+import {
+  assertNoClaimedHours,
+  collectShiftCascade,
+  deleteShiftCascade,
+  shiftLabel,
+  totalCounts,
+} from "./lib/cascade";
 
 const modeValidator = v.union(v.literal("sync"), v.literal("async"));
 
@@ -138,17 +145,43 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const dutyType = await ctx.db.get(args.dutyTypeRef);
     if (!dutyType) throw new ConvexError("Duty type not found");
-    await requireCoordinator(ctx, dutyType.periodRef);
-    const shifts = await ctx.db
-      .query("shifts")
-      .withIndex("by_period", (q) => q.eq("periodRef", dutyType.periodRef))
-      .collect();
-    if (shifts.some((s) => s.dutyTypeRef === dutyType._id)) {
-      throw new ConvexError(
-        "Cannot delete: shifts still reference this duty type. Delete or reassign those shifts first.",
-      );
+    const { user } = await requireCoordinator(ctx, dutyType.periodRef);
+
+    // Every shift of this kind goes with it — the weekly ones and the one-off
+    // events alike — along with what hangs off each. This used to refuse and
+    // send the coordinator away to delete the shifts by hand, which for an
+    // exam duty meant hunting one-off events across the whole term.
+    const owned = (
+      await ctx.db
+        .query("shifts")
+        .withIndex("by_period", (q) => q.eq("periodRef", dutyType.periodRef))
+        .collect()
+    ).filter((s) => s.dutyTypeRef === dutyType._id);
+
+    // Check every shift before deleting any: a partial cascade would leave the
+    // duty type behind with some of its shifts already gone.
+    const cascades = [];
+    for (const shift of owned) {
+      const cascade = await collectShiftCascade(ctx, shift);
+      assertNoClaimedHours(shiftLabel(shift), cascade);
+      cascades.push({ shift, cascade });
     }
+
+    const counts = totalCounts(
+      await Promise.all(
+        cascades.map(({ shift, cascade }) => deleteShiftCascade(ctx, shift, cascade)),
+      ),
+    );
     await ctx.db.delete(dutyType._id);
+
+    await ctx.db.insert("changeLog", {
+      periodRef: dutyType.periodRef,
+      actorRef: user._id,
+      action: "dutyType.remove",
+      before: { dutyType, deletedShiftCount: owned.length, deleted: counts },
+      after: null,
+      at: Date.now(),
+    });
     return null;
   },
 });

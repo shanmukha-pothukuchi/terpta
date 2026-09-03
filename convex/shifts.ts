@@ -3,6 +3,12 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { dayValidator } from "./schema";
 import { requireCoordinator, requireUser } from "./lib/auth";
+import {
+  assertNoClaimedHours,
+  collectShiftCascade,
+  deleteShiftCascade,
+  shiftLabel,
+} from "./lib/cascade";
 
 type Day = Infer<typeof dayValidator>;
 
@@ -427,14 +433,9 @@ export const remove = mutation({
     if (!shift) throw new ConvexError("Shift not found");
     const { user, period } = await requireCoordinator(ctx, shift.periodRef);
 
-    const assignments = await ctx.db
-      .query("assignments")
-      .withIndex("by_shift", (q) => q.eq("shiftRef", shift._id))
-      .collect();
-    for (const assignment of assignments) {
-      await ctx.db.delete(assignment._id);
-    }
-    await ctx.db.delete(shift._id);
+    const cascade = await collectShiftCascade(ctx, shift);
+    assertNoClaimedHours(shiftLabel(shift), cascade);
+    const counts = await deleteShiftCascade(ctx, shift, cascade);
 
     if (period.status === "published") {
       await logShiftChange(
@@ -442,7 +443,7 @@ export const remove = mutation({
         shift.periodRef,
         user._id,
         "shift.remove",
-        { shift, deletedAssignmentCount: assignments.length },
+        { shift, deleted: counts },
         null,
       );
     }
