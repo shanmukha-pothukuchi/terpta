@@ -427,39 +427,6 @@ function AsyncCard({ shift, name, onClick }: { shift: ShiftRow; name: string; on
 /* Pure view                                                           */
 /* ------------------------------------------------------------------ */
 
-/**
- * One number for the whole period: how many TAs a discussion section needs.
- * Committing rewrites every section shift, so it is a blur/Enter commit and
- * not a live one.
- */
-function TaPerSectionControl({ value, onCommit }: { value: number; onCommit: (n: number) => void }) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
-  const commit = () => {
-    const n = Math.max(1, Math.round(Number(draft) || 1));
-    setDraft(String(n));
-    if (n !== value) onCommit(n);
-  };
-  return (
-    <div className="flex items-center gap-2">
-      <Label htmlFor="tas-per-section" className="mb-0 whitespace-nowrap">
-        TAs per section
-      </Label>
-      <Input
-        id="tas-per-section"
-        type="number"
-        min={1}
-        step={1}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-        className="h-8 w-16 text-right font-mono"
-      />
-    </div>
-  );
-}
-
 export interface ShiftsViewProps {
   periodSelected: boolean;
   /** undefined = loading */
@@ -468,9 +435,6 @@ export interface ShiftsViewProps {
   onCreate: (dutyTypeRef: Id<"dutyTypes">, fields: ShiftFormFields) => void;
   onUpdate: (shiftRef: Id<"shifts">, fields: ShiftFormFields) => void;
   onRemove: (shiftRef: Id<"shifts">) => void;
-  /** TAs each discussion section needs; changing it rewrites every section shift. */
-  taPerSection?: number;
-  onTaPerSection?: (n: number) => void;
 }
 
 export function ShiftsView({
@@ -480,8 +444,6 @@ export function ShiftsView({
   onCreate,
   onUpdate,
   onRemove,
-  taPerSection,
-  onTaPerSection,
 }: ShiftsViewProps) {
   const [modal, setModal] = useState<{ dutyType: DutyTypeRow; shift: ShiftRow | null } | null>(null);
 
@@ -522,11 +484,6 @@ export function ShiftsView({
         description={
           `${shifts.length} shift${shifts.length === 1 ? "" : "s"} across ${dutyTypes.length} duty type${dutyTypes.length === 1 ? "" : "s"}` +
           (scarce > 0 ? ` · ${scarce} short on available TAs` : "")
-        }
-        actions={
-          onTaPerSection ? (
-            <TaPerSectionControl value={taPerSection ?? 1} onCommit={onTaPerSection} />
-          ) : undefined
         }
       />
       {dutyTypes.length === 0 ? (
@@ -710,24 +667,9 @@ export default function Shifts() {
   const create = useMutation(api.shifts.create);
   const update = useMutation(api.shifts.update);
   const remove = useMutation(api.shifts.remove);
-  const periodInfo = useQuery(api.periods.get, periodId ? { periodRef: periodId } : "skip");
-  const setTaPerSection = useMutation(api.periods.setTaPerSection);
 
   return (
     <ShiftsView
-      taPerSection={periodInfo?.period.taPerSection ?? 1}
-      onTaPerSection={(n) => {
-        if (!periodId) return;
-        setTaPerSection({ periodRef: periodId, taPerSection: n })
-          .then((changed) =>
-            toast(
-              changed === 0
-                ? `Every section already needs ${n} TA${n === 1 ? "" : "s"}`
-                : `${changed} section shift${changed === 1 ? "" : "s"} now need${changed === 1 ? "s" : ""} ${n} TA${n === 1 ? "" : "s"}`,
-            ),
-          )
-          .catch((e) => toast(errorMessage(e), { tone: "error" }));
-      }}
       periodSelected={periodId !== null}
       dutyTypes={periodId ? dutyTypes : undefined}
       shifts={periodId ? shifts : undefined}

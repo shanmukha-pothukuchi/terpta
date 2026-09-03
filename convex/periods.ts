@@ -264,35 +264,6 @@ export const publish = mutation({
  * How many TAs each discussion section needs, applied to every section shift
  * in the period. Kept on the period so a new import gets the same answer.
  */
-export const setTaPerSection = mutation({
-  args: { periodRef: v.id("staffingPeriods"), taPerSection: v.number() },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    const { user, period } = await requireCoordinator(ctx, args.periodRef);
-    const n = Math.max(1, Math.round(args.taPerSection));
-    await ctx.db.patch(period._id, { taPerSection: n });
-    const shifts = await ctx.db
-      .query("shifts")
-      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
-      .collect();
-    let changed = 0;
-    for (const shift of shifts) {
-      if (shift.sectionRef === undefined || shift.requiredCount === n) continue;
-      await ctx.db.patch(shift._id, { requiredCount: n });
-      changed++;
-    }
-    await ctx.db.insert("changeLog", {
-      periodRef: period._id,
-      actorRef: user._id,
-      action: "period.taPerSection",
-      before: { taPerSection: period.taPerSection ?? 1 },
-      after: { taPerSection: n, shiftsChanged: changed },
-      at: Date.now(),
-    });
-    return changed;
-  },
-});
-
 /** Everyone on the roster, for the publish notice. Coordinator only. */
 export const publishTargets = internalQuery({
   args: { periodRef: v.id("staffingPeriods") },
