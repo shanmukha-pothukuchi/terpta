@@ -8,7 +8,7 @@
  */
 import { useEffect, useId, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { Button, Input, Label, Select } from "../../../components/ui";
+import { Button, IconButton, Input, Label, Select } from "../../../components/ui";
 import { DAY_CODES, DAY_SHORT, formatMeeting, formatTime, type DayCode } from "../../../lib/format";
 import { GRID_END_MIN, GRID_START_MIN, SLOT_MIN } from "../availability/model";
 import type { ManualClass } from "./model";
@@ -101,14 +101,13 @@ export function ManualClassEntry({ value, onChange, forceOpen }: ManualClassEntr
               <span className="shrink-0 font-mono text-[11.5px] text-muted">
                 {formatMeeting(m.day, m.startMin, m.endMin)}
               </span>
-              <button
-                type="button"
+              <IconButton
+                variant="danger"
                 onClick={() => remove(m.key)}
                 aria-label={`Remove ${m.label || "class"}`}
-                className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-[6px] text-faint hover:bg-[rgba(255,255,255,0.06)] hover:text-ink"
               >
-                <Trash2 size={14} strokeWidth={1.5} aria-hidden />
-              </button>
+                <Trash2 size={16} strokeWidth={1.5} aria-hidden />
+              </IconButton>
             </div>
           ))}
         </div>

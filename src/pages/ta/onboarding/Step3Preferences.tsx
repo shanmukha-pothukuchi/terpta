@@ -34,7 +34,7 @@ import {
 } from "@dnd-kit/core";
 import { GripVertical, Plus, TriangleAlert, X } from "lucide-react";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { Card, Tooltip } from "../../../components/ui";
+import { Card, IconButton, Tooltip } from "../../../components/ui";
 import { DAY_SHORT, formatMeeting, formatTime } from "../../../lib/format";
 import {
   DEFAULT_HOURS,
@@ -65,6 +65,11 @@ export interface Step3PreferencesProps {
   /** For the cross-step conflict card. */
   classes: ClassesValue;
   departmentCapNote?: string;
+  /**
+   * wizard (default): centred 720px card for onboarding.
+   * page: full-width, left-aligned like the other TA tabs.
+   */
+  layout?: "wizard" | "page";
 }
 
 const DEFAULT_CAP_NOTE =
@@ -142,7 +147,7 @@ function RankedSectionRow({
             : undefined,
         }}
         className={
-          "group relative flex h-9 min-w-0 items-center gap-2 rounded-[7px] border px-2.5 " +
+          "group relative flex h-10 min-w-0 items-center gap-2 rounded-[7px] border px-2.5 " +
           (isDragging
             ? "z-10 border-line-strong bg-raised shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
             : "border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.025)]")
@@ -173,14 +178,13 @@ function RankedSectionRow({
         <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-muted">
           {meetings}
         </span>
-        <button
-          type="button"
+        <IconButton
+          variant="ghost"
           onClick={onRemove}
           aria-label={`Remove section ${sectionNumber} from your ranking`}
-          className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-[6px] text-faint opacity-0 transition-opacity hover:bg-[rgba(255,255,255,0.06)] hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
         >
-          <X size={14} strokeWidth={1.5} aria-hidden />
-        </button>
+          <X size={16} strokeWidth={1.5} aria-hidden />
+        </IconButton>
         <button
           type="button"
           aria-label={`Drag to reorder section ${sectionNumber}`}
@@ -206,6 +210,7 @@ export function Step3Preferences({
   sections,
   classes,
   departmentCapNote,
+  layout = "wizard",
 }: Step3PreferencesProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -280,13 +285,26 @@ export function Step3Preferences({
     );
   };
 
+  const page = layout === "page";
+
   return (
-    <div className="mx-auto flex min-w-0 max-w-[720px] flex-col gap-3">
-      {/* The reference card is one 18px-gap stack; zero the Card title's own
-          bottom margin so the rhythm stays even. */}
+    <div
+      className={
+        page
+          ? "flex min-w-0 flex-col gap-3"
+          : "mx-auto flex min-w-0 max-w-[720px] flex-col gap-3"
+      }
+    >
+      {/* The wizard card is one 18px-gap stack; zero the Card title's own
+          bottom margin so the rhythm stays even. On the Preferences page the
+          page header already names this, so the card title is dropped. */}
       <Card
-        title="Preferences"
-        className="flex flex-col gap-[18px] [&>div:first-child]:mb-0"
+        title={page ? undefined : "Preferences"}
+        className={
+          page
+            ? "flex flex-col gap-[18px]"
+            : "flex flex-col gap-[18px] [&>div:first-child]:mb-0"
+        }
       >
         {/* ---------------------------------------------------------- */}
         {/* a. Hours                                                    */}

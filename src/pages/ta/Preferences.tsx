@@ -150,7 +150,17 @@ function PreferencesEditor({ periodRef, term, profile, dutyTypes, sections }: Ed
 
   return (
     <div>
-      <PageHeader title="Preferences" description={PAGE_DESCRIPTION} />
+      <PageHeader
+        title="Preferences"
+        description={PAGE_DESCRIPTION}
+        actions={
+          tab === "details" ? undefined : (
+            <Button variant="primary" loading={saving} onClick={() => void save()}>
+              Save changes
+            </Button>
+          )
+        }
+      />
 
       <SegmentedControl<TabKey>
         options={TABS}
@@ -163,18 +173,19 @@ function PreferencesEditor({ periodRef, term, profile, dutyTypes, sections }: Ed
         <div className="flex flex-col gap-4">
           <div className="flex gap-2.5 rounded-[9px] border border-[rgba(245,165,36,0.30)] bg-[rgba(245,165,36,0.08)] px-3 py-2.5">
             <TriangleAlert
-              size={14}
+              size={16}
               strokeWidth={1.5}
               className="mt-0.5 shrink-0 text-warn"
               aria-hidden
             />
-            <p className="min-w-0 text-[12px] text-warn-text">
+            <p className="min-w-0 text-[12.5px] text-warn-text">
               Changing your classes regenerates the locked class blocks on your availability
               grid.
             </p>
           </div>
 
           <Step1Courses
+            embedded
             value={classes}
             onChange={setClasses}
             onSearch={(query: string) => searchCourses({ query, term })}
@@ -189,6 +200,7 @@ function PreferencesEditor({ periodRef, term, profile, dutyTypes, sections }: Ed
         </div>
       ) : tab === "preferences" ? (
         <Step3Preferences
+          layout="page"
           value={prefs}
           onChange={setPrefs}
           dutyTypes={dutyTypes}
@@ -198,12 +210,6 @@ function PreferencesEditor({ periodRef, term, profile, dutyTypes, sections }: Ed
       ) : (
         <YourDetails />
       )}
-
-      <div className="mt-4 flex items-center justify-end">
-        <Button variant="primary" loading={saving} onClick={() => void save()}>
-          Save changes
-        </Button>
-      </div>
     </div>
   );
 }

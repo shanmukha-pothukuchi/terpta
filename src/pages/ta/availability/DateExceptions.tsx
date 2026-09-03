@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { CalendarDays, Plus, Trash2 } from "lucide-react";
-import { useToast } from "../../../components/ui";
+import { IconButton, useToast } from "../../../components/ui";
 import { formatDate } from "../../../lib/format";
 import type { ExceptionItem } from "./model";
 
@@ -128,15 +128,14 @@ export function DateExceptions({ exceptions, onAdd, onRemove }: DateExceptionsPr
             <span className="truncate text-[12.5px] text-muted">{ex.reason}</span>
           )}
           <div className="flex-1" />
-          <button
-            type="button"
+          <IconButton
+            variant="danger"
             aria-label="Remove exception"
             disabled={removing === ex.id}
             onClick={() => void handleRemove(ex.id)}
-            className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-[7px] text-faint transition-colors hover:bg-[rgba(226,24,51,0.12)] hover:text-[#F4A3AE] disabled:opacity-50"
           >
-            <Trash2 size={14} strokeWidth={1.5} />
-          </button>
+            <Trash2 size={16} strokeWidth={1.5} aria-hidden />
+          </IconButton>
         </div>
       ))}
       {exceptions.length === 0 && (

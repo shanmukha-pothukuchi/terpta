@@ -6,6 +6,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import {
   Button,
   EmptyState,
+  IconButton,
   Input,
   Label,
   Modal,
@@ -36,7 +37,7 @@ function prefLabel(p: number): string {
 }
 
 const ROW_GRID =
-  "grid grid-cols-[minmax(0,1.3fr)_128px_64px_minmax(0,1.5fr)_170px_36px] items-center gap-3 px-3.5";
+  "grid grid-cols-[minmax(0,1.3fr)_128px_64px_minmax(0,1.5fr)_170px_40px] items-center gap-3 px-3.5";
 
 /* ------------------------------------------------------------------ */
 /* Pure view                                                           */
@@ -216,15 +217,14 @@ export function RosterView({
                     </p>
                   ) : null}
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
+                <IconButton
+                  variant="danger"
                   aria-label={`Remove ${row.name}`}
                   onClick={() => setPendingRemove(row)}
-                  className="w-7 justify-self-end px-0"
+                  className="justify-self-end"
                 >
-                  <Trash2 size={14} strokeWidth={1.5} aria-hidden />
-                </Button>
+                  <Trash2 size={16} strokeWidth={1.5} aria-hidden />
+                </IconButton>
               </div>
             );
           })}

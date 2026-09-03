@@ -7,6 +7,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import {
   Button,
   EmptyState,
+  IconButton,
   Input,
   Modal,
   PageHeader,
@@ -207,15 +208,14 @@ function EditableRow({
         />
         <span className="text-[12px] text-faint">h</span>
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
+      <IconButton
+        variant="danger"
         onClick={onDelete}
         aria-label={`Delete ${dt.name}`}
-        className="w-7 justify-self-end px-0"
+        className="justify-self-end"
       >
-        <Trash2 size={14} strokeWidth={1.5} aria-hidden />
-      </Button>
+        <Trash2 size={16} strokeWidth={1.5} aria-hidden />
+      </IconButton>
     </div>
   );
 }

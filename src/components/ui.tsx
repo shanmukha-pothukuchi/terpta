@@ -278,9 +278,9 @@ export function Chip({
           type="button"
           onClick={onRemove}
           aria-label="Remove"
-          className="ml-0.5 -mr-1 grid size-3.5 place-items-center rounded text-faint hover:text-ink cursor-pointer"
+          className="ml-0.5 -mr-0.5 grid size-4 place-items-center rounded text-faint hover:text-ink cursor-pointer"
         >
-          <X size={10} strokeWidth={1.5} />
+          <X size={12} strokeWidth={1.5} />
         </button>
       ) : null}
     </span>

@@ -90,6 +90,11 @@ export interface Step1CoursesProps {
   onDetailsChange?: (next: ContactDetails) => void;
   /** Placeholder for the preferred-name field. */
   firstName?: string;
+  /**
+   * Preferences-page reuse: skip the onboarding hero, spacer, and
+   * "edit this anytime" line so the tab matches Hours / Schedule.
+   */
+  embedded?: boolean;
 }
 
 export function Step1Courses({
@@ -100,6 +105,7 @@ export function Step1Courses({
   details,
   onDetailsChange,
   firstName,
+  embedded,
 }: Step1CoursesProps) {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [highlightSectionId, setHighlightSectionId] = useState<Id<"sections"> | null>(null);
@@ -268,19 +274,27 @@ export function Step1Courses({
   const rows = useMemo(() => previewMeetings(value, ghost), [value, ghost]);
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[560px_minmax(0,1fr)] lg:items-start lg:gap-x-16">
+    <div
+      className={
+        embedded
+          ? "grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start lg:gap-x-6"
+          : "grid gap-8 lg:grid-cols-[560px_minmax(0,1fr)] lg:items-start lg:gap-x-16"
+      }
+    >
       {/* Left — the form. Uncarded, by design. */}
-      <div className="flex min-w-0 flex-col gap-7">
-        <div className="flex flex-col gap-2.5">
-          <h2 className="text-[30px] font-semibold leading-[1.15] tracking-[-0.02em] text-ink">
-            What are you taking this semester?
-          </h2>
-          <p className="text-[15px] leading-[1.5] text-muted">
-            {
-              "We’ll pull your lecture and discussion times from the Schedule of Classes so they’re blocked off automatically."
-            }
-          </p>
-        </div>
+      <div className={embedded ? "flex min-w-0 flex-col gap-4" : "flex min-w-0 flex-col gap-7"}>
+        {embedded ? null : (
+          <div className="flex flex-col gap-2.5">
+            <h2 className="text-[30px] font-semibold leading-[1.15] tracking-[-0.02em] text-ink">
+              What are you taking this semester?
+            </h2>
+            <p className="text-[15px] leading-[1.5] text-muted">
+              {
+                "We’ll pull your lecture and discussion times from the Schedule of Classes so they’re blocked off automatically."
+              }
+            </p>
+          </div>
+        )}
 
         <div className="flex flex-col gap-2.5">
           <CourseSearch
@@ -320,7 +334,7 @@ export function Step1Courses({
         {/* The two contact fields fill the gap the reference leaves above the
             hint, so onboarding still collects them without a fourth step. When
             they are absent the column keeps its original low-actions spacer. */}
-        {details && onDetailsChange ? (
+        {embedded ? null : details && onDetailsChange ? (
           <div className="flex min-w-0 flex-col gap-3">
             <h3 className="text-[13px] font-semibold leading-none text-ink">About you</h3>
 
@@ -363,9 +377,11 @@ export function Step1Courses({
           <div className="h-10 lg:h-[180px]" aria-hidden />
         )}
 
-        <div className="flex items-center">
-          <p className="text-[13px] text-muted">You can edit this anytime under Preferences.</p>
-        </div>
+        {embedded ? null : (
+          <div className="flex items-center">
+            <p className="text-[13px] text-muted">You can edit this anytime under Preferences.</p>
+          </div>
+        )}
       </div>
 
       {/* Right — live import preview. The one card on the screen. */}

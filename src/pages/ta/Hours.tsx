@@ -336,53 +336,55 @@ export function HoursView({
         title="Hours"
         description={courseLabel || undefined}
         actions={
-          <>
-            <div className="flex items-center gap-1">
+          published ? (
+            <>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Previous week"
+                  onClick={() => onWeekChange(addDaysIso(weekStart, -7))}
+                >
+                  <ChevronLeft size={14} strokeWidth={1.5} />
+                </Button>
+                <span className="w-[118px] text-center font-mono text-[12.5px] text-ink">
+                  Week of {formatDate(weekStart)}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Next week"
+                  onClick={() => onWeekChange(addDaysIso(weekStart, 7))}
+                >
+                  <ChevronRight size={14} strokeWidth={1.5} />
+                </Button>
+              </div>
+              {/* Submitting is not a one-way door: pull the week back while
+                  the coordinator has not approved any of it yet. */}
+              {submittedCount > 0 && onUnsubmitWeek ? (
+                <Button
+                  variant="secondary"
+                  loading={unsubmitting}
+                  onClick={() => {
+                    setUnsubmitting(true);
+                    void onUnsubmitWeek().finally(() => setUnsubmitting(false));
+                  }}
+                >
+                  <Undo2 size={14} strokeWidth={1.5} aria-hidden />
+                  Unsubmit week
+                </Button>
+              ) : null}
               <Button
-                variant="ghost"
-                size="sm"
-                aria-label="Previous week"
-                onClick={() => onWeekChange(addDaysIso(weekStart, -7))}
+                variant="primary"
+                onClick={() => void onSubmitWeek()}
+                loading={submittingWeek}
+                disabled={draftCount === 0}
               >
-                <ChevronLeft size={14} strokeWidth={1.5} />
+                <Send size={14} strokeWidth={1.5} aria-hidden />
+                Submit week
               </Button>
-              <span className="w-[118px] text-center font-mono text-[12.5px] text-ink">
-                Week of {formatDate(weekStart)}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label="Next week"
-                onClick={() => onWeekChange(addDaysIso(weekStart, 7))}
-              >
-                <ChevronRight size={14} strokeWidth={1.5} />
-              </Button>
-            </div>
-            {/* Submitting is not a one-way door: pull the week back while
-                the coordinator has not approved any of it yet. */}
-            {submittedCount > 0 && onUnsubmitWeek ? (
-              <Button
-                variant="secondary"
-                loading={unsubmitting}
-                onClick={() => {
-                  setUnsubmitting(true);
-                  void onUnsubmitWeek().finally(() => setUnsubmitting(false));
-                }}
-              >
-                <Undo2 size={14} strokeWidth={1.5} aria-hidden />
-                Unsubmit week
-              </Button>
-            ) : null}
-            <Button
-              variant="primary"
-              onClick={() => void onSubmitWeek()}
-              loading={submittingWeek}
-              disabled={draftCount === 0}
-            >
-              <Send size={14} strokeWidth={1.5} aria-hidden />
-              Submit week
-            </Button>
-          </>
+            </>
+          ) : undefined
         }
       />
 

@@ -353,13 +353,13 @@ function SchedulePreview() {
   );
 }
 
-function TaHoursPreview() {
+function TaHoursPreview({ unpublished }: { unpublished?: boolean } = {}) {
   const [weekStart, setWeekStart] = useState(fx.TA_WEEK_START);
   return (
     <PageFrame>
       <TaHoursView
         courseLabel="CMSC132 · Fall 2026"
-        published
+        published={!unpublished}
         items={fx.scheduleItems}
         hourLogs={fx.taHourLogs}
         maxHoursPerWeek={10}
@@ -476,6 +476,10 @@ const SCREENS: Record<string, { label: string; element: ReactNode }> = {
   "hours-approval": { label: "Coordinator hours approval", element: <HoursApprovalPreview /> },
   schedule: { label: "TA schedule", element: <SchedulePreview /> },
   "ta-hours": { label: "TA hour logging", element: <TaHoursPreview /> },
+  "ta-hours-unpublished": {
+    label: "TA hour logging — schedule not published yet",
+    element: <TaHoursPreview unpublished />,
+  },
   "onboarding-1": {
     label: "Setup 1 — courses (?state=empty | ?state=error)",
     element: <OnboardingCoursesPreview />,
