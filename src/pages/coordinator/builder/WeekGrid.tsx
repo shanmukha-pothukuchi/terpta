@@ -59,8 +59,21 @@ function hourLabel(min: number, first: boolean): string {
  * `title`: the slot clips its overflow, and the styled tooltip is positioned
  * inside it, so it rendered as a clipped dark sliver above the block.
  */
-function CoverBadge({ label, note }: { label: string | null; note: string }) {
-  const covered = label !== null;
+function CoverBadge({
+  label,
+  note,
+  resolved,
+}: {
+  label: string | null;
+  note: string;
+  /**
+   * Green is a claim that this slot is fine, so it is withheld while the slot
+   * is still short. A stand-in named for one date does not staff the seat the
+   * other weeks, and a green tick over an empty roster reads as "handled".
+   */
+  resolved: boolean;
+}) {
+  const covered = label !== null && resolved;
   const Icon = covered ? UserRoundCheck : UserRoundX;
   return (
     <span
@@ -108,8 +121,9 @@ function Slot({
   const dormant = week?.dormantShiftIds.has(shift._id as string) ?? false;
   const coverage = coverageFor(week ?? null, shift._id, shift.day);
   const assigned = model.assignmentsByShift.get(shift._id as string) ?? [];
+  // Empty seats on the standing roster. Drives the "Drop a TA" ghosts, so it
+  // counts assignments — a one-date stand-in does not fill a seat every week.
   const missing = Math.max(0, shift.requiredCount - assigned.length);
-  const unfilled = missing > 0;
   const isSection = shift.sectionRef !== undefined;
   const section = isSection
     ? model.sectionById.get(shift.sectionRef as string)
@@ -148,6 +162,15 @@ function Slot({
     (rosterCovered ? firstName(model.taName(present[0].assignment.taProfileRef)) : null);
   const coverLabel = recordedCover ?? (rosterCovered ? "Covered" : null);
 
+  // Short on the day itself: nobody assigned is coming and no stand-in was
+  // recorded. An assigned TA who is away used to keep the seat looking taken,
+  // so a meeting with literally nobody in the room read as fully staffed.
+  const shortThisWeek =
+    week !== null &&
+    week !== undefined &&
+    present.length + (recordedCover ? 1 : 0) < shift.requiredCount;
+  const unfilled = missing > 0 || shortThisWeek;
+
   const coverNote = coverage
     ? coverage.coverName
       ? `${coverage.coverName} covers for ${coverage.absentName}`
@@ -155,6 +178,19 @@ function Slot({
         ? `${coverage.absentName} is away — ${standIn} is assigned instead`
         : `${coverage.absentName} out — nobody covering yet`
     : null;
+
+  // Short with no coverage row to hang the marker on: a TA simply put a date
+  // exception over the day and nothing was ever raised against it.
+  const awayNames = roster
+    .filter((r) => r.away)
+    .map((r) => firstName(model.taName(r.assignment.taProfileRef)));
+  // Only when somebody is actually away. A slot nobody was ever assigned to
+  // is plainly unstaffed, not missing a sub, and the dashed seat says that
+  // better than a badge would.
+  const shortNote =
+    shortThisWeek && !coverage && awayNames.length > 0
+      ? `${awayNames.join(", ")} away — nobody covering this week`
+      : null;
 
   const startMin = shift.startMin ?? model.gridStartMin;
   const endMin = shift.endMin ?? startMin + 60;
@@ -223,7 +259,9 @@ function Slot({
             {narrow ? null : <span>Off</span>}
           </span>
         ) : coverage && coverNote ? (
-          <CoverBadge label={coverLabel} note={coverNote} />
+          <CoverBadge label={coverLabel} note={coverNote} resolved={!unfilled} />
+        ) : shortNote ? (
+          <CoverBadge label={null} note={shortNote} resolved={false} />
         ) : narrow ? null : (
           <span className="ml-auto truncate" style={{ color: hint.color }}>
             {hint.text}

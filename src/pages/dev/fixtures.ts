@@ -390,6 +390,14 @@ export const builderWeek: WeekOverlayInput = {
       reason: "Conference travel",
       dates: [dateOfDayInWeek(BUILDER_WEEK_START, discussionShifts[0].day as DayCode)],
     },
+    // Nobody raised a swap for this one, so it has no coverage row to hang a
+    // marker on — the slot has to notice on its own that 0102 is empty.
+    {
+      taProfileRef: DANIEL.taProfileRef,
+      name: "Daniel Chen",
+      reason: "Family emergency",
+      dates: [dateOfDayInWeek(BUILDER_WEEK_START, discussionShifts[1].day as DayCode)],
+    },
   ],
   coverages: [
     {
@@ -424,6 +432,19 @@ export const builderWeek: WeekOverlayInput = {
       absentName: "Sarah Kim",
       coverTaRef: null,
       coverName: null,
+    },
+    // The covered TA was then taken off the shift entirely. One date is
+    // handled; the seat is empty every other week, and the slot must say so
+    // rather than showing a green tick over nothing.
+    {
+      _id: fid<"shiftCoverages">("cov-0107"),
+      shiftRef: discussionShifts[6]._id,
+      date: dateOfDayInWeek(BUILDER_WEEK_START, discussionShifts[6].day as DayCode),
+      day: discussionShifts[6].day as DayCode,
+      absentTaRef: ALEX.taProfileRef,
+      absentName: "Alex Rivera",
+      coverTaRef: SARAH.taProfileRef,
+      coverName: "Sarah Kim",
     },
   ],
 };

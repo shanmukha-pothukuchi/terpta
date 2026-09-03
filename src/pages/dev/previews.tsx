@@ -18,7 +18,7 @@
  */
 import { useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Toaster } from "../../components/ui";
+import { Button, PageHeader, Toaster } from "../../components/ui";
 import { AppShellView } from "../../components/AppShell";
 import { CommandPaletteView } from "../../components/CommandPalette";
 import { StaticPeriodProvider } from "../../lib/period";
@@ -448,6 +448,28 @@ function OnboardingPreferencesPreview() {
   );
 }
 
+/** The same editor as the Preferences tab renders it: left-aligned, no wizard. */
+function PreferencesTabPreview() {
+  const [value, setValue] = useState<PreferencesValue>(ofx.preferencesValue);
+  return (
+    <PageFrame>
+      <PageHeader
+        title="Preferences"
+        description="Update your classes and how you'd like to be scheduled."
+        actions={<Button variant="primary">Save changes</Button>}
+      />
+      <Step3Preferences
+        layout="page"
+        value={value}
+        onChange={setValue}
+        dutyTypes={ofx.dutyTypes}
+        sections={ofx.staffedSections}
+        classes={ofx.classesValue}
+      />
+    </PageFrame>
+  );
+}
+
 const SCREENS: Record<string, { label: string; element: ReactNode }> = {
   login: { label: "Login (add ?state=loading or ?state=error)", element: <LoginPreview /> },
   shell: { label: "App shell + command palette", element: <ShellPreview /> },
@@ -486,6 +508,10 @@ const SCREENS: Record<string, { label: string; element: ReactNode }> = {
   },
   "onboarding-2": { label: "Setup 2 — availability", element: <OnboardingAvailabilityPreview /> },
   "onboarding-3": { label: "Setup 3 — preferences", element: <OnboardingPreferencesPreview /> },
+  "preferences-tab": {
+    label: "TA Preferences tab (page layout)",
+    element: <PreferencesTabPreview />,
+  },
 };
 
 function PreviewIndex() {

@@ -287,11 +287,15 @@ export function Step3Preferences({
 
   const page = layout === "page";
 
+  // Left-aligned on the page, centred in the wizard — but capped either way.
+  // These are form controls, and a slider or a ranked row stretched across a
+  // 1900px window stops looking like the rest of the app; the sibling "Your
+  // details" tab holds its fields in rather than filling the page.
   return (
     <div
       className={
         page
-          ? "flex min-w-0 flex-col gap-3"
+          ? "flex min-w-0 max-w-[720px] flex-col gap-3"
           : "mx-auto flex min-w-0 max-w-[720px] flex-col gap-3"
       }
     >
