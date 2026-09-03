@@ -48,7 +48,7 @@ export const DUTY_COLORS = [
   "#D946EF",
 ];
 
-const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_140px_72px_110px_40px] items-center gap-3 px-3.5";
+const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_216px_72px_132px_40px] items-center gap-3 px-3.5";
 
 /* ------------------------------------------------------------------ */
 /* Small controls                                                      */
@@ -79,7 +79,7 @@ function ModeToggle({
           aria-pressed={value === m}
           disabled={lockedReason !== undefined && value !== m}
           className={
-            "h-full rounded-[5px] px-2 text-[11.5px] transition-colors duration-100 " +
+            "h-full whitespace-nowrap rounded-[5px] px-2 text-[11.5px] transition-colors duration-100 " +
             (lockedReason ? "cursor-not-allowed " : "cursor-pointer ") +
             (value === m
               ? "bg-[rgba(255,255,255,0.09)] font-medium text-ink shadow-[inset_0_0_0_1px_rgba(255,255,255,0.10)]"
@@ -227,7 +227,7 @@ function EditableRow({
           aria-label={isWindow ? "Office hours per TA per week" : "Default hours credit"}
           className="h-7 w-16 text-right font-mono"
         />
-        <span className="text-[12px] text-faint">{isWindow ? "h / TA" : "h"}</span>
+        <span className="whitespace-nowrap text-[12px] text-faint">{isWindow ? "h/TA" : "h"}</span>
       </div>
       <IconButton
         variant="danger"
@@ -301,7 +301,7 @@ function DraftRow({
           aria-label={mode === "window" ? "Office hours per TA per week" : "Default hours credit"}
           className="h-7 w-16 text-right font-mono"
         />
-        <span className="text-[12px] text-faint">{mode === "window" ? "h / TA" : "h"}</span>
+        <span className="whitespace-nowrap text-[12px] text-faint">{mode === "window" ? "h/TA" : "h"}</span>
       </div>
       <div />
     </div>
