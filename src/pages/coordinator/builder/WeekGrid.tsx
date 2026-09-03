@@ -4,7 +4,6 @@ import { CalendarOff, UserRoundCheck, UserRoundX } from "lucide-react";
 import {
   coverageFor,
   isAwayOnDay,
-  type WeekCoverage,
   type WeekOverlay,
 } from "./weekOverlay";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -60,8 +59,8 @@ function hourLabel(min: number, first: boolean): string {
  * `title`: the slot clips its overflow, and the styled tooltip is positioned
  * inside it, so it rendered as a clipped dark sliver above the block.
  */
-function CoverBadge({ coverage, note }: { coverage: WeekCoverage; note: string }) {
-  const covered = coverage.coverName !== null;
+function CoverBadge({ label, note }: { label: string | null; note: string }) {
+  const covered = label !== null;
   const Icon = covered ? UserRoundCheck : UserRoundX;
   return (
     <span
@@ -78,9 +77,7 @@ function CoverBadge({ coverage, note }: { coverage: WeekCoverage; note: string }
       <Icon size={11} strokeWidth={1.5} className="shrink-0" aria-hidden />
       {/* Never dropped in a narrow lane: the icon alone is the ambiguity this
           badge exists to remove. The time beside it truncates first instead. */}
-      <span className="max-w-[72px] truncate">
-        {covered ? firstName(coverage.coverName ?? "") : "No sub"}
-      </span>
+      <span className="max-w-[72px] truncate">{label ?? "No sub"}</span>
     </span>
   );
 }
@@ -119,10 +116,44 @@ function Slot({
     : undefined;
   const duty = model.dutyById.get(shift.dutyTypeRef as string);
 
+  // Who is actually in the room that day. A TA who is away does not count,
+  // and a TA the coordinator dropped in by editing the roster counts every
+  // bit as much as one recorded as a formal substitute: the badge answers
+  // "is somebody there", not "does a shiftCoverages row say so". Without
+  // this, filling the hole by drag left the slot reading "No sub" forever.
+  const roster = assigned.map((a) => {
+    const absence = week
+      ? isAwayOnDay(week, a.taProfileRef, shift.day, (d) =>
+          dateOfDayInWeek(week.weekStart, d),
+        )
+      : undefined;
+    const away =
+      absence !== undefined ||
+      String(coverage?.absentTaRef ?? "") === String(a.taProfileRef);
+    return { assignment: a, absence, away };
+  });
+  const present = roster.filter((r) => !r.away);
+
+  // A recorded substitute is not on the board — a date-scoped swap leaves the
+  // assignment with the absent TA — so the badge has to name them. Someone
+  // swapped in on the roster is already on a chip below it, so naming them
+  // again would just print the same word twice.
+  const recordedCover = coverage?.coverName ? firstName(coverage.coverName) : null;
+  const rosterCovered =
+    recordedCover === null &&
+    coverage !== undefined &&
+    present.length >= shift.requiredCount;
+  const standIn =
+    recordedCover ??
+    (rosterCovered ? firstName(model.taName(present[0].assignment.taProfileRef)) : null);
+  const coverLabel = recordedCover ?? (rosterCovered ? "Covered" : null);
+
   const coverNote = coverage
     ? coverage.coverName
       ? `${coverage.coverName} covers for ${coverage.absentName}`
-      : `${coverage.absentName} out — nobody covering yet`
+      : standIn
+        ? `${coverage.absentName} is away — ${standIn} is assigned instead`
+        : `${coverage.absentName} out — nobody covering yet`
     : null;
 
   const startMin = shift.startMin ?? model.gridStartMin;
@@ -192,7 +223,7 @@ function Slot({
             {narrow ? null : <span>Off</span>}
           </span>
         ) : coverage && coverNote ? (
-          <CoverBadge coverage={coverage} note={coverNote} />
+          <CoverBadge label={coverLabel} note={coverNote} />
         ) : narrow ? null : (
           <span className="ml-auto truncate" style={{ color: hint.color }}>
             {hint.text}
@@ -200,27 +231,16 @@ function Slot({
         )}
       </div>
       <div className="flex min-w-0 flex-wrap gap-1">
-        {assigned.map((a) => {
+        {roster.map(({ assignment: a, absence, away }) => {
           const conflicts = model.conflictsByAssignment.get(a._id as string) ?? [];
           const conflict = conflicts.length > 0;
           const over = model.overTaIds.has(a.taProfileRef as string);
           const under = model.underTaIds.has(a.taProfileRef as string);
           const load = model.loadByTa.get(a.taProfileRef as string);
           const name = firstName(model.taName(a.taProfileRef));
-          // Away this week: either an absence the coordinator has not acted on
-          // yet, or one they have — the assignment survives a date-scoped swap,
-          // so without this the board still reads as if the TA were coming.
-          const absence = week
-            ? isAwayOnDay(week, a.taProfileRef, shift.day, (d) =>
-                dateOfDayInWeek(week.weekStart, d),
-              )
-            : undefined;
-          const away =
-            absence !== undefined ||
-            String(coverage?.absentTaRef ?? "") === String(a.taProfileRef);
           const awayNote = away
-            ? coverage?.coverName
-              ? `${name} is away — ${coverage.coverName} covers`
+            ? standIn
+              ? `${name} is away — ${standIn} takes it`
               : `${name} is away${absence?.reason ? ` — ${absence.reason}` : ""} · no sub yet`
             : null;
           const lit =

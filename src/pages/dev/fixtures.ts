@@ -410,6 +410,18 @@ export const builderWeek: WeekOverlayInput = {
       coverTaRef: null,
       coverName: null,
     },
+    // The hole was filled by editing the roster rather than by recording a
+    // substitute: Sarah came off the shift and Emma went on. No coverTaRef is
+    // ever written that way, so the slot has to read the board to notice.
+    {
+      shiftRef: discussionShifts[4]._id,
+      date: dateOfDayInWeek(BUILDER_WEEK_START, discussionShifts[4].day as DayCode),
+      day: discussionShifts[4].day as DayCode,
+      absentTaRef: SARAH.taProfileRef,
+      absentName: "Sarah Kim",
+      coverTaRef: null,
+      coverName: null,
+    },
   ],
 };
 
