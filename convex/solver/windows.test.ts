@@ -173,3 +173,57 @@ describe("office-hour windows", () => {
     expect(out.diagnostics.unfilledWindowHours).toEqual([]);
   });
 });
+
+describe("per-TA duty cap", () => {
+  const disc = (id: string, day: Day, startMin: number): SolverShift => ({
+    id,
+    kind: "weekly_sync",
+    dutyTypeId: "disc",
+    requiredCount: 1,
+    day,
+    startMin,
+    endMin: startMin + 50,
+    startDate: "2026-08-31",
+    endDate: "2026-12-11",
+  });
+
+  it("gives a TA at most the capped number of shifts of that duty", () => {
+    const out = solve(
+      base({
+        shifts: [disc("d1", "M", 540), disc("d2", "W", 540)],
+        taProfiles: [ta("a")],
+        windowHoursPerTa: {},
+        maxPerTaByDuty: { disc: 1 },
+      }),
+    );
+    expect(out.assignments).toHaveLength(1);
+    expect(out.diagnostics.unfilledShifts).toHaveLength(1);
+  });
+
+  it("fills both without a cap", () => {
+    const out = solve(
+      base({
+        shifts: [disc("d1", "M", 540), disc("d2", "W", 540)],
+        taProfiles: [ta("a")],
+        windowHoursPerTa: {},
+      }),
+    );
+    expect(out.assignments).toHaveLength(2);
+  });
+
+  it("does not stop a locked placement over the cap", () => {
+    const out = solve(
+      base({
+        shifts: [disc("d1", "M", 540), disc("d2", "W", 540)],
+        taProfiles: [ta("a")],
+        windowHoursPerTa: {},
+        maxPerTaByDuty: { disc: 1 },
+        lockedAssignments: [
+          { shiftId: "d1", taProfileId: "a" },
+          { shiftId: "d2", taProfileId: "a" },
+        ],
+      }),
+    );
+    expect(out.assignments.filter((x) => x.locked)).toHaveLength(2);
+  });
+});

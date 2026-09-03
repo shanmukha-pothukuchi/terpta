@@ -102,6 +102,12 @@ export default defineSchema({
     defaultHoursCredit: v.number(),
     /** "window" only: office hours each TA must hold per week. */
     hoursPerTa: v.optional(v.number()),
+    /**
+     * Sync only: the most shifts of this kind the solver may give one TA.
+     * Absent means no cap. A coordinator placing someone by hand is not
+     * bound by it.
+     */
+    maxPerTa: v.optional(v.number()),
   }).index("by_period", ["periodRef"]),
 
   shifts: defineTable({

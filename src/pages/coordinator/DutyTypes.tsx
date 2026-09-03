@@ -28,6 +28,8 @@ export interface DutyTypeFields {
   defaultHoursCredit: number;
   /** "window" only: office hours each TA must hold per week. */
   hoursPerTa?: number;
+  /** Sync only: most shifts of this kind the solver gives one TA. 0 = no cap. */
+  maxPerTa?: number;
 }
 
 const MODE_LABEL: Record<DutyTypeFields["mode"], string> = {
@@ -48,7 +50,7 @@ export const DUTY_COLORS = [
   "#D946EF",
 ];
 
-const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_216px_72px_132px_40px] items-center gap-3 px-3.5";
+const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_216px_72px_132px_112px_40px] items-center gap-3 px-3.5";
 
 /* ------------------------------------------------------------------ */
 /* Small controls                                                      */
@@ -163,6 +165,8 @@ function EditableRow({
   const [name, setName] = useState(dt.name);
   const [credit, setCredit] = useState(String(dt.defaultHoursCredit));
   const [perTa, setPerTa] = useState(String(dt.hoursPerTa ?? 2));
+  const [cap, setCap] = useState(dt.maxPerTa === undefined ? "" : String(dt.maxPerTa));
+  useEffect(() => setCap(dt.maxPerTa === undefined ? "" : String(dt.maxPerTa)), [dt.maxPerTa]);
   useEffect(() => setName(dt.name), [dt.name]);
   useEffect(() => setCredit(String(dt.defaultHoursCredit)), [dt.defaultHoursCredit]);
   useEffect(() => setPerTa(String(dt.hoursPerTa ?? 2)), [dt.hoursPerTa]);
@@ -191,6 +195,14 @@ function EditableRow({
       return;
     }
     if (n !== (dt.hoursPerTa ?? 2)) onUpdate({ hoursPerTa: n });
+  };
+  const commitCap = () => {
+    const n = cap.trim() === "" ? 0 : Math.round(Number(cap));
+    if (!Number.isFinite(n) || n < 0) {
+      setCap(dt.maxPerTa === undefined ? "" : String(dt.maxPerTa));
+      return;
+    }
+    if (n !== (dt.maxPerTa ?? 0)) onUpdate({ maxPerTa: n });
   };
 
   return (
@@ -229,6 +241,24 @@ function EditableRow({
         />
         <span className="whitespace-nowrap text-[12px] text-faint">{isWindow ? "h/TA" : "h"}</span>
       </div>
+      {/* "One discussion per TA": the solver stops at the cap; a coordinator
+          dropping someone in by hand is not stopped. Blank means no cap. */}
+      {dt.mode === "sync" ? (
+        <Input
+          value={cap}
+          onChange={(e) => setCap(e.target.value)}
+          onBlur={commitCap}
+          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          type="number"
+          min={0}
+          step={1}
+          placeholder="none"
+          aria-label={`Most ${dt.name} shifts per TA`}
+          className="h-7 w-20 text-right font-mono"
+        />
+      ) : (
+        <span className="text-[12px] text-faint">—</span>
+      )}
       <IconButton
         variant="danger"
         onClick={onDelete}
@@ -303,6 +333,7 @@ function DraftRow({
         />
         <span className="whitespace-nowrap text-[12px] text-faint">{mode === "window" ? "h/TA" : "h"}</span>
       </div>
+      <span className="text-[12px] text-faint">{mode === "sync" ? "set after adding" : "—"}</span>
       <div />
     </div>
   );
@@ -390,6 +421,7 @@ export function DutyTypesView({
             <span>Mode</span>
             <span>Color</span>
             <span>Default credit</span>
+            <span>Max per TA</span>
             <span />
           </div>
           {dutyTypes.map((dt) => (

@@ -87,6 +87,7 @@ interface Ctx {
   syncShifts: SyncShift[];
   asyncShifts: AsyncShift[];
   windowShifts: WindowShift[];
+  maxPerTaByDuty: Record<string, number>;
   coversWindow: (taId: string, day: Day, s: number, e: number) => boolean;
   overlapsUnavail: (taId: string, day: Day, s: number, e: number) => boolean;
   preferNotMinutes: (taId: string, day: Day, s: number, e: number) => number;
@@ -294,6 +295,7 @@ function buildContext(input: SolveInput): Ctx {
     syncShifts,
     asyncShifts,
     windowShifts,
+    maxPerTaByDuty: input.maxPerTaByDuty ?? {},
     coversWindow,
     overlapsUnavail: (taId, day, s, e) => overlapsBlocks(unavail, taId, day, s, e),
     preferNotMinutes: preferNotMinutesOf,
@@ -372,6 +374,17 @@ function canAddSync(ctx: Ctx, state: State, shift: SyncShift, taId: string): boo
   if (!ctx.eligibleSet.get(shift.id)!.has(taId)) return false;
   const arr = state.syncByShift.get(shift.id)!;
   if (arr.includes(taId)) return false;
+  // A duty-type cap: "one discussion per TA". Locked placements are forced
+  // through applyLocked and never come here, so a coordinator's hand
+  // placement can exceed it; the solver's own choices cannot.
+  const cap = ctx.maxPerTaByDuty[shift.dutyTypeId];
+  if (cap !== undefined) {
+    let held = 0;
+    for (const sid of state.taSyncShifts.get(taId)!) {
+      if ((ctx.shiftById.get(sid) as SyncShift).dutyTypeId === shift.dutyTypeId) held++;
+    }
+    if (held >= cap) return false;
+  }
   for (const sid of state.taSyncShifts.get(taId)!) {
     if (syncShiftsConflict(shift, ctx.shiftById.get(sid) as SyncShift)) return false;
   }

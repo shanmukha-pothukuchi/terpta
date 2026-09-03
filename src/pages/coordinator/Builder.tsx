@@ -423,12 +423,18 @@ export function BuilderScreen({
       undoStack.current = [];
       setUndoCount(0);
       const unfilled = diag.unfilledShifts.reduce((n, u) => n + u.missing, 0);
-      toast(
-        unfilled > 0
-          ? `Generated · ${unfilled} seats still unfilled · locks kept`
-          : "Generated · all shifts filled · locks kept",
-        { tone: unfilled > 0 ? "info" : "success" },
-      );
+      const unplacedOh = diag.unfilledWindowHours.reduce((n, u) => n + u.missingHours, 0);
+      const parts = [
+        unfilled > 0 ? `${unfilled} seats still unfilled` : "all shifts filled",
+        unplacedOh > 0
+          ? `${unplacedOh}h of office hours could not be placed for ${diag.unfilledWindowHours.length} TA${diag.unfilledWindowHours.length === 1 ? "" : "s"}`
+          : null,
+        "locks kept",
+      ].filter(Boolean);
+      toast(`Generated · ${parts.join(" · ")}`, {
+        tone: unfilled > 0 || unplacedOh > 0 ? "info" : "success",
+        duration: unplacedOh > 0 ? 9000 : 4000,
+      });
     } catch (e) {
       err(e, "Generate failed");
     } finally {

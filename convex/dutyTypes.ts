@@ -22,6 +22,7 @@ export const dutyTypeDoc = v.object({
   color: v.string(),
   defaultHoursCredit: v.number(),
   hoursPerTa: v.optional(v.number()),
+  maxPerTa: v.optional(v.number()),
 });
 
 /**
@@ -75,6 +76,7 @@ export const create = mutation({
     color: v.string(),
     defaultHoursCredit: v.number(),
     hoursPerTa: v.optional(v.number()),
+    maxPerTa: v.optional(v.number()),
   },
   returns: v.id("dutyTypes"),
   handler: async (ctx, args) => {
@@ -90,6 +92,7 @@ export const create = mutation({
       color: args.color,
       defaultHoursCredit: args.defaultHoursCredit,
       ...(args.mode === "window" ? { hoursPerTa: args.hoursPerTa ?? 2 } : {}),
+      ...(args.maxPerTa !== undefined && args.maxPerTa > 0 ? { maxPerTa: Math.round(args.maxPerTa) } : {}),
     });
   },
 });
@@ -102,6 +105,8 @@ export const update = mutation({
     color: v.optional(v.string()),
     defaultHoursCredit: v.optional(v.number()),
     hoursPerTa: v.optional(v.number()),
+    /** Zero clears the cap. */
+    maxPerTa: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -140,6 +145,15 @@ export const update = mutation({
     if (args.hoursPerTa !== undefined) {
       if (args.hoursPerTa < 0) throw new ConvexError("hoursPerTa must be >= 0");
       patch.hoursPerTa = args.hoursPerTa;
+    } else if (args.mode === "window" && dutyType.hoursPerTa === undefined) {
+      // Switching an existing duty type to windows left this unset, so the
+      // solver saw zero hours to place and generated no office hours at all
+      // while the screen showed the default. Store the default it shows.
+      patch.hoursPerTa = 2;
+    }
+    if (args.maxPerTa !== undefined) {
+      if (args.maxPerTa < 0) throw new ConvexError("maxPerTa must be >= 0");
+      patch.maxPerTa = args.maxPerTa > 0 ? Math.round(args.maxPerTa) : undefined;
     }
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch(dutyType._id, patch);

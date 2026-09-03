@@ -318,6 +318,7 @@ const solveInputValidator = v.object({
     }),
   ),
   windowHoursPerTa: v.optional(v.record(v.string(), v.number())),
+  maxPerTaByDuty: v.optional(v.record(v.string(), v.number())),
   lockedWindowBlocks: v.optional(
     v.array(
       v.object({
@@ -429,9 +430,12 @@ export const loadSolverInput = internalQuery({
       ...(p.officeHoursStyle !== undefined ? { officeHoursStyle: p.officeHoursStyle } : {}),
     }));
 
+    const maxPerTaByDuty: Record<string, number> = {};
     const windowHoursPerTa: Record<string, number> = {};
     for (const d of dutyTypes) {
-      if (d.mode === "window") windowHoursPerTa[d._id as string] = d.hoursPerTa ?? 0;
+      if (d.maxPerTa !== undefined && d.maxPerTa > 0) maxPerTaByDuty[d._id as string] = d.maxPerTa;
+      // Absent means the default the duty-type screen displays, never zero.
+      if (d.mode === "window") windowHoursPerTa[d._id as string] = d.hoursPerTa ?? 2;
     }
 
     const availability: SolveInput["availability"] = [];
@@ -501,6 +505,7 @@ export const loadSolverInput = internalQuery({
       dateExceptions,
       lockedAssignments,
       windowHoursPerTa,
+      maxPerTaByDuty,
       lockedWindowBlocks,
       periodStart: DEFAULT_PERIOD_START,
       periodEnd: DEFAULT_PERIOD_END,

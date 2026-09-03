@@ -102,6 +102,8 @@ export interface SolveInput {
   lockedAssignments: SolverLockedAssignment[];
   /** Hours each TA owes per week, by window duty type id. */
   windowHoursPerTa?: Record<string, number>;
+  /** Most sync shifts of a duty type one TA may be given, by duty type id. */
+  maxPerTaByDuty?: Record<string, number>;
   lockedWindowBlocks?: SolverLockedWindowBlock[];
   periodStart: string; // ISO date
   periodEnd: string; // ISO date
