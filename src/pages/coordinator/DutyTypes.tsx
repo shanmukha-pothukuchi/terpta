@@ -1,4 +1,11 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { Plus, Settings2, Tags, Trash2 } from "lucide-react";
@@ -59,7 +66,8 @@ export const DUTY_COLORS = [
   "#D946EF",
 ];
 
-const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_216px_72px_132px_112px_40px] items-center gap-3 px-3.5";
+const ROW_GRID =
+  "grid grid-cols-[minmax(0,1fr)_216px_72px_196px_40px] items-center gap-3 px-3.5";
 
 /* ------------------------------------------------------------------ */
 /* Small controls                                                      */
@@ -163,133 +171,159 @@ function ColorSwatchPicker({ value, onChange }: { value: string; onChange: (c: s
 /* ------------------------------------------------------------------ */
 
 /**
- * Everything a window duty type needs that will not fit on one row.
+ * The settings a duty type carries, in a panel anchored to its row.
  *
- * Office hours are the only duty with rules about *where* the solver may cut
- * them, and cramming two more controls into the table is what made the mode
- * pills and the "h/TA" suffix wrap in the first place.
+ * Every row gets one, whatever its mode: the contents differ but the control
+ * does not, so the table stays four even columns instead of growing a field
+ * per feature. The panel is portalled to the body — the card it sits in
+ * clips its overflow, which sliced the office-hour panel in half.
  */
-function WindowRulesPopover({
-  dt,
-  siblings,
-  onUpdate,
+function SettingsPopover({
+  summary,
+  title,
+  ariaLabel,
+  children,
 }: {
-  dt: DutyTypeRow;
-  /** Other duty types in the period, for the "keep clear of" list. */
-  siblings: DutyTypeRow[];
-  onUpdate: (patch: Partial<DutyTypeFields>) => void;
+  /** What the button says when closed, e.g. "1h · max 1". */
+  summary: string;
+  title: string;
+  ariaLabel: string;
+  children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const minBlock = dt.minBlockMinutes ?? DEFAULT_MIN_BLOCK;
-  const [minText, setMinText] = useState(String(minBlock / 60));
-  useEffect(
-    () => setMinText(String((dt.minBlockMinutes ?? DEFAULT_MIN_BLOCK) / 60)),
-    [dt.minBlockMinutes],
-  );
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [panel, setPanel] = useState<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
-  const avoiding = new Set((dt.noOverlapDutyRefs ?? []).map((id) => id as string));
-  const avoidCount = avoiding.size + (dt.noOverlapLectures ? 1 : 0);
+  // Measure once mounted, then place: right-aligned to the button, flipped
+  // above it when there is no room below.
+  useLayoutEffect(() => {
+    if (!open || !panel || !buttonRef.current) return;
+    const b = buttonRef.current.getBoundingClientRect();
+    const p = panel.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(8, b.right - p.width),
+      Math.max(8, window.innerWidth - p.width - 8),
+    );
+    const below = b.bottom + 6;
+    const top =
+      below + p.height > window.innerHeight - 8
+        ? Math.max(8, b.top - 6 - p.height)
+        : below;
+    setPos({ left, top });
+  }, [open, panel]);
 
-  const commitMin = () => {
-    const hours = Number(minText);
-    if (!Number.isFinite(hours) || hours < 0.5) {
-      setMinText(String(minBlock / 60));
-      return;
-    }
-    // Blocks are cut on a half-hour grid, so anything between lands on one.
-    const minutes = Math.max(30, Math.round((hours * 60) / 30) * 30);
-    if (minutes !== minBlock) onUpdate({ minBlockMinutes: minutes });
-  };
-
-  const toggleDuty = (id: Id<"dutyTypes">) => {
-    const next = new Set(avoiding);
-    if (next.has(id as string)) next.delete(id as string);
-    else next.add(id as string);
-    onUpdate({
-      noOverlapDutyRefs: siblings
-        .filter((d) => next.has(d._id as string))
-        .map((d) => d._id),
-    });
-  };
+  // Anchored to a rect, so a scroll would leave it behind.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
   return (
-    <div className="relative justify-self-start">
+    <>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setPos(null);
+          setOpen((o) => !o);
+        }}
         aria-expanded={open}
-        aria-label={`Office-hour rules for ${dt.name}`}
-        className="flex h-7 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[7px] border border-line px-2 text-[12px] text-muted transition-colors hover:bg-[rgba(255,255,255,0.05)] hover:text-ink"
+        aria-label={ariaLabel}
+        className={
+          "flex h-7 w-fit cursor-pointer items-center gap-1.5 justify-self-start whitespace-nowrap rounded-[7px] border border-line px-2 text-[12px] transition-colors " +
+          (open
+            ? "bg-[rgba(255,255,255,0.06)] text-ink"
+            : "text-muted hover:bg-[rgba(255,255,255,0.05)] hover:text-ink")
+        }
       >
         <Settings2 size={13} strokeWidth={1.5} aria-hidden />
-        {minBlock % 60 === 0 ? `${minBlock / 60}h` : `${minBlock}m`} min
-        {avoidCount > 0 ? <span className="text-faint">· {avoidCount}</span> : null}
+        {summary}
       </button>
-      {open ? (
-        <>
-          <button
-            type="button"
-            aria-label="Close office-hour rules"
-            className="fixed inset-0 z-10 cursor-default"
-            onClick={() => setOpen(false)}
-          />
-          <div className="absolute right-0 top-full z-20 mt-1.5 flex w-[268px] flex-col gap-3 rounded-[11px] border border-line-strong bg-popover p-3 shadow-[0_12px_40px_rgba(0,0,0,0.5)]">
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-2">
-                <span className="flex-1 text-[12.5px] text-ink">Shortest block</span>
-                <Input
-                  value={minText}
-                  onChange={(e) => setMinText(e.target.value)}
-                  onBlur={commitMin}
-                  onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-                  type="number"
-                  min={0.5}
-                  step={0.5}
-                  aria-label="Shortest office-hour block"
-                  className="h-7 w-16 text-right font-mono"
-                />
-                <span className="text-[12px] text-faint">h</span>
+      {open
+        ? createPortal(
+            <>
+              <button
+                type="button"
+                aria-label={`Close ${title.toLowerCase()}`}
+                className="fixed inset-0 z-40 cursor-default"
+                onClick={() => setOpen(false)}
+              />
+              <div
+                ref={setPanel}
+                role="dialog"
+                aria-label={title}
+                className="fixed z-50 flex w-[300px] flex-col gap-3 rounded-[11px] border border-line-strong bg-popover p-3 shadow-[0_12px_40px_rgba(0,0,0,0.5)]"
+                style={{
+                  left: pos?.left ?? -9999,
+                  top: pos?.top ?? -9999,
+                  // Hidden for the one frame between mount and measure.
+                  visibility: pos ? "visible" : "hidden",
+                }}
+              >
+                <div className="text-[12.5px] font-medium text-ink">{title}</div>
+                {children}
               </div>
-              <p className="text-[11.5px] leading-[1.45] text-faint">
-                No TA is given a block shorter than this. Time left over after
-                the last full block is reported, not shoehorned in.
-              </p>
-            </div>
-            <div className="flex flex-col gap-1.5 border-t border-line pt-2.5">
-              <span className="text-[12.5px] text-ink">Keep clear of</span>
-              <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-muted hover:text-ink">
-                <input
-                  type="checkbox"
-                  checked={dt.noOverlapLectures ?? false}
-                  onChange={(e) => onUpdate({ noOverlapLectures: e.target.checked })}
-                  className="size-[13px] accent-[#E21833]"
-                />
-                Lectures
-              </label>
-              {siblings.map((d) => (
-                <label
-                  key={d._id}
-                  className="flex cursor-pointer items-center gap-2 text-[12.5px] text-muted hover:text-ink"
-                >
-                  <input
-                    type="checkbox"
-                    checked={avoiding.has(d._id as string)}
-                    onChange={() => toggleDuty(d._id)}
-                    className="size-[13px] accent-[#E21833]"
-                  />
-                  <span className="min-w-0 truncate">{d.name}</span>
-                </label>
-              ))}
-              {siblings.length === 0 ? (
-                <span className="text-[11.5px] text-faint">No other duty types yet.</span>
-              ) : null}
-              <p className="text-[11.5px] leading-[1.45] text-faint">
-                Ruled out for everyone, not only the TA on that shift — nobody
-                comes to office hours held during the lecture.
-              </p>
-            </div>
-          </div>
-        </>
+            </>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+/** Label + number input + unit, the shape every setting in here takes. */
+function NumberSetting({
+  label,
+  value,
+  onChange,
+  onCommit,
+  unit,
+  hint,
+  min = 0,
+  step = 0.5,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  onCommit: () => void;
+  unit?: string;
+  hint?: string;
+  min?: number;
+  step?: number;
+  placeholder?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <span className="flex-1 whitespace-nowrap text-[12.5px] text-muted">{label}</span>
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={onCommit}
+          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          type="number"
+          min={min}
+          step={step}
+          placeholder={placeholder}
+          aria-label={label}
+          className="h-7 w-[68px] text-right font-mono"
+        />
+        {/* Always rendered, empty or not, so the inputs of a panel line up. */}
+        <span className="w-[34px] text-[12px] text-faint">{unit ?? ""}</span>
+      </div>
+      {hint ? (
+        <p className="text-[11.5px] leading-[1.45] text-faint">{hint}</p>
       ) : null}
     </div>
   );
@@ -302,6 +336,7 @@ function EditableRow({
   onDelete,
 }: {
   dt: DutyTypeRow;
+  /** Other duty types in the period, for the "keep clear of" list. */
   siblings: DutyTypeRow[];
   onUpdate: (patch: Partial<DutyTypeFields>) => void;
   onDelete: () => void;
@@ -310,10 +345,16 @@ function EditableRow({
   const [credit, setCredit] = useState(String(dt.defaultHoursCredit));
   const [perTa, setPerTa] = useState(String(dt.hoursPerTa ?? 2));
   const [cap, setCap] = useState(dt.maxPerTa === undefined ? "" : String(dt.maxPerTa));
-  useEffect(() => setCap(dt.maxPerTa === undefined ? "" : String(dt.maxPerTa)), [dt.maxPerTa]);
+  const minBlock = dt.minBlockMinutes ?? DEFAULT_MIN_BLOCK;
+  const [minText, setMinText] = useState(String(minBlock / 60));
   useEffect(() => setName(dt.name), [dt.name]);
   useEffect(() => setCredit(String(dt.defaultHoursCredit)), [dt.defaultHoursCredit]);
   useEffect(() => setPerTa(String(dt.hoursPerTa ?? 2)), [dt.hoursPerTa]);
+  useEffect(() => setCap(dt.maxPerTa === undefined ? "" : String(dt.maxPerTa)), [dt.maxPerTa]);
+  useEffect(
+    () => setMinText(String((dt.minBlockMinutes ?? DEFAULT_MIN_BLOCK) / 60)),
+    [dt.minBlockMinutes],
+  );
   const isWindow = dt.mode === "window";
 
   const commitName = () => {
@@ -348,9 +389,43 @@ function EditableRow({
     }
     if (n !== (dt.maxPerTa ?? 0)) onUpdate({ maxPerTa: n });
   };
+  const commitMinBlock = () => {
+    const hours = Number(minText);
+    if (!Number.isFinite(hours) || hours < 0.5) {
+      setMinText(String(minBlock / 60));
+      return;
+    }
+    // Blocks are cut on a half-hour grid, so anything between lands on one.
+    const minutes = Math.max(30, Math.round((hours * 60) / 30) * 30);
+    if (minutes !== minBlock) onUpdate({ minBlockMinutes: minutes });
+  };
+
+  const avoiding = new Set((dt.noOverlapDutyRefs ?? []).map((id) => id as string));
+  const avoidCount = avoiding.size + (dt.noOverlapLectures ? 1 : 0);
+  const toggleAvoid = (id: Id<"dutyTypes">) => {
+    const next = new Set(avoiding);
+    if (next.has(id as string)) next.delete(id as string);
+    else next.add(id as string);
+    onUpdate({
+      noOverlapDutyRefs: siblings.filter((d) => next.has(d._id as string)).map((d) => d._id),
+    });
+  };
+
+  const hourText = (n: number) => (Number.isInteger(n) ? String(n) : String(n));
+  const summary = isWindow
+    ? `${hourText(dt.hoursPerTa ?? 2)}h/TA · ${minBlock % 60 === 0 ? `${minBlock / 60}h` : `${minBlock}m`} min${
+        avoidCount > 0 ? ` · ${avoidCount}` : ""
+      }`
+    : dt.mode === "sync"
+      ? `${hourText(dt.defaultHoursCredit)}h credit${
+          dt.maxPerTa !== undefined && dt.maxPerTa > 0 ? ` · max ${dt.maxPerTa}` : ""
+        }`
+      : `${hourText(dt.defaultHoursCredit)}h credit`;
 
   return (
-    <div className={`${ROW_GRID} h-11 border-b border-[rgba(255,255,255,0.04)] last:border-b-0 hover:bg-[rgba(255,255,255,0.02)]`}>
+    <div
+      className={`${ROW_GRID} h-11 border-b border-[rgba(255,255,255,0.04)] last:border-b-0 hover:bg-[rgba(255,255,255,0.02)]`}
+    >
       <Input
         value={name}
         onChange={(e) => setName(e.target.value)}
@@ -369,42 +444,99 @@ function EditableRow({
         }
       />
       <ColorSwatchPicker value={dt.color} onChange={(color) => onUpdate({ color })} />
-      {/* A window has no credit to award: the hours are real. The one number
-          it needs is how many each TA owes per week. */}
-      <div className="flex items-center gap-1.5">
-        <Input
-          value={isWindow ? perTa : credit}
-          onChange={(e) => (isWindow ? setPerTa : setCredit)(e.target.value)}
-          onBlur={isWindow ? commitPerTa : commitCredit}
-          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-          type="number"
-          min={0}
-          step={0.5}
-          aria-label={isWindow ? "Office hours per TA per week" : "Default hours credit"}
-          className="h-7 w-16 text-right font-mono"
-        />
-        <span className="whitespace-nowrap text-[12px] text-faint">{isWindow ? "h/TA" : "h"}</span>
-      </div>
-      {/* "One discussion per TA": the solver stops at the cap; a coordinator
-          dropping someone in by hand is not stopped. Blank means no cap. */}
-      {dt.mode === "sync" ? (
-        <Input
-          value={cap}
-          onChange={(e) => setCap(e.target.value)}
-          onBlur={commitCap}
-          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-          type="number"
-          min={0}
-          step={1}
-          placeholder="none"
-          aria-label={`Most ${dt.name} shifts per TA`}
-          className="h-7 w-20 text-right font-mono"
-        />
-      ) : isWindow ? (
-        <WindowRulesPopover dt={dt} siblings={siblings} onUpdate={onUpdate} />
-      ) : (
-        <span className="text-[12px] text-faint">—</span>
-      )}
+      <SettingsPopover
+        summary={summary}
+        title={`${dt.name} settings`}
+        ariaLabel={`Settings for ${dt.name}`}
+      >
+        {isWindow ? (
+          <>
+            {/* A window has no credit to award: the hours are real. */}
+            <NumberSetting
+              label="Hours per TA"
+              value={perTa}
+              onChange={setPerTa}
+              onCommit={commitPerTa}
+              unit="h/wk"
+              hint="What each TA owes every week. The solver cuts blocks out of the windows until they have it."
+            />
+            <div className="border-t border-line pt-2.5">
+              <NumberSetting
+                label="Shortest block"
+                value={minText}
+                onChange={setMinText}
+                onCommit={commitMinBlock}
+                unit="h"
+                min={0.5}
+                hint="No TA is given a block shorter than this. Time left over after the last full block is reported, not shoehorned in."
+              />
+            </div>
+            <div className="flex flex-col gap-1.5 border-t border-line pt-2.5">
+              <span className="text-[12.5px] text-muted">Keep clear of</span>
+              <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-muted hover:text-ink">
+                <input
+                  type="checkbox"
+                  checked={dt.noOverlapLectures ?? false}
+                  onChange={(e) => onUpdate({ noOverlapLectures: e.target.checked })}
+                  className="size-[13px] accent-[#E21833]"
+                />
+                Lectures
+              </label>
+              {siblings.map((d) => (
+                <label
+                  key={d._id}
+                  className="flex cursor-pointer items-center gap-2 text-[12.5px] text-muted hover:text-ink"
+                >
+                  <input
+                    type="checkbox"
+                    checked={avoiding.has(d._id as string)}
+                    onChange={() => toggleAvoid(d._id)}
+                    className="size-[13px] accent-[#E21833]"
+                  />
+                  <span className="min-w-0 truncate">{d.name}</span>
+                </label>
+              ))}
+              {siblings.length === 0 ? (
+                <span className="text-[11.5px] text-faint">No other duty types yet.</span>
+              ) : null}
+              <p className="text-[11.5px] leading-[1.45] text-faint">
+                Ruled out for everyone, not only the TA on that shift — nobody
+                comes to office hours held during the lecture.
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            <NumberSetting
+              label="Hours credit"
+              value={credit}
+              onChange={setCredit}
+              onCommit={commitCredit}
+              unit="h"
+              hint={
+                dt.mode === "async"
+                  ? "What a pool of this kind is worth when a shift does not say otherwise."
+                  : "What one of these shifts counts for toward a TA's weekly hours."
+              }
+            />
+            {dt.mode === "sync" ? (
+              <div className="border-t border-line pt-2.5">
+                {/* "One discussion per TA": the solver stops at the cap; a
+                    coordinator placing someone by hand is not stopped. */}
+                <NumberSetting
+                  label="Max per TA"
+                  value={cap}
+                  onChange={setCap}
+                  onCommit={commitCap}
+                  step={1}
+                  placeholder="none"
+                  hint="The most shifts of this kind the generator gives one TA. Blank means no limit; placing someone by hand is never blocked."
+                />
+              </div>
+            ) : null}
+          </>
+        )}
+      </SettingsPopover>
       <IconButton
         variant="danger"
         onClick={onDelete}
@@ -442,7 +574,9 @@ function DraftRow({
   };
 
   return (
-    <div className={`${ROW_GRID} h-12 border-b border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.02)] last:border-b-0`}>
+    <div
+      className={`${ROW_GRID} h-12 border-b border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.02)] last:border-b-0`}
+    >
       <div className="flex items-center gap-2">
         <Input
           autoFocus
@@ -467,6 +601,8 @@ function DraftRow({
       </div>
       <ModeToggle value={mode} onChange={setMode} />
       <ColorSwatchPicker value={color} onChange={setColor} />
+      {/* The one number needed up front; the rest is set from the row's
+          settings once the duty type exists. */}
       <div className="flex items-center gap-1.5">
         <Input
           value={credit}
@@ -477,11 +613,10 @@ function DraftRow({
           aria-label={mode === "window" ? "Office hours per TA per week" : "Default hours credit"}
           className="h-7 w-16 text-right font-mono"
         />
-        <span className="whitespace-nowrap text-[12px] text-faint">{mode === "window" ? "h/TA" : "h"}</span>
+        <span className="whitespace-nowrap text-[12px] text-faint">
+          {mode === "window" ? "h/TA" : "h"}
+        </span>
       </div>
-      <span className="text-[12px] text-faint">
-        {mode === "async" ? "—" : "set after adding"}
-      </span>
       <div />
     </div>
   );
@@ -528,6 +663,7 @@ export function DutyTypesView({
 
   const syncCount = dutyTypes?.filter((d) => d.mode === "sync").length ?? 0;
   const asyncCount = dutyTypes?.filter((d) => d.mode === "async").length ?? 0;
+  const windowCount = dutyTypes?.filter((d) => d.mode === "window").length ?? 0;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -560,6 +696,7 @@ export function DutyTypesView({
             <span className="text-[13px] font-medium text-ink">Duty types</span>
             <span className="text-[12px] text-faint">
               {syncCount} sync · {asyncCount} async
+              {windowCount > 0 ? ` · ${windowCount} office hours` : ""}
             </span>
           </div>
           <div
@@ -568,8 +705,7 @@ export function DutyTypesView({
             <span>Name</span>
             <span>Mode</span>
             <span>Color</span>
-            <span>Default credit</span>
-            <span>Limits</span>
+            <span>Settings</span>
             <span />
           </div>
           {dutyTypes.map((dt) => (
