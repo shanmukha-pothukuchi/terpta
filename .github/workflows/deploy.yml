@@ -38,9 +38,7 @@ jobs:
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
           VITE_WORKOS_CLIENT_ID: ${{ secrets.VITE_WORKOS_CLIENT_ID }}
-          # TODO: set the VITE_WORKOS_REDIRECT_URI repo variable, or replace
-          # the fallback below with https://<OWNER>.github.io/terpta/callback
-          VITE_WORKOS_REDIRECT_URI: ${{ vars.VITE_WORKOS_REDIRECT_URI || 'https://<OWNER>.github.io/terpta/callback' }}
+          VITE_WORKOS_REDIRECT_URI: ${{ vars.VITE_WORKOS_REDIRECT_URI || 'https://shanmukha-pothukuchi.github.io/terpta/callback' }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

@@ -51,12 +51,12 @@ Pushing to `main` runs `.github/workflows/deploy.yml`:
 3. Uploads `dist/` and publishes to GitHub Pages
 
 Required repo **secrets**: `CONVEX_DEPLOY_KEY` (from the Convex dashboard, production deploy key), `VITE_WORKOS_CLIENT_ID`.
-Recommended repo **variable**: `VITE_WORKOS_REDIRECT_URI` (e.g. `https://<owner>.github.io/terpta/callback`); otherwise edit the fallback in the workflow.
+Recommended repo **variable**: `VITE_WORKOS_REDIRECT_URI` (e.g. `https://shanmukha-pothukuchi.github.io/terpta/callback`); otherwise edit the fallback in the workflow.
 
 ## WorkOS dashboard checklist
 
-- [ ] Redirect URIs: `https://<owner>.github.io/terpta/callback` and `http://localhost:5173/callback`
-- [ ] CORS origins: `https://<owner>.github.io` and `http://localhost:5173`
+- [ ] Redirect URIs: `https://shanmukha-pothukuchi.github.io/terpta/callback` and `http://localhost:5173/callback`
+- [ ] CORS origins: `https://shanmukha-pothukuchi.github.io` and `http://localhost:5173`
 - [ ] Google OAuth enabled
 - [ ] Password authentication disabled
 - [ ] Allowed email domains: `umd.edu`, `terpmail.umd.edu`
