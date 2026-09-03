@@ -379,6 +379,18 @@ export const remove = mutation({
       .query("hourLogs")
       .withIndex("by_profile", (q) => q.eq("taProfileRef", args.taProfileRef))
       .collect();
+    // Same rule as deleting a shift: hours the TA has submitted or been
+    // approved for are a pay record, not roster state, and do not vanish
+    // because the roster changed. Drafts go.
+    const claimed = logs.filter((l) => l.status !== "draft").length;
+    if (claimed > 0) {
+      const user = await ctx.db.get(profile.userRef);
+      throw new ConvexError(
+        `${user?.name ?? "This TA"} has ${claimed} logged hour ${claimed === 1 ? "entry" : "entries"} ` +
+          "that were submitted or approved. Those are not deleted automatically — " +
+          "resolve them on the Hours screen first.",
+      );
+    }
     for (const log of logs) await ctx.db.delete(log._id);
 
     const assignments = await ctx.db
@@ -396,6 +408,20 @@ export const remove = mutation({
         await ctx.db.delete(swap._id);
       } else if (swap.suggestedTaRef === args.taProfileRef) {
         await ctx.db.patch(swap._id, { suggestedTaRef: undefined });
+      }
+    }
+
+    // One-off coverage in either direction. Their own absences are moot now;
+    // where they were the stand-in the hole reopens, so the board shows
+    // "No sub" instead of the name of somebody no longer in the course.
+    const coverages = await ctx.db
+      .query("shiftCoverages")
+      .withIndex("by_period", (q) => q.eq("periodRef", profile.periodRef))
+      .collect();
+    for (const c of coverages) {
+      if (c.absentTaRef === args.taProfileRef) await ctx.db.delete(c._id);
+      else if (c.coverTaRef === args.taProfileRef) {
+        await ctx.db.patch(c._id, { coverTaRef: undefined, filledBy: undefined });
       }
     }
 
