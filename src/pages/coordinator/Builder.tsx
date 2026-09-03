@@ -12,7 +12,7 @@ import {
 import { CalendarOff, RefreshCw, Send, TriangleAlert, Undo2, Wand2 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { termName } from "../../lib/format";
+import { formatDate, termName } from "../../lib/format";
 import { thisMonday } from "../../lib/week";
 import { WeekNav } from "../../components/WeekNav";
 import { usePeriod } from "../../lib/period";
@@ -45,6 +45,8 @@ import { CoveragePanel } from "./builder/CoveragePanel";
 import {
   awayTaIds,
   buildWeekOverlay,
+  coverageDropTarget,
+  type WeekCoverage,
   type WeekOverlayInput,
 } from "./builder/weekOverlay";
 import { TaDrawer } from "./builder/TaDrawer";
@@ -130,6 +132,7 @@ export function BuilderScreen({
   const board = useQuery(api.builder.board, skip ? "skip" : { periodRef });
   const periodInfo = useQuery(api.periods.get, skip ? "skip" : { periodRef });
 
+  const setCoverMut = useMutation(api.coverage.setCover);
   const overrideAssignment = useMutation(api.builder.overrideAssignment);
   const removeAssignment = useMutation(api.builder.removeAssignment);
   const toggleLockMut = useMutation(api.builder.toggleLock);
@@ -271,6 +274,64 @@ export function BuilderScreen({
     }
   };
 
+  const shiftLabel = (shiftRef: Id<"shifts">): string => {
+    const shift = shiftById(shiftRef as string);
+    if (!shift) return "that shift";
+    const section = shift.sectionRef
+      ? model.sectionById.get(shift.sectionRef as string)
+      : undefined;
+    return section
+      ? section.sectionNumber
+      : (model.dutyById.get(shift.dutyTypeRef as string)?.name ?? "that shift");
+  };
+
+  /**
+   * Fill an open one-off hole for a single date.
+   *
+   * Dropping someone onto a slot that is short for one meeting means "stand
+   * in that day", not "join this shift every week for the rest of term" — the
+   * absent TA keeps the standing assignment. Making it recurring is a
+   * deliberate second choice, offered on the toast rather than assumed.
+   */
+  const doCover = async (cov: WeekCoverage, taProfileRef: Id<"taProfiles">) => {
+    const name = firstName(model.taName(taProfileRef));
+    try {
+      await setCoverMut({ coverageRef: cov._id, coverTaRef: taProfileRef });
+      pushUndo(async () => {
+        await setCoverMut({ coverageRef: cov._id });
+      });
+      toast(
+        `${name} covers ${shiftLabel(cov.shiftRef)} on ${formatDate(cov.date)} — that date only`,
+        {
+          tone: "success",
+          duration: 8000,
+          link: {
+            label: "Make it permanent",
+            onClick: () => void makeCoverPermanent(cov, taProfileRef),
+          },
+        },
+      );
+    } catch (e) {
+      err(e, "Could not set the cover");
+    }
+  };
+
+  /** Promote a one-date stand-in to the standing assignment for the shift. */
+  const makeCoverPermanent = async (
+    cov: WeekCoverage,
+    taProfileRef: Id<"taProfiles">,
+  ) => {
+    try {
+      await setCoverMut({ coverageRef: cov._id });
+      await doAssign(taProfileRef, cov.shiftRef);
+      toast(
+        `${firstName(model.taName(taProfileRef))} now has ${shiftLabel(cov.shiftRef)} every week`,
+      );
+    } catch (e) {
+      err(e, "Could not make that permanent");
+    }
+  };
+
   /** Take a TA off a slot, with the inverse op recorded for Undo. */
   const doUnassign = async (assignmentRef: Id<"assignments">) => {
     const existing = data.board?.assignments.find((a) => a._id === assignmentRef);
@@ -408,14 +469,25 @@ export function BuilderScreen({
       return;
     }
     if (!overId.startsWith("shift:")) return;
+    const targetShiftRef = overId.slice("shift:".length) as Id<"shifts">;
     const source = payload.fromAssignmentRef
       ? data.board!.assignments.find((a) => a._id === payload.fromAssignmentRef)
       : undefined;
-    void doAssign(
-      payload.taProfileRef,
-      overId.slice("shift:".length) as Id<"shifts">,
-      source,
-    );
+
+    // A name dragged from the roster onto a slot with an open hole this week
+    // fills that one meeting. Moving an existing chip is left alone: that
+    // gesture already means "change the standing roster", and quietly turning
+    // it into a one-date stand-in would strand the TA's other shift.
+    const target = shiftById(targetShiftRef as string);
+    const open = coverageDropTarget(week, targetShiftRef, target?.day, payload.taProfileRef, {
+      isMove: source !== undefined,
+    });
+    if (open) {
+      void doCover(open, payload.taProfileRef);
+      return;
+    }
+
+    void doAssign(payload.taProfileRef, targetShiftRef, source);
   };
 
   let conflictCount = 0;

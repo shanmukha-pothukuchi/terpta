@@ -3,6 +3,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import {
   awayTaIds,
   buildWeekOverlay,
+  coverageDropTarget,
   coverageFor,
   isAwayOnDay,
   type WeekOverlayInput,
@@ -11,6 +12,7 @@ import { dateOfDayInWeek } from "../../../lib/week";
 
 const sid = (s: string) => s as Id<"shifts">;
 const tid = (s: string) => s as Id<"taProfiles">;
+const cid = (s: string) => s as Id<"shiftCoverages">;
 
 const input: WeekOverlayInput = {
   weekStart: "2026-09-14",
@@ -27,6 +29,7 @@ const input: WeekOverlayInput = {
   ],
   coverages: [
     {
+      _id: cid("cov-1"),
       shiftRef: sid("shift-disc-0101"),
       date: "2026-09-14",
       day: "M",
@@ -100,5 +103,64 @@ describe("isAwayOnDay", () => {
   it("returns nothing without an overlay or a day", () => {
     expect(isAwayOnDay(null, tid("ta-priya"), "W", dateOfDay)).toBeUndefined();
     expect(isAwayOnDay(overlay, tid("ta-priya"), undefined, dateOfDay)).toBeUndefined();
+  });
+});
+
+describe("coverageDropTarget", () => {
+  // The fixture overlay's only coverage is already filled by Ravi; an open one
+  // is the case that matters, so build a second overlay with both.
+  const withOpen = buildWeekOverlay({
+    ...input,
+    coverages: [
+      ...input.coverages,
+      {
+        _id: cid("cov-open"),
+        shiftRef: sid("shift-disc-0103"),
+        date: "2026-09-15",
+        day: "Tu",
+        absentTaRef: tid("ta-shan"),
+        absentName: "Shan",
+        coverTaRef: null,
+        coverName: null,
+      },
+    ],
+  });
+  const drop = (opts: { isMove: boolean }, ta = tid("ta-sree")) =>
+    coverageDropTarget(withOpen, sid("shift-disc-0103"), "Tu", ta, opts);
+
+  it("routes a roster drop onto an open hole to the one-off coverage", () => {
+    expect(drop({ isMove: false })?._id).toBe("cov-open");
+  });
+
+  it("leaves a moved chip as a standing-roster edit", () => {
+    expect(drop({ isMove: true })).toBeUndefined();
+  });
+
+  it("does not let the absent TA stand in for themselves", () => {
+    expect(drop({ isMove: false }, tid("ta-shan"))).toBeUndefined();
+  });
+
+  it("ignores a coverage that already has a stand-in", () => {
+    expect(
+      coverageDropTarget(withOpen, sid("shift-disc-0101"), "M", tid("ta-sree"), {
+        isMove: false,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("falls through when the slot has no coverage at all", () => {
+    expect(
+      coverageDropTarget(withOpen, sid("shift-disc-9999"), "F", tid("ta-sree"), {
+        isMove: false,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("falls through with no week selected", () => {
+    expect(
+      coverageDropTarget(null, sid("shift-disc-0103"), "Tu", tid("ta-sree"), {
+        isMove: false,
+      }),
+    ).toBeUndefined();
   });
 });

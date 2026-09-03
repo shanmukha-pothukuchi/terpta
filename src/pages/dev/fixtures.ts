@@ -393,6 +393,7 @@ export const builderWeek: WeekOverlayInput = {
   ],
   coverages: [
     {
+      _id: fid<"shiftCoverages">("cov-0101"),
       shiftRef: discussionShifts[0]._id,
       date: dateOfDayInWeek(BUILDER_WEEK_START, discussionShifts[0].day as DayCode),
       day: discussionShifts[0].day as DayCode,
@@ -402,6 +403,7 @@ export const builderWeek: WeekOverlayInput = {
       coverName: "Daniel Chen",
     },
     {
+      _id: fid<"shiftCoverages">("cov-0103"),
       shiftRef: discussionShifts[2]._id,
       date: dateOfDayInWeek(BUILDER_WEEK_START, discussionShifts[2].day as DayCode),
       day: discussionShifts[2].day as DayCode,
@@ -414,6 +416,7 @@ export const builderWeek: WeekOverlayInput = {
     // substitute: Sarah came off the shift and Emma went on. No coverTaRef is
     // ever written that way, so the slot has to read the board to notice.
     {
+      _id: fid<"shiftCoverages">("cov-0105"),
       shiftRef: discussionShifts[4]._id,
       date: dateOfDayInWeek(BUILDER_WEEK_START, discussionShifts[4].day as DayCode),
       day: discussionShifts[4].day as DayCode,

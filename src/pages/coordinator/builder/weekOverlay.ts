@@ -22,6 +22,7 @@ export interface WeekAbsence {
 }
 
 export interface WeekCoverage {
+  _id: Id<"shiftCoverages">;
   shiftRef: Id<"shifts">;
   date: string;
   day: DayCode | null;
@@ -85,6 +86,32 @@ export function coverageFor(
   return overlay.coverages.find(
     (c) => String(c.shiftRef) === id && (day === undefined || c.day === day),
   );
+}
+
+/**
+ * The one-off hole a drop should fill, or undefined to fall through to the
+ * standing roster.
+ *
+ * Dropping a name from the roster onto a slot that is short for one meeting
+ * means "stand in that day" — not "join this shift every week for the rest of
+ * term". Everything else keeps the meaning it had: moving an existing chip is
+ * a standing-roster edit and turning it into a one-date stand-in would strand
+ * the TA's other shift; a slot with no open coverage has no one-off hole to
+ * fill; a coverage already filled is not open; and the TA who is out cannot
+ * stand in for themselves.
+ */
+export function coverageDropTarget(
+  overlay: WeekOverlay | null,
+  shiftRef: Id<"shifts"> | string,
+  day: DayCode | undefined,
+  taProfileRef: Id<"taProfiles"> | string,
+  opts: { isMove: boolean },
+): WeekCoverage | undefined {
+  if (opts.isMove) return undefined;
+  const coverage = coverageFor(overlay, shiftRef, day);
+  if (!coverage || coverage.coverTaRef !== null) return undefined;
+  if (String(coverage.absentTaRef) === String(taProfileRef)) return undefined;
+  return coverage;
 }
 
 /**
