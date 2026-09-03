@@ -181,7 +181,7 @@ function ShiftFormModal({
       }
     >
       <div className="flex flex-col gap-3.5">
-        {dutyType.mode === "sync" ? (
+        {dutyType.mode !== "async" ? (
           <SegmentedControl
             options={[
               { value: "weekly", label: "Weekly" },
@@ -192,7 +192,7 @@ function ShiftFormModal({
           />
         ) : null}
 
-        {dutyType.mode === "sync" && recurrence === "weekly" ? (
+        {dutyType.mode !== "async" && recurrence === "weekly" ? (
           <div className="flex items-end gap-2.5">
             <div className="w-32">
               <Label htmlFor="sf-day">Day</Label>
@@ -227,7 +227,7 @@ function ShiftFormModal({
           </div>
         ) : null}
 
-        {dutyType.mode === "sync" && recurrence === "weekly" ? (
+        {dutyType.mode !== "async" && recurrence === "weekly" ? (
           <div className="flex items-end gap-2.5">
             <div className="w-40">
               <Label htmlFor="sf-from">First week</Label>
@@ -252,7 +252,7 @@ function ShiftFormModal({
           </div>
         ) : null}
 
-        {dutyType.mode === "sync" && recurrence === "once" ? (
+        {dutyType.mode !== "async" && recurrence === "once" ? (
           <div className="flex items-end gap-2.5">
             <div className="w-40">
               <Label htmlFor="sf-date">Date (weekday)</Label>
@@ -316,7 +316,7 @@ function ShiftFormModal({
 
         <div className="flex items-end gap-2.5">
           <div className="w-32">
-            <Label htmlFor="sf-count">TAs needed</Label>
+            <Label htmlFor="sf-count">{dutyType.mode === "window" ? "TAs at once" : "TAs needed"}</Label>
             <Input
               id="sf-count"
               type="number"
@@ -427,6 +427,39 @@ function AsyncCard({ shift, name, onClick }: { shift: ShiftRow; name: string; on
 /* Pure view                                                           */
 /* ------------------------------------------------------------------ */
 
+/**
+ * One number for the whole period: how many TAs a discussion section needs.
+ * Committing rewrites every section shift, so it is a blur/Enter commit and
+ * not a live one.
+ */
+function TaPerSectionControl({ value, onCommit }: { value: number; onCommit: (n: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const commit = () => {
+    const n = Math.max(1, Math.round(Number(draft) || 1));
+    setDraft(String(n));
+    if (n !== value) onCommit(n);
+  };
+  return (
+    <div className="flex items-center gap-2">
+      <Label htmlFor="tas-per-section" className="mb-0 whitespace-nowrap">
+        TAs per section
+      </Label>
+      <Input
+        id="tas-per-section"
+        type="number"
+        min={1}
+        step={1}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+        className="h-8 w-16 text-right font-mono"
+      />
+    </div>
+  );
+}
+
 export interface ShiftsViewProps {
   periodSelected: boolean;
   /** undefined = loading */
@@ -435,6 +468,9 @@ export interface ShiftsViewProps {
   onCreate: (dutyTypeRef: Id<"dutyTypes">, fields: ShiftFormFields) => void;
   onUpdate: (shiftRef: Id<"shifts">, fields: ShiftFormFields) => void;
   onRemove: (shiftRef: Id<"shifts">) => void;
+  /** TAs each discussion section needs; changing it rewrites every section shift. */
+  taPerSection?: number;
+  onTaPerSection?: (n: number) => void;
 }
 
 export function ShiftsView({
@@ -444,6 +480,8 @@ export function ShiftsView({
   onCreate,
   onUpdate,
   onRemove,
+  taPerSection,
+  onTaPerSection,
 }: ShiftsViewProps) {
   const [modal, setModal] = useState<{ dutyType: DutyTypeRow; shift: ShiftRow | null } | null>(null);
 
@@ -484,6 +522,11 @@ export function ShiftsView({
         description={
           `${shifts.length} shift${shifts.length === 1 ? "" : "s"} across ${dutyTypes.length} duty type${dutyTypes.length === 1 ? "" : "s"}` +
           (scarce > 0 ? ` · ${scarce} short on available TAs` : "")
+        }
+        actions={
+          onTaPerSection ? (
+            <TaPerSectionControl value={taPerSection ?? 1} onCommit={onTaPerSection} />
+          ) : undefined
         }
       />
       {dutyTypes.length === 0 ? (
@@ -537,7 +580,9 @@ export function ShiftsView({
                   <span className="text-[12px] text-faint">
                     {dt.mode === "sync"
                       ? `sync · ${weekly.length} weekly · ${once.length} one-time`
-                      : `async · ${asyncShifts.length} pool${asyncShifts.length === 1 ? "" : "s"}`}
+                      : dt.mode === "window"
+                        ? `office hours · ${weekly.length} window${weekly.length === 1 ? "" : "s"} · ${dt.hoursPerTa ?? 2}h per TA`
+                        : `async · ${asyncShifts.length} pool${asyncShifts.length === 1 ? "" : "s"}`}
                   </span>
                   <span className="flex-1" />
                   <Button size="sm" onClick={() => setModal({ dutyType: dt, shift: null })}>
@@ -665,9 +710,24 @@ export default function Shifts() {
   const create = useMutation(api.shifts.create);
   const update = useMutation(api.shifts.update);
   const remove = useMutation(api.shifts.remove);
+  const periodInfo = useQuery(api.periods.get, periodId ? { periodRef: periodId } : "skip");
+  const setTaPerSection = useMutation(api.periods.setTaPerSection);
 
   return (
     <ShiftsView
+      taPerSection={periodInfo?.period.taPerSection ?? 1}
+      onTaPerSection={(n) => {
+        if (!periodId) return;
+        setTaPerSection({ periodRef: periodId, taPerSection: n })
+          .then((changed) =>
+            toast(
+              changed === 0
+                ? `Every section already needs ${n} TA${n === 1 ? "" : "s"}`
+                : `${changed} section shift${changed === 1 ? "" : "s"} now need${changed === 1 ? "s" : ""} ${n} TA${n === 1 ? "" : "s"}`,
+            ),
+          )
+          .catch((e) => toast(errorMessage(e), { tone: "error" }));
+      }}
       periodSelected={periodId !== null}
       dutyTypes={periodId ? dutyTypes : undefined}
       shifts={periodId ? shifts : undefined}

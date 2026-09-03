@@ -192,7 +192,17 @@ export interface PreferencesValue {
   dutyTypePrefs: Id<"dutyTypes">[];
   /** Ranked, best first. Empty means no preference. */
   sectionPrefs: Id<"sections">[];
+  /**
+   * How office hours should be cut. Absent reads as "few_long", which is
+   * what every profile saved before the choice existed gets.
+   */
+  officeHoursStyle?: "few_long" | "many_short";
 }
+
+export const OFFICE_HOURS_STYLE_OPTIONS = [
+  { value: "few_long" as const, label: "Fewer, longer" },
+  { value: "many_short" as const, label: "More, shorter" },
+];
 
 export const MIN_HOURS = 4;
 export const MAX_HOURS = 20;
@@ -205,11 +215,11 @@ export const DEFAULT_HOURS = 10;
  */
 export function syncAsyncFromDuties(
   selected: Id<"dutyTypes">[],
-  dutyTypes: Array<{ _id: Id<"dutyTypes">; mode: "sync" | "async" }>,
+  dutyTypes: Array<{ _id: Id<"dutyTypes">; mode: "sync" | "async" | "window" }>,
 ): number {
   const modes = selected
     .map((id) => dutyTypes.find((d) => d._id === id)?.mode)
-    .filter((m): m is "sync" | "async" => m !== undefined);
+    .filter((m): m is "sync" | "async" | "window" => m !== undefined);
   if (modes.length === 0) return 0.5;
   return modes.filter((m) => m === "async").length / modes.length;
 }

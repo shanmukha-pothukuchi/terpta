@@ -52,7 +52,7 @@ export const periodEntry: PeriodEntry = {
 function dutyType(
   id: string,
   name: string,
-  mode: "sync" | "async",
+  mode: "sync" | "async" | "window",
   color: string,
   defaultHoursCredit: number,
   shiftCount = 0,

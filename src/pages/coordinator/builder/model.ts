@@ -60,8 +60,14 @@ export function buildModel(
   const dutyById = new Map(dutyTypes.map((d) => [d._id as string, d]));
   const sectionById = new Map(board.sections.map((s) => [s._id as string, s]));
 
+  // A window is a range office hours get cut from, not a slot to fill; the
+  // blocks cut from it are ordinary weekly shifts and do appear.
   const weekly = shifts
-    .filter((s) => s.recurrence === "weekly")
+    .filter(
+      (s) =>
+        s.recurrence === "weekly" &&
+        !(dutyById.get(s.dutyTypeRef as string)?.mode === "window" && s.windowRef === undefined),
+    )
     .sort((a, b) => (a.startMin ?? 0) - (b.startMin ?? 0));
   const events = shifts
     .filter((s) => s.recurrence === "once")

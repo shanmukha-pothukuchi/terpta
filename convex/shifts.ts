@@ -3,6 +3,7 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { dayValidator } from "./schema";
 import { requireCoordinator, requireUser } from "./lib/auth";
+import { fitWindow } from "./lib/availability";
 import {
   assertNoClaimedHours,
   collectShiftCascade,
@@ -30,6 +31,8 @@ export const shiftFields = {
   endDate: v.optional(v.string()),
   hoursRequired: v.optional(v.number()),
   dueDate: v.optional(v.string()),
+  windowRef: v.optional(v.id("shifts")),
+  createdBy: v.optional(v.union(v.literal("solver"), v.literal("manual"))),
 };
 export const shiftDoc = v.object(shiftFields);
 
@@ -70,8 +73,8 @@ type TimingArgs = {
  * the resulting shift (so replace() drops stale fields when a shift changes
  * shape, e.g. weekly -> once).
  */
-function validateTiming(mode: "sync" | "async", f: TimingArgs) {
-  if (mode === "sync") {
+function validateTiming(mode: "sync" | "async" | "window", f: TimingArgs) {
+  if (mode === "sync" || mode === "window") {
     if (f.recurrence === undefined) {
       throw new ConvexError('Sync shifts require recurrence ("weekly" or "once")');
     }
@@ -137,43 +140,9 @@ function validateTiming(mode: "sync" | "async", f: TimingArgs) {
 type TaAvailability = {
   profile: Doc<"taProfiles">;
   /** status === "available" | "prefer_not" — time a TA painted as takeable. */
-  covered: Doc<"availabilityBlocks">[];
-  unavailable: Doc<"availabilityBlocks">[]; // status === "unavailable" only
+  blocks: Doc<"availabilityBlocks">[];
   exceptions: Doc<"dateExceptions">[];
 };
-
-function overlapsUnavailable(
-  unavailable: Doc<"availabilityBlocks">[],
-  day: Day,
-  startMin: number,
-  endMin: number,
-): boolean {
-  return unavailable.some(
-    (b) => b.day === day && b.startMin < endMin && b.endMin > startMin,
-  );
-}
-
-/**
- * Unpainted time is UNAVAILABLE: the whole [startMin, endMin) window must be
- * covered by the union of the TA's "available"/"prefer_not" blocks.
- */
-function windowFullyCovered(
-  covered: Doc<"availabilityBlocks">[],
-  day: Day,
-  startMin: number,
-  endMin: number,
-): boolean {
-  const intervals = covered
-    .filter((b) => b.day === day)
-    .sort((a, b) => a.startMin - b.startMin);
-  let cur = startMin;
-  for (const b of intervals) {
-    if (b.startMin > cur) break; // gap — not covered
-    if (b.endMin > cur) cur = b.endMin;
-    if (cur >= endMin) return true;
-  }
-  return cur >= endMin;
-}
 
 function countAvailableTas(shift: Doc<"shifts">, tas: TaAvailability[]): number {
   let count = 0;
@@ -198,10 +167,7 @@ function countAvailableTas(shift: Doc<"shifts">, tas: TaAvailability[]): number 
       );
       if (excluded) continue;
     }
-    if (
-      windowFullyCovered(ta.covered, shift.day, shift.startMin, shift.endMin) &&
-      !overlapsUnavailable(ta.unavailable, shift.day, shift.startMin, shift.endMin)
-    ) {
+    if (fitWindow(ta.blocks, shift.day, shift.startMin, shift.endMin) !== "unavailable") {
       count++;
     }
   }
@@ -244,12 +210,12 @@ export const list = query({
       .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
       .collect();
 
-    const submittedProfiles = (
-      await ctx.db
-        .query("taProfiles")
-        .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
-        .collect()
-    ).filter((p) => p.availabilitySubmittedAt !== undefined);
+    // Everyone on the roster: a TA who never submitted is assumed free
+    // (convex/lib/availability.ts), so leaving them out undercounted.
+    const submittedProfiles = await ctx.db
+      .query("taProfiles")
+      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
+      .collect();
 
     const tas: TaAvailability[] = [];
     for (const profile of submittedProfiles) {
@@ -261,12 +227,7 @@ export const list = query({
         .query("dateExceptions")
         .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
         .collect();
-      tas.push({
-        profile,
-        covered: blocks.filter((b) => b.status !== "unavailable"),
-        unavailable: blocks.filter((b) => b.status === "unavailable"),
-        exceptions,
-      });
+      tas.push({ profile, blocks, exceptions });
     }
 
     // Sections are usually organised by instructor of record, so surface the

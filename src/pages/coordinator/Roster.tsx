@@ -154,6 +154,7 @@ export function RosterView({
             <span className="shrink-0 text-[13px] font-medium text-ink">TAs</span>
             <span className="min-w-0 flex-1 truncate text-[12px] text-faint">
               {submitted} of {rows.length} submitted availability
+              {missing > 0 ? " · the rest are scheduled as free at any time" : ""}
             </span>
             <ProgressBar
               value={submitted}

@@ -101,6 +101,7 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
           maxHoursPerWeek: profile.maxHoursPerWeek,
           dutyTypePrefs: profile.dutyTypePrefs,
           sectionPrefs: profile.sectionPrefs,
+          officeHoursStyle: profile.officeHoursStyle ?? "few_long",
         },
       }));
     }
@@ -201,6 +202,7 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
         ),
         dutyTypePrefs: next.preferences.dutyTypePrefs,
         sectionPrefs: next.preferences.sectionPrefs,
+        officeHoursStyle: next.preferences.officeHoursStyle,
         manualClassMeetings,
       });
       setSavedAt(Date.now());

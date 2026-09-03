@@ -86,6 +86,7 @@ export const dutyTypes = [
   { _id: did("dt-oh"), name: "Office Hours", mode: "sync" as const, color: "#2f6fed" },
   { _id: did("dt-exam"), name: "Exam Proctoring", mode: "sync" as const, color: "#7c3aed" },
   { _id: did("dt-grade"), name: "Grading", mode: "async" as const, color: "#0d9488" },
+  { _id: did("dt-oh-window"), name: "Office Hours (windows)", mode: "window" as const, color: "#e21833" },
 ];
 
 export const staffedSections = [

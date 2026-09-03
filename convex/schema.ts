@@ -15,6 +15,18 @@ export const sectionTypeValidator = v.union(
   v.literal("lab"),
 );
 
+/** sync: fixed slots; async: hours by a due date; window: a range office hours are cut from. */
+export const dutyModeValidator = v.union(
+  v.literal("sync"),
+  v.literal("async"),
+  v.literal("window"),
+);
+
+export const officeHoursStyleValidator = v.union(
+  v.literal("few_long"),
+  v.literal("many_short"),
+);
+
 export const meetingValidator = v.object({
   day: dayValidator,
   startMin: v.number(),
@@ -78,14 +90,18 @@ export default defineSchema({
       v.literal("generated"),
       v.literal("published"),
     ),
+    /** TAs each discussion section needs. Absent means one. */
+    taPerSection: v.optional(v.number()),
   }).index("by_coordinator", ["coordinatorRef"]),
 
   dutyTypes: defineTable({
     periodRef: v.id("staffingPeriods"),
     name: v.string(),
-    mode: v.union(v.literal("sync"), v.literal("async")),
+    mode: dutyModeValidator,
     color: v.string(),
     defaultHoursCredit: v.number(),
+    /** "window" only: office hours each TA must hold per week. */
+    hoursPerTa: v.optional(v.number()),
   }).index("by_period", ["periodRef"]),
 
   shifts: defineTable({
@@ -105,6 +121,14 @@ export default defineSchema({
     // async duties
     hoursRequired: v.optional(v.number()),
     dueDate: v.optional(v.string()),
+    /**
+     * Set on an office-hour block the solver cut out of a window shift. The
+     * block is a real weekly shift — the schedule, hours and exports treat
+     * it like any other — and this is what ties it back to its window so a
+     * regenerate can replace it.
+     */
+    windowRef: v.optional(v.id("shifts")),
+    createdBy: v.optional(v.union(v.literal("solver"), v.literal("manual"))),
   }).index("by_period", ["periodRef"]),
 
   taProfiles: defineTable({
@@ -123,6 +147,8 @@ export default defineSchema({
     manualClassMeetings: v.optional(v.array(meetingValidator)),
     /** Set when the TA finishes (or skips to the end of) the setup wizard. */
     onboardingCompletedAt: v.optional(v.number()),
+    /** How they want office hours cut. Absent reads as "few_long". */
+    officeHoursStyle: v.optional(officeHoursStyleValidator),
   })
     .index("by_period", ["periodRef"])
     .index("by_user_period", ["userRef", "periodRef"]),

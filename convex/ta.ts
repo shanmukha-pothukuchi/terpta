@@ -3,7 +3,12 @@ import type { FunctionReference } from "convex/server";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { blockStatusValidator, dayValidator, meetingValidator } from "./schema";
+import {
+  blockStatusValidator,
+  dayValidator,
+  meetingValidator,
+  officeHoursStyleValidator,
+} from "./schema";
 import { requireOwnProfile, requireUser } from "./lib/auth";
 import { dutyTypeDoc } from "./dutyTypes";
 import { assignmentDoc, shiftDoc } from "./shifts";
@@ -44,6 +49,7 @@ const taProfileDoc = v.object({
   availabilitySubmittedAt: v.optional(v.number()),
   manualClassMeetings: v.optional(v.array(meetingValidator)),
   onboardingCompletedAt: v.optional(v.number()),
+  officeHoursStyle: v.optional(officeHoursStyleValidator),
 });
 
 const availabilityBlockDoc = v.object({
@@ -199,6 +205,8 @@ export const saveProfile = mutation({
     sectionPrefs: v.array(v.id("sections")),
     /** Class times typed by hand when umd.io could not be reached. */
     manualClassMeetings: v.optional(v.array(meetingValidator)),
+    /** Omitted on an update keeps whatever was saved; on a create reads as few_long. */
+    officeHoursStyle: v.optional(officeHoursStyleValidator),
   },
   returns: v.id("taProfiles"),
   handler: async (ctx, args) => {
@@ -238,6 +246,7 @@ export const saveProfile = mutation({
       syncAsyncPreference: args.syncAsyncPreference,
       dutyTypePrefs: args.dutyTypePrefs,
       sectionPrefs: args.sectionPrefs,
+      ...(args.officeHoursStyle !== undefined ? { officeHoursStyle: args.officeHoursStyle } : {}),
       manualClassMeetings,
     };
 

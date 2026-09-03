@@ -63,6 +63,7 @@ interface EditorProps {
   term: string;
   profile: {
     maxHoursPerWeek: number;
+    officeHoursStyle?: "few_long" | "many_short";
     syncAsyncPreference: number;
     enrolledSectionRefs: Id<"sections">[];
     dutyTypePrefs: Id<"dutyTypes">[];
@@ -72,7 +73,7 @@ interface EditorProps {
   dutyTypes: Array<{
     _id: Id<"dutyTypes">;
     name: string;
-    mode: "sync" | "async";
+    mode: "sync" | "async" | "window";
     color: string;
   }>;
   sections: SchedulableSection[];
@@ -88,6 +89,7 @@ function PreferencesEditor({ periodRef, term, profile, dutyTypes, sections }: Ed
 
   const [prefs, setPrefs] = useState<PreferencesValue>(() => ({
     maxHoursPerWeek: profile.maxHoursPerWeek || DEFAULT_HOURS,
+    officeHoursStyle: profile.officeHoursStyle ?? "few_long",
     syncAsyncPreference: profile.syncAsyncPreference,
     dutyTypePrefs: profile.dutyTypePrefs,
     sectionPrefs: profile.sectionPrefs,
@@ -132,6 +134,7 @@ function PreferencesEditor({ periodRef, term, profile, dutyTypes, sections }: Ed
         enrolledSectionRefs: enrolledFromClasses,
         dutyTypePrefs: prefs.dutyTypePrefs,
         sectionPrefs: prefs.sectionPrefs,
+        officeHoursStyle: prefs.officeHoursStyle,
         // The label rides along in `room` so it survives a reload.
         manualClassMeetings: classes.manual.map((m) => ({
           day: m.day,
@@ -334,6 +337,7 @@ export default function TaPreferences() {
       term={info.period.term}
       profile={{
         maxHoursPerWeek: profile.maxHoursPerWeek,
+        officeHoursStyle: profile.officeHoursStyle,
         syncAsyncPreference: profile.syncAsyncPreference,
         enrolledSectionRefs: profile.enrolledSectionRefs,
         dutyTypePrefs: profile.dutyTypePrefs,

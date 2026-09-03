@@ -18,6 +18,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { dayValidator } from "./schema";
 import { requireCoordinator, requireUser } from "./lib/auth";
 import { dayOfIso } from "./lib/week";
+import { fitWindow } from "./lib/availability";
 
 function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number) {
   return aStart < bEnd && bStart < aEnd;
@@ -184,14 +185,12 @@ async function rankCandidates(
 
     // Availability has to cover the whole window, and any "unavailable"
     // sliver inside it disqualifies them outright.
-    const blocks = (
-      await ctx.db
-        .query("availabilityBlocks")
-        .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
-        .collect()
-    ).filter((b) => b.day === day && overlaps(b.startMin, b.endMin, startMin, endMin));
-    if (blocks.length === 0) continue;
-    if (blocks.some((b) => b.status === "unavailable")) continue;
+    const blocks = await ctx.db
+      .query("availabilityBlocks")
+      .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
+      .collect();
+    const fit = fitWindow(blocks, day, startMin, endMin);
+    if (fit === "unavailable") continue;
 
     const assignments = await ctx.db
       .query("assignments")
@@ -203,7 +202,7 @@ async function rankCandidates(
     out.push({
       taProfileRef: profile._id,
       name: await displayName(ctx, profile._id),
-      fit: blocks.every((b) => b.status === "available") ? "available" : "prefer_not",
+      fit,
       assignedCount: assignments.length,
     });
   }

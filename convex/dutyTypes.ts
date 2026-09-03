@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { dutyModeValidator } from "./schema";
 import { requireCoordinator, requireUser } from "./lib/auth";
 import {
   assertNoClaimedHours,
@@ -9,7 +10,7 @@ import {
   totalCounts,
 } from "./lib/cascade";
 
-const modeValidator = v.union(v.literal("sync"), v.literal("async"));
+const modeValidator = dutyModeValidator;
 
 /** Full dutyTypes doc validator (shared with ta.getSchedule). */
 export const dutyTypeDoc = v.object({
@@ -20,6 +21,7 @@ export const dutyTypeDoc = v.object({
   mode: modeValidator,
   color: v.string(),
   defaultHoursCredit: v.number(),
+  hoursPerTa: v.optional(v.number()),
 });
 
 /**
@@ -72,6 +74,7 @@ export const create = mutation({
     mode: modeValidator,
     color: v.string(),
     defaultHoursCredit: v.number(),
+    hoursPerTa: v.optional(v.number()),
   },
   returns: v.id("dutyTypes"),
   handler: async (ctx, args) => {
@@ -86,6 +89,7 @@ export const create = mutation({
       mode: args.mode,
       color: args.color,
       defaultHoursCredit: args.defaultHoursCredit,
+      ...(args.mode === "window" ? { hoursPerTa: args.hoursPerTa ?? 2 } : {}),
     });
   },
 });
@@ -97,6 +101,7 @@ export const update = mutation({
     mode: v.optional(modeValidator),
     color: v.optional(v.string()),
     defaultHoursCredit: v.optional(v.number()),
+    hoursPerTa: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -131,6 +136,10 @@ export const update = mutation({
     if (args.color !== undefined) patch.color = args.color;
     if (args.defaultHoursCredit !== undefined) {
       patch.defaultHoursCredit = args.defaultHoursCredit;
+    }
+    if (args.hoursPerTa !== undefined) {
+      if (args.hoursPerTa < 0) throw new ConvexError("hoursPerTa must be >= 0");
+      patch.hoursPerTa = args.hoursPerTa;
     }
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch(dutyType._id, patch);

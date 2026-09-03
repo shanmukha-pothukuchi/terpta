@@ -89,9 +89,25 @@ function round1(x: number): number {
  */
 function toSolverShift(
   shift: Doc<"shifts">,
-  dutyMode: "sync" | "async",
+  dutyMode: "sync" | "async" | "window",
   defaultHoursCredit: number,
 ): SolverShift | null {
+  if (dutyMode === "window") {
+    if (shift.day === undefined || shift.startMin === undefined || shift.endMin === undefined) {
+      return null;
+    }
+    return {
+      id: shift._id,
+      kind: "window",
+      dutyTypeId: shift.dutyTypeRef,
+      requiredCount: Math.max(1, shift.requiredCount),
+      day: shift.day,
+      startMin: shift.startMin,
+      endMin: shift.endMin,
+      startDate: shift.startDate ?? DEFAULT_PERIOD_START,
+      endDate: shift.endDate ?? DEFAULT_PERIOD_END,
+    };
+  }
   if (dutyMode === "async") {
     return {
       id: shift._id,
@@ -239,7 +255,28 @@ const solverShiftValidator = v.union(
     hoursRequired: v.number(),
     dueDate: v.string(),
   }),
+  v.object({
+    id: v.string(),
+    kind: v.literal("window"),
+    dutyTypeId: v.string(),
+    requiredCount: v.number(),
+    day: dayValidator,
+    startMin: v.number(),
+    endMin: v.number(),
+    startDate: v.string(),
+    endDate: v.string(),
+  }),
 );
+
+const windowBlockValidator = v.object({
+  windowShiftId: v.string(),
+  dutyTypeId: v.string(),
+  taProfileId: v.string(),
+  day: dayValidator,
+  startMin: v.number(),
+  endMin: v.number(),
+  locked: v.boolean(),
+});
 
 const solveInputValidator = v.object({
   shifts: v.array(solverShiftValidator),
@@ -250,6 +287,7 @@ const solveInputValidator = v.object({
       syncAsyncPreference: v.number(),
       dutyTypePrefs: v.array(v.string()),
       sectionPrefs: v.array(v.string()),
+      officeHoursStyle: v.optional(v.union(v.literal("few_long"), v.literal("many_short"))),
     }),
   ),
   availability: v.array(
@@ -279,6 +317,18 @@ const solveInputValidator = v.object({
       hoursAllocated: v.optional(v.number()),
     }),
   ),
+  windowHoursPerTa: v.optional(v.record(v.string(), v.number())),
+  lockedWindowBlocks: v.optional(
+    v.array(
+      v.object({
+        windowShiftId: v.string(),
+        taProfileId: v.string(),
+        day: dayValidator,
+        startMin: v.number(),
+        endMin: v.number(),
+      }),
+    ),
+  ),
   periodStart: v.string(),
   periodEnd: v.string(),
 });
@@ -293,6 +343,9 @@ const solvedAssignmentValidator = v.object({
 const diagnosticsValidator = v.object({
   unfilledShifts: v.array(
     v.object({ shiftId: v.string(), missing: v.number() }),
+  ),
+  unfilledWindowHours: v.array(
+    v.object({ taProfileId: v.string(), dutyTypeId: v.string(), missingHours: v.number() }),
   ),
   taLoads: v.array(
     v.object({
@@ -352,6 +405,9 @@ export const loadSolverInput = internalQuery({
 
     const shifts: SolverShift[] = [];
     for (const shift of shiftDocs) {
+      // Blocks cut from a window are the solver's own output; the window
+      // itself is what it reasons about. Pinned blocks go in separately.
+      if (shift.windowRef !== undefined) continue;
       const duty = dutyById.get(shift.dutyTypeRef);
       const mode =
         duty?.mode ?? (shift.recurrence !== undefined ? "sync" : "async");
@@ -370,7 +426,13 @@ export const loadSolverInput = internalQuery({
       syncAsyncPreference: p.syncAsyncPreference,
       dutyTypePrefs: p.dutyTypePrefs.map((id) => id as string),
       sectionPrefs: p.sectionPrefs.map((id) => id as string),
+      ...(p.officeHoursStyle !== undefined ? { officeHoursStyle: p.officeHoursStyle } : {}),
     }));
+
+    const windowHoursPerTa: Record<string, number> = {};
+    for (const d of dutyTypes) {
+      if (d.mode === "window") windowHoursPerTa[d._id as string] = d.hoursPerTa ?? 0;
+    }
 
     const availability: SolveInput["availability"] = [];
     const dateExceptions: SolveInput["dateExceptions"] = [];
@@ -402,6 +464,7 @@ export const loadSolverInput = internalQuery({
     }
 
     const lockedAssignments: SolverLockedAssignment[] = [];
+    const lockedWindowBlocks: NonNullable<SolveInput["lockedWindowBlocks"]> = [];
     for (const shift of shiftDocs) {
       const rows = await ctx.db
         .query("assignments")
@@ -409,6 +472,18 @@ export const loadSolverInput = internalQuery({
         .collect();
       for (const row of rows) {
         if (!row.locked) continue;
+        if (shift.windowRef !== undefined) {
+          if (shift.day !== undefined && shift.startMin !== undefined && shift.endMin !== undefined) {
+            lockedWindowBlocks.push({
+              windowShiftId: shift.windowRef as string,
+              taProfileId: row.taProfileRef as string,
+              day: shift.day,
+              startMin: shift.startMin,
+              endMin: shift.endMin,
+            });
+          }
+          continue;
+        }
         lockedAssignments.push({
           shiftId: shift._id as string,
           taProfileId: row.taProfileRef as string,
@@ -425,6 +500,8 @@ export const loadSolverInput = internalQuery({
       availability,
       dateExceptions,
       lockedAssignments,
+      windowHoursPerTa,
+      lockedWindowBlocks,
       periodStart: DEFAULT_PERIOD_START,
       periodEnd: DEFAULT_PERIOD_END,
     };
@@ -439,16 +516,40 @@ export const applyResult = internalMutation({
   args: {
     periodRef: v.id("staffingPeriods"),
     assignments: v.array(solvedAssignmentValidator),
+    windowBlocks: v.optional(v.array(windowBlockValidator)),
   },
   returns: v.null(),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<null> => {
     const { user, period } = await requireCoordinator(ctx, args.periodRef);
 
-    const shiftDocs = await ctx.db
+    const allShiftDocs = await ctx.db
       .query("shifts")
       .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
       .collect();
+
+    // Office-hour blocks the last run cut are replaced wholesale, unless the
+    // coordinator pinned one; a locked block stays exactly where it is.
+    let removedBlocks = 0;
+    const survivingBlocks = new Set<string>();
+    for (const shift of allShiftDocs) {
+      if (shift.windowRef === undefined) continue;
+      const rows = await ctx.db
+        .query("assignments")
+        .withIndex("by_shift", (q) => q.eq("shiftRef", shift._id))
+        .collect();
+      if (rows.some((r) => r.locked)) {
+        survivingBlocks.add(shift._id as string);
+        continue;
+      }
+      for (const row of rows) await ctx.db.delete(row._id);
+      await ctx.db.delete(shift._id);
+      removedBlocks++;
+    }
+    const shiftDocs = allShiftDocs.filter(
+      (s) => s.windowRef === undefined || survivingBlocks.has(s._id as string),
+    );
     const shiftIds = new Set<string>(shiftDocs.map((s) => s._id as string));
+    const shiftById = new Map(shiftDocs.map((s) => [s._id as string, s]));
 
     // Delete every non-locked assignment for the period; keep locked rows in
     // place (preserves their provenance) and remember them for dedupe.
@@ -487,13 +588,43 @@ export const applyResult = internalMutation({
       inserted += 1;
     }
 
+    // Each cut block becomes a real weekly shift plus its assignment, so
+    // schedules, hour logs, covers and exports need no special case.
+    let insertedBlocks = 0;
+    for (const b of args.windowBlocks ?? []) {
+      if (b.locked) continue; // still there from before
+      const window = shiftById.get(b.windowShiftId);
+      if (!window) continue;
+      const blockRef = await ctx.db.insert("shifts", {
+        periodRef: args.periodRef,
+        dutyTypeRef: window.dutyTypeRef,
+        requiredCount: 1,
+        description: window.description,
+        recurrence: "weekly",
+        day: b.day,
+        startMin: b.startMin,
+        endMin: b.endMin,
+        ...(window.startDate !== undefined ? { startDate: window.startDate } : {}),
+        ...(window.endDate !== undefined ? { endDate: window.endDate } : {}),
+        windowRef: window._id,
+        createdBy: "solver",
+      });
+      await ctx.db.insert("assignments", {
+        shiftRef: blockRef,
+        taProfileRef: b.taProfileId as Id<"taProfiles">,
+        locked: false,
+        createdBy: "solver",
+      });
+      insertedBlocks++;
+    }
+
     await ctx.db.patch(args.periodRef, { status: "generated" });
     await ctx.db.insert("changeLog", {
       periodRef: args.periodRef,
       actorRef: user._id,
       action: "builder.generate",
-      before: { status: period.status, removedAssignments: removed },
-      after: { status: "generated", insertedAssignments: inserted },
+      before: { status: period.status, removedAssignments: removed, removedBlocks },
+      after: { status: "generated", insertedAssignments: inserted, insertedBlocks },
       at: Date.now(),
     });
     return null;
@@ -517,6 +648,7 @@ export const generate = action({
     await ctx.runMutation(internal.builder.applyResult, {
       periodRef: args.periodRef,
       assignments: result.assignments,
+      windowBlocks: result.windowBlocks,
     });
     return result.diagnostics;
   },

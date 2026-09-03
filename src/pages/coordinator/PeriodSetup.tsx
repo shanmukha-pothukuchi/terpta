@@ -124,6 +124,9 @@ export interface PeriodSetupViewProps {
   onToggleStaffKind: (kind: SectionKind) => void;
   deadline: string;
   onDeadlineChange: (v: string) => void;
+  /** TAs each discussion section needs. */
+  taPerSection?: number;
+  onTaPerSectionChange?: (n: number) => void;
   creating: boolean;
   onCreate: () => void;
 }
@@ -144,6 +147,8 @@ export function PeriodSetupView({
   onToggleStaffKind,
   deadline,
   onDeadlineChange,
+  taPerSection = 1,
+  onTaPerSectionChange,
   creating,
   onCreate,
 }: PeriodSetupViewProps) {
@@ -391,6 +396,18 @@ export function PeriodSetupView({
                 className="font-mono"
               />
             </div>
+            <div className="w-32">
+              <Label htmlFor="ps-per-section">TAs per section</Label>
+              <Input
+                id="ps-per-section"
+                type="number"
+                min={1}
+                step={1}
+                value={taPerSection}
+                onChange={(e) => onTaPerSectionChange?.(Math.max(1, Math.round(Number(e.target.value) || 1)))}
+                className="text-right font-mono"
+              />
+            </div>
             <Button variant="primary" onClick={onCreate} disabled={!canCreate} loading={creating}>
               {!creating && <CalendarPlus size={14} strokeWidth={1.5} aria-hidden />}
               Create period
@@ -421,6 +438,7 @@ export default function PeriodSetup() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [initializedFor, setInitializedFor] = useState<Id<"courses"> | null>(null);
   const [deadline, setDeadline] = useState("");
+  const [taPerSection, setTaPerSection] = useState(1);
   const [creating, setCreating] = useState(false);
   const [staffKinds, setStaffKinds] = useState<Set<SectionKind>>(
     () => new Set(DEFAULT_STAFF_KINDS),
@@ -464,6 +482,7 @@ export default function PeriodSetup() {
         collectionDeadline: deadline,
         sectionRefs: [...selected] as Id<"sections">[],
         staffMeetingKinds: [...staffKinds],
+        taPerSection,
       });
       toast("Staffing period created — collecting availability", {
         link: { label: "Invite TAs", to: "/coordinator/roster" },
@@ -511,6 +530,8 @@ export default function PeriodSetup() {
       }
       deadline={deadline}
       onDeadlineChange={setDeadline}
+      taPerSection={taPerSection}
+      onTaPerSectionChange={setTaPerSection}
       creating={creating}
       onCreate={() => void onCreate()}
     />

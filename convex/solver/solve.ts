@@ -10,6 +10,7 @@ import type {
   SolvedAssignment,
   SolverShift,
   SolverTaProfile,
+  SolvedWindowBlock,
 } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -56,6 +57,11 @@ const SA_COOL = 0.9985;
 
 type SyncShift = Extract<SolverShift, { kind: "weekly_sync" | "once_sync" }>;
 type AsyncShift = Extract<SolverShift, { kind: "async" }>;
+type WindowShift = Extract<SolverShift, { kind: "window" }>;
+
+/** Office-hour blocks are cut on a half-hour grid. */
+const SLOT = 30;
+const DAY_ORDER: Record<Day, number> = { M: 0, Tu: 1, W: 2, Th: 3, F: 4 };
 
 interface Load {
   weeklyMin: number; // minutes/week from weekly_sync assignments
@@ -64,6 +70,7 @@ interface Load {
 }
 
 interface State {
+  windowBlocks: SolvedWindowBlock[];
   syncByShift: Map<string, string[]>; // sync shiftId -> assigned taIds
   asyncByShift: Map<string, Map<string, number>>; // async shiftId -> taId -> hours
   taSyncShifts: Map<string, string[]>; // taId -> sync shiftIds
@@ -79,6 +86,10 @@ interface Ctx {
   shiftById: Map<string, SolverShift>;
   syncShifts: SyncShift[];
   asyncShifts: AsyncShift[];
+  windowShifts: WindowShift[];
+  coversWindow: (taId: string, day: Day, s: number, e: number) => boolean;
+  overlapsUnavail: (taId: string, day: Day, s: number, e: number) => boolean;
+  preferNotMinutes: (taId: string, day: Day, s: number, e: number) => number;
   eligible: Map<string, string[]>; // sync shiftId -> statically eligible taIds (sorted)
   eligibleSet: Map<string, Set<string>>;
   syncPairCost: Map<string, Float64Array>; // sync shiftId -> cost per taIndex
@@ -137,8 +148,16 @@ function buildContext(input: SolveInput): Ctx {
   const taIds = tas.map((t) => t.id);
 
   const shiftById = new Map(input.shifts.map((s) => [s.id, s]));
-  const syncShifts = input.shifts.filter((s): s is SyncShift => s.kind !== "async");
+  const syncShifts = input.shifts.filter(
+    (s): s is SyncShift => s.kind === "weekly_sync" || s.kind === "once_sync",
+  );
   const asyncShifts = input.shifts.filter((s): s is AsyncShift => s.kind === "async");
+  const windowShifts = input.shifts
+    .filter((s): s is WindowShift => s.kind === "window")
+    .sort(
+      (a, b) =>
+        DAY_ORDER[a.day] - DAY_ORDER[b.day] || a.startMin - b.startMin || a.id.localeCompare(b.id),
+    );
 
   // Availability indexes. Semantics: unpainted time is UNAVAILABLE. A TA can
   // take a sync shift only if the window is FULLY covered by "available" or
@@ -174,6 +193,10 @@ function buildContext(input: SolveInput): Ctx {
     for (const arr of byDay.values()) arr.sort((a, b) => a[0] - b[0]);
   }
   const coversWindow = (taId: string, day: Day, s: number, e: number): boolean => {
+    // A TA who has painted nothing has told us nothing, and is assumed free
+    // rather than left out of every shift; their class times still bind via
+    // the unavailable index. See convex/lib/availability.ts for the rule.
+    if (!coverage.has(taId)) return true;
     const arr = coverage.get(taId)?.get(day);
     if (!arr) return false;
     let cur = s;
@@ -195,6 +218,18 @@ function buildContext(input: SolveInput): Ctx {
     if (!arr) return false;
     for (const [bs, be] of arr) if (timeOverlap(s, e, bs, be)) return true;
     return false;
+  };
+
+  const preferNotMinutesOf = (taId: string, day: Day, s: number, e: number): number => {
+    const arr = preferNot.get(taId)?.get(day);
+    if (!arr) return 0;
+    let total = 0;
+    for (const [bs, be] of arr) {
+      const lo = Math.max(bs, s);
+      const hi = Math.min(be, e);
+      if (hi > lo) total += hi - lo;
+    }
+    return total;
   };
 
   const exceptions = new Map<string, Array<[string, string]>>();
@@ -258,6 +293,10 @@ function buildContext(input: SolveInput): Ctx {
     shiftById,
     syncShifts,
     asyncShifts,
+    windowShifts,
+    coversWindow,
+    overlapsUnavail: (taId, day, s, e) => overlapsBlocks(unavail, taId, day, s, e),
+    preferNotMinutes: preferNotMinutesOf,
     eligible,
     eligibleSet,
     syncPairCost,
@@ -274,6 +313,7 @@ function buildContext(input: SolveInput): Ctx {
 
 function createState(ctx: Ctx): State {
   const state: State = {
+    windowBlocks: [],
     syncByShift: new Map(),
     asyncByShift: new Map(),
     taSyncShifts: new Map(),
@@ -414,6 +454,7 @@ function applyLocked(
       });
       continue;
     }
+    if (shift.kind === "window") continue; // blocks are pinned via lockedWindowBlocks
     if (shift.kind === "async") {
       const hours = Math.max(0, la.hoursAllocated ?? 0);
       const m = state.asyncByShift.get(shift.id)!;
@@ -546,6 +587,7 @@ function greedyFillAsync(ctx: Ctx, state: State): void {
 
 function snapshot(state: State): State {
   return {
+    windowBlocks: [...state.windowBlocks],
     syncByShift: new Map([...state.syncByShift].map(([k, v]) => [k, v.slice()])),
     asyncByShift: new Map([...state.asyncByShift].map(([k, v]) => [k, new Map(v)])),
     taSyncShifts: new Map([...state.taSyncShifts].map(([k, v]) => [k, v.slice()])),
@@ -554,6 +596,7 @@ function snapshot(state: State): State {
 }
 
 function restore(state: State, snap: State): void {
+  state.windowBlocks = [...snap.windowBlocks];
   const c = snapshot(snap);
   state.syncByShift = c.syncByShift;
   state.asyncByShift = c.asyncByShift;
@@ -686,10 +729,149 @@ function anneal(ctx: Ctx, state: State): void {
 // Output
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Office-hour windows
+// ---------------------------------------------------------------------------
+
+/**
+ * Cut each TA's weekly office-hour requirement into blocks inside the
+ * windows the coordinator opened.
+ *
+ * Runs after the sync and async fills, on the loads they left, so office
+ * hours land in the gaps rather than the other way round — a discussion
+ * section meets when it meets; office hours can move. For each window duty
+ * type, TAs are taken lightest-loaded first, and for each the largest block
+ * their style allows is placed where it costs least: no prefer_not time if
+ * possible, and for "many_short" a day they are not already holding hours
+ * on. Window capacity (`requiredCount` TAs at once), the TA's own sync
+ * shifts, class times, unavailable blocks and weekly cap are all hard.
+ *
+ * Deterministic: ties go to the earliest day and time, then window id.
+ */
+function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHours"] {
+  const unfilled: SolveDiagnostics["unfilledWindowHours"] = [];
+  if (ctx.windowShifts.length === 0) return unfilled;
+  const hoursPerTa = ctx.input.windowHoursPerTa ?? {};
+
+  const occupancy = new Map<string, Int32Array>();
+  for (const w of ctx.windowShifts) {
+    occupancy.set(w.id, new Int32Array(Math.max(0, Math.ceil((w.endMin - w.startMin) / SLOT))));
+  }
+  const slotIndex = (w: WindowShift, min: number) => Math.floor((min - w.startMin) / SLOT);
+
+  const blocksOf = new Map<string, SolvedWindowBlock[]>();
+  const busy = (taId: string, day: Day, s: number, e: number): boolean => {
+    for (const sid of state.taSyncShifts.get(taId) ?? []) {
+      const sh = ctx.shiftById.get(sid) as SyncShift | undefined;
+      if (sh && sh.day === day && timeOverlap(s, e, sh.startMin, sh.endMin)) return true;
+    }
+    for (const b of blocksOf.get(taId) ?? []) {
+      if (b.day === day && timeOverlap(s, e, b.startMin, b.endMin)) return true;
+    }
+    return false;
+  };
+  const place = (w: WindowShift, taId: string, s: number, e: number, locked: boolean) => {
+    const occ = occupancy.get(w.id)!;
+    for (let i = slotIndex(w, s); i < slotIndex(w, e); i++) occ[i] += 1;
+    const block: SolvedWindowBlock = {
+      windowShiftId: w.id,
+      dutyTypeId: w.dutyTypeId,
+      taProfileId: taId,
+      day: w.day,
+      startMin: s,
+      endMin: e,
+      locked,
+    };
+    state.windowBlocks.push(block);
+    let mine = blocksOf.get(taId);
+    if (!mine) blocksOf.set(taId, (mine = []));
+    mine.push(block);
+    const load = state.loads.get(taId);
+    if (load) load.weeklyMin += e - s;
+  };
+
+  // Pinned blocks first: they consume capacity and count toward the owner.
+  for (const lb of ctx.input.lockedWindowBlocks ?? []) {
+    const w = ctx.shiftById.get(lb.windowShiftId);
+    if (!w || w.kind !== "window" || !ctx.taById.has(lb.taProfileId)) continue;
+    place(w, lb.taProfileId, lb.startMin, lb.endMin, true);
+  }
+
+  const dutyIds = [...new Set(ctx.windowShifts.map((w) => w.dutyTypeId))].sort();
+  for (const dutyId of dutyIds) {
+    const targetMin = Math.round((hoursPerTa[dutyId] ?? 0) * 60);
+    if (targetMin <= 0) continue;
+    const windows = ctx.windowShifts.filter((w) => w.dutyTypeId === dutyId);
+    const order = [...ctx.tas].sort(
+      (a, b) =>
+        weeklyHoursOf(ctx, state.loads.get(a.id)!) - weeklyHoursOf(ctx, state.loads.get(b.id)!) ||
+        a.id.localeCompare(b.id),
+    );
+
+    for (const ta of order) {
+      const held = (blocksOf.get(ta.id) ?? [])
+        .filter((b) => b.dutyTypeId === dutyId)
+        .reduce((n, b) => n + (b.endMin - b.startMin), 0);
+      let need = targetMin - held;
+      const style = ta.officeHoursStyle ?? "few_long";
+      // "few_long" reaches for two-hour blocks and settles for less;
+      // "many_short" never holds more than an hour at a stretch.
+      const sizes = style === "few_long" ? [120, 90, 60, 30] : [60, 30];
+
+      while (need >= SLOT) {
+        let best: { w: WindowShift; s: number; e: number; score: number } | null = null;
+        for (const size of sizes) {
+          if (size > need) continue;
+          for (const w of windows) {
+            const occ = occupancy.get(w.id)!;
+            for (let start = w.startMin; start + size <= w.endMin; start += SLOT) {
+              const end = start + size;
+              let room = true;
+              for (let i = slotIndex(w, start); i < slotIndex(w, end); i++) {
+                if (occ[i] >= w.requiredCount) {
+                  room = false;
+                  break;
+                }
+              }
+              if (!room) continue;
+              if (!ctx.coversWindow(ta.id, w.day, start, end)) continue;
+              if (ctx.overlapsUnavail(ta.id, w.day, start, end)) continue;
+              if (busy(ta.id, w.day, start, end)) continue;
+              const load = state.loads.get(ta.id)!;
+              if (weeklyHoursOf(ctx, load) + size / 60 > ta.maxHoursPerWeek + 1e-9) continue;
+
+              let score = ctx.preferNotMinutes(ta.id, w.day, start, end);
+              if (
+                style === "many_short" &&
+                (blocksOf.get(ta.id) ?? []).some((b) => b.day === w.day && b.dutyTypeId === dutyId)
+              ) {
+                score += 1000; // spread the short blocks across the week
+              }
+              if (best === null || score < best.score) best = { w, s: start, e: end, score };
+            }
+          }
+          if (best) break; // the largest size that fits anywhere wins
+        }
+        // Assignments to `best` happen three loops deep; control-flow
+        // narrowing gives up and calls it never here, so say what it is.
+        const chosen = best as { w: WindowShift; s: number; e: number; score: number } | null;
+        if (chosen === null) break;
+        place(chosen.w, ta.id, chosen.s, chosen.e, false);
+        need -= chosen.e - chosen.s;
+      }
+      if (need >= SLOT) {
+        unfilled.push({ taProfileId: ta.id, dutyTypeId: dutyId, missingHours: round4(need / 60) });
+      }
+    }
+  }
+  return unfilled;
+}
+
 function buildOutput(
   ctx: Ctx,
   state: State,
   hardViolations: SolveDiagnostics["hardViolations"],
+  unfilledWindowHours: SolveDiagnostics["unfilledWindowHours"],
 ): SolveOutput {
   const assignments: SolvedAssignment[] = [];
   for (const s of ctx.syncShifts) {
@@ -723,8 +905,16 @@ function buildOutput(
             : 0,
   );
 
+  const windowBlocks = [...state.windowBlocks].sort(
+    (a, b) =>
+      DAY_ORDER[a.day] - DAY_ORDER[b.day] ||
+      a.startMin - b.startMin ||
+      a.taProfileId.localeCompare(b.taProfileId),
+  );
+
   const unfilledShifts: SolveDiagnostics["unfilledShifts"] = [];
   for (const s of ctx.input.shifts) {
+    if (s.kind === "window") continue; // a window is a range, never "unfilled"
     if (s.kind === "async") {
       const m = state.asyncByShift.get(s.id)!;
       let alloc = 0;
@@ -737,7 +927,10 @@ function buildOutput(
     }
   }
 
-  const assignedTas = new Set(assignments.map((a) => a.taProfileId));
+  const assignedTas = new Set([
+    ...assignments.map((a) => a.taProfileId),
+    ...windowBlocks.map((b) => b.taProfileId),
+  ]);
   const taLoads = ctx.tas.map((ta) => ({
     taProfileId: ta.id,
     weeklyHours: round4(weeklyHoursOf(ctx, state.loads.get(ta.id)!)),
@@ -749,7 +942,14 @@ function buildOutput(
 
   return {
     assignments,
-    diagnostics: { unfilledShifts, taLoads, zeroAssignmentTaIds, hardViolations },
+    windowBlocks,
+    diagnostics: {
+      unfilledShifts,
+      unfilledWindowHours,
+      taLoads,
+      zeroAssignmentTaIds,
+      hardViolations,
+    },
   };
 }
 
@@ -767,5 +967,6 @@ export function solve(input: SolveInput): SolveOutput {
   // Final repair: fill any vacancies the annealer left open.
   greedyFillSync(ctx, state);
   greedyFillAsync(ctx, state);
-  return buildOutput(ctx, state, hardViolations);
+  const unfilledWindowHours = fillWindows(ctx, state);
+  return buildOutput(ctx, state, hardViolations, unfilledWindowHours);
 }

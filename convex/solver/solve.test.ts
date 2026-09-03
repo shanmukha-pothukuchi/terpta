@@ -190,7 +190,9 @@ describe("solve", () => {
     assertHardConstraints(input, out);
   });
 
-  it("treats unpainted time as unavailable (no availability at all)", () => {
+  it("assumes a TA who painted nothing is available", () => {
+    // No submission is no information: the app schedules them rather than
+    // staffing around a phantom. See convex/lib/availability.ts.
     const input = baseInput({
       taProfiles: [ta("ta-a")], // never painted anything
       shifts: [
@@ -202,8 +204,8 @@ describe("solve", () => {
       ],
     });
     const out = solve(input);
-    expect(out.assignments).toEqual([]);
-    expect(out.diagnostics.unfilledShifts).toEqual([{ shiftId: "w1", missing: 1 }]);
+    expect(out.assignments).toEqual([{ shiftId: "w1", taProfileId: "ta-a", locked: false }]);
+    expect(out.diagnostics.unfilledShifts).toEqual([]);
   });
 
   it("requires the FULL shift window to be covered", () => {

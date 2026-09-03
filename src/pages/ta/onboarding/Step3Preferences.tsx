@@ -34,12 +34,13 @@ import {
 } from "@dnd-kit/core";
 import { GripVertical, Plus, TriangleAlert, X } from "lucide-react";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { Card, IconButton, Tooltip } from "../../../components/ui";
+import { Card, IconButton, SegmentedControl, Tooltip } from "../../../components/ui";
 import { DAY_SHORT, formatMeeting, formatTime } from "../../../lib/format";
 import {
   DEFAULT_HOURS,
   MAX_HOURS,
   MIN_HOURS,
+  OFFICE_HOURS_STYLE_OPTIONS,
   conflictBySectionId,
   findConflicts,
   type ClassesValue,
@@ -58,7 +59,7 @@ export interface Step3PreferencesProps {
   dutyTypes: Array<{
     _id: Id<"dutyTypes">;
     name: string;
-    mode: "sync" | "async";
+    mode: "sync" | "async" | "window";
     color: string;
   }>;
   sections: SchedulableSection[];
@@ -346,6 +347,25 @@ export function Step3Preferences({
             {departmentCapNote ?? DEFAULT_CAP_NOTE}
           </p>
         </div>
+
+        {/* ---------------------------------------------------------- */}
+        {/* a2. Office hours — only when the course opens windows       */}
+        {/* ---------------------------------------------------------- */}
+        {dutyTypes.some((d) => d.mode === "window") ? (
+          <div className="flex min-w-0 flex-col gap-2">
+            <span className="text-[13px] text-muted">Office hours</span>
+            <SegmentedControl
+              options={OFFICE_HOURS_STYLE_OPTIONS}
+              value={value.officeHoursStyle ?? "few_long"}
+              onChange={(officeHoursStyle) => patch({ officeHoursStyle })}
+            />
+            <p className="text-[12px] text-faint [text-wrap:pretty]">
+              {(value.officeHoursStyle ?? "few_long") === "few_long"
+                ? "One or two longer sittings a week, up to two hours each."
+                : "Hour-long sittings spread across different days."}
+            </p>
+          </div>
+        ) : null}
 
         {/* ---------------------------------------------------------- */}
         {/* b. Duty types — flat multi-select, click order = ranking     */}

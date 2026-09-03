@@ -21,6 +21,7 @@ const periodDoc = v.object({
   term: v.string(),
   coordinatorRef: v.id("users"),
   collectionDeadline: v.string(),
+  taPerSection: v.optional(v.number()),
   status: periodStatusValidator,
 });
 
@@ -80,6 +81,7 @@ export const create = mutation({
     courseRef: v.id("courses"),
     term: v.string(),
     collectionDeadline: v.string(),
+    taPerSection: v.optional(v.number()),
     sectionRefs: v.array(v.id("sections")),
     /**
      * Which meeting kinds become shifts. A UMD section carries its lecture
@@ -88,6 +90,7 @@ export const create = mutation({
      * a TA actually runs.
      */
     staffMeetingKinds: v.optional(v.array(sectionTypeValidator)),
+    /** TAs each discussion section needs. Defaults to one. */
   },
   returns: v.id("staffingPeriods"),
   handler: async (ctx, args) => {
@@ -101,12 +104,14 @@ export const create = mutation({
       throw new ConvexError("collectionDeadline must be ISO YYYY-MM-DD");
     }
 
+    const taPerSection = Math.max(1, Math.round(args.taPerSection ?? 1));
     const periodRef = await ctx.db.insert("staffingPeriods", {
       courseRef: args.courseRef,
       term: args.term,
       coordinatorRef: user._id,
       collectionDeadline: args.collectionDeadline,
       status: "collecting",
+      taPerSection,
     });
 
     let discussionDutyTypeRef: Id<"dutyTypes"> | null = null;
@@ -132,7 +137,7 @@ export const create = mutation({
         await ctx.db.insert("shifts", {
           periodRef,
           dutyTypeRef: discussionDutyTypeRef,
-          requiredCount: 1,
+          requiredCount: taPerSection,
           sectionRef,
           description: `${KIND_LABEL[kind]} ${section.sectionNumber}`,
           recurrence: "weekly",
@@ -252,6 +257,39 @@ export const publish = mutation({
       at: Date.now(),
     });
     return null;
+  },
+});
+
+/**
+ * How many TAs each discussion section needs, applied to every section shift
+ * in the period. Kept on the period so a new import gets the same answer.
+ */
+export const setTaPerSection = mutation({
+  args: { periodRef: v.id("staffingPeriods"), taPerSection: v.number() },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const { user, period } = await requireCoordinator(ctx, args.periodRef);
+    const n = Math.max(1, Math.round(args.taPerSection));
+    await ctx.db.patch(period._id, { taPerSection: n });
+    const shifts = await ctx.db
+      .query("shifts")
+      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
+      .collect();
+    let changed = 0;
+    for (const shift of shifts) {
+      if (shift.sectionRef === undefined || shift.requiredCount === n) continue;
+      await ctx.db.patch(shift._id, { requiredCount: n });
+      changed++;
+    }
+    await ctx.db.insert("changeLog", {
+      periodRef: period._id,
+      actorRef: user._id,
+      action: "period.taPerSection",
+      before: { taPerSection: period.taPerSection ?? 1 },
+      after: { taPerSection: n, shiftsChanged: changed },
+      at: Date.now(),
+    });
+    return changed;
   },
 });
 

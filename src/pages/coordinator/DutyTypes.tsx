@@ -23,10 +23,18 @@ export type DutyTypeRow = FunctionReturnType<typeof api.dutyTypes.list>[number];
 
 export interface DutyTypeFields {
   name: string;
-  mode: "sync" | "async";
+  mode: "sync" | "async" | "window";
   color: string;
   defaultHoursCredit: number;
+  /** "window" only: office hours each TA must hold per week. */
+  hoursPerTa?: number;
 }
+
+const MODE_LABEL: Record<DutyTypeFields["mode"], string> = {
+  sync: "Sync",
+  async: "Async",
+  window: "Office hours",
+};
 
 /** Board-adjacent picker palette (UMD red first, then distinct hues). */
 export const DUTY_COLORS = [
@@ -51,8 +59,8 @@ function ModeToggle({
   onChange,
   lockedReason,
 }: {
-  value: "sync" | "async";
-  onChange: (v: "sync" | "async") => void;
+  value: "sync" | "async" | "window";
+  onChange: (v: "sync" | "async" | "window") => void;
   /** When set, the toggle is read-only and explains why on hover. */
   lockedReason?: string;
 }) {
@@ -63,7 +71,7 @@ function ModeToggle({
         (lockedReason ? "opacity-60" : "")
       }
     >
-      {(["sync", "async"] as const).map((m) => (
+      {(["sync", "async", "window"] as const).map((m) => (
         <button
           key={m}
           type="button"
@@ -80,7 +88,7 @@ function ModeToggle({
                 : "text-muted hover:text-ink")
           }
         >
-          {m === "sync" ? "Sync" : "Async"}
+          {MODE_LABEL[m]}
         </button>
       ))}
     </div>
@@ -154,8 +162,11 @@ function EditableRow({
 }) {
   const [name, setName] = useState(dt.name);
   const [credit, setCredit] = useState(String(dt.defaultHoursCredit));
+  const [perTa, setPerTa] = useState(String(dt.hoursPerTa ?? 2));
   useEffect(() => setName(dt.name), [dt.name]);
   useEffect(() => setCredit(String(dt.defaultHoursCredit)), [dt.defaultHoursCredit]);
+  useEffect(() => setPerTa(String(dt.hoursPerTa ?? 2)), [dt.hoursPerTa]);
+  const isWindow = dt.mode === "window";
 
   const commitName = () => {
     const trimmed = name.trim();
@@ -173,6 +184,14 @@ function EditableRow({
     }
     if (n !== dt.defaultHoursCredit) onUpdate({ defaultHoursCredit: n });
   };
+  const commitPerTa = () => {
+    const n = Number(perTa);
+    if (!Number.isFinite(n) || n < 0) {
+      setPerTa(String(dt.hoursPerTa ?? 2));
+      return;
+    }
+    if (n !== (dt.hoursPerTa ?? 2)) onUpdate({ hoursPerTa: n });
+  };
 
   return (
     <div className={`${ROW_GRID} h-11 border-b border-[rgba(255,255,255,0.04)] last:border-b-0 hover:bg-[rgba(255,255,255,0.02)]`}>
@@ -189,24 +208,26 @@ function EditableRow({
         onChange={(mode) => mode !== dt.mode && onUpdate({ mode })}
         lockedReason={
           dt.shiftCount > 0
-            ? `Locked: ${dt.shiftCount} shift${dt.shiftCount === 1 ? "" : "s"} already use this duty type. Delete them to switch between sync and async.`
+            ? `Locked: ${dt.shiftCount} shift${dt.shiftCount === 1 ? "" : "s"} already use this duty type. Delete them to change its mode.`
             : undefined
         }
       />
       <ColorSwatchPicker value={dt.color} onChange={(color) => onUpdate({ color })} />
+      {/* A window has no credit to award: the hours are real. The one number
+          it needs is how many each TA owes per week. */}
       <div className="flex items-center gap-1.5">
         <Input
-          value={credit}
-          onChange={(e) => setCredit(e.target.value)}
-          onBlur={commitCredit}
+          value={isWindow ? perTa : credit}
+          onChange={(e) => (isWindow ? setPerTa : setCredit)(e.target.value)}
+          onBlur={isWindow ? commitPerTa : commitCredit}
           onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
           type="number"
           min={0}
           step={0.5}
-          aria-label="Default hours credit"
+          aria-label={isWindow ? "Office hours per TA per week" : "Default hours credit"}
           className="h-7 w-16 text-right font-mono"
         />
-        <span className="text-[12px] text-faint">h</span>
+        <span className="text-[12px] text-faint">{isWindow ? "h / TA" : "h"}</span>
       </div>
       <IconButton
         variant="danger"
@@ -228,17 +249,19 @@ function DraftRow({
   onCancel: () => void;
 }) {
   const [name, setName] = useState("");
-  const [mode, setMode] = useState<"sync" | "async">("sync");
+  const [mode, setMode] = useState<"sync" | "async" | "window">("sync");
   const [color, setColor] = useState(DUTY_COLORS[1]);
   const [credit, setCredit] = useState("1");
 
   const save = () => {
     const n = Number(credit);
+    const safe = Number.isFinite(n) && n >= 0 ? n : 1;
     onSave({
       name: name.trim(),
       mode,
       color,
-      defaultHoursCredit: Number.isFinite(n) && n >= 0 ? n : 1,
+      defaultHoursCredit: mode === "window" ? 0 : safe,
+      ...(mode === "window" ? { hoursPerTa: safe } : {}),
     });
   };
 
@@ -275,10 +298,10 @@ function DraftRow({
           type="number"
           min={0}
           step={0.5}
-          aria-label="Default hours credit"
+          aria-label={mode === "window" ? "Office hours per TA per week" : "Default hours credit"}
           className="h-7 w-16 text-right font-mono"
         />
-        <span className="text-[12px] text-faint">h</span>
+        <span className="text-[12px] text-faint">{mode === "window" ? "h / TA" : "h"}</span>
       </div>
       <div />
     </div>
