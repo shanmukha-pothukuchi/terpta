@@ -16,6 +16,8 @@ import { formatDate, termName } from "../../lib/format";
 import { thisMonday } from "../../lib/week";
 import { WeekNav } from "../../components/WeekNav";
 import { usePeriod } from "../../lib/period";
+import { useHiddenIds } from "../../lib/viewFilter";
+import { DutyFilterBar, type DutyFilterItem } from "../../components/DutyFilterBar";
 import {
   Badge,
   Button,
@@ -159,6 +161,9 @@ export function BuilderScreen({
     () => fixture?.week?.weekStart ?? thisMonday(),
   );
 
+  // Scoped to the period so two courses do not share one filter.
+  const hiddenDuties = useHiddenIds(`terpta:builder-hidden-duties:${periodRef}`);
+
   const undoStack = useRef<Array<() => Promise<void>>>([]);
   const [undoCount, setUndoCount] = useState(0);
   const pushUndo = (fn: () => Promise<void>) => {
@@ -203,12 +208,25 @@ export function BuilderScreen({
     return input ? buildWeekOverlay(input) : null;
   }, [fixtureWeek, weekData]);
 
-  const model: BuilderModel | null = useMemo(() => {
+  // The whole board, whatever is being shown of it. Publishing reads this
+  // one: a filtered summary of what is about to go out to TAs would be a lie.
+  const fullModel: BuilderModel | null = useMemo(() => {
     if (!data.shifts || !data.dutyTypes || !data.roster || !data.board) return null;
     return buildModel(data.shifts, data.dutyTypes, data.roster, data.board);
   }, [data.shifts, data.dutyTypes, data.roster, data.board]);
 
-  if (model === null || data.status === undefined) {
+  // What the board itself draws. Hiding a duty type is a view preference —
+  // the shifts keep their assignments and still publish.
+  const model: BuilderModel | null = useMemo(() => {
+    if (!fullModel) return null;
+    if (hiddenDuties.hidden.size === 0) return fullModel;
+    const visible = data.shifts!.filter(
+      (s) => !hiddenDuties.hidden.has(s.dutyTypeRef as string),
+    );
+    return buildModel(visible, data.dutyTypes!, data.roster!, data.board!);
+  }, [fullModel, hiddenDuties.hidden, data.shifts, data.dutyTypes, data.roster, data.board]);
+
+  if (model === null || fullModel === null || data.status === undefined) {
     return <FullPageSpinner label="Loading builder…" />;
   }
 
@@ -515,6 +533,16 @@ export function BuilderScreen({
     void doAssign(payload.taProfileRef, targetShiftRef, source);
   };
 
+  // One chip per duty type that has anything on the board, counted from the
+  // unfiltered model so a chip never reads 0 just because it is hidden.
+  const dutyFilterItems: DutyFilterItem[] = data.dutyTypes!.map((d) => ({
+    id: d._id as string,
+    name: d.name,
+    color: d.color,
+    count: data.shifts!.filter(
+      (s) => (s.dutyTypeRef as string) === (d._id as string) && s.windowRef === undefined,
+    ).length,
+  })).filter((d) => d.count > 0);
   const openShift =
     drawerShift !== null ? shiftById(drawerShift as string) : undefined;
   // Only offer "this date only" when there is a hole to fill on it; otherwise
@@ -581,6 +609,15 @@ export function BuilderScreen({
             Publish
           </Button>
         </div>
+
+        {dutyFilterItems.length > 1 ? (
+          <DutyFilterBar
+            items={dutyFilterItems}
+            hidden={hiddenDuties.hidden}
+            onToggle={hiddenDuties.toggle}
+            onShowAll={hiddenDuties.showAll}
+          />
+        ) : null}
 
         {data.shifts!.length === 0 ? (
           <EmptyState
@@ -676,7 +713,7 @@ export function BuilderScreen({
       <PublishModal
         open={publishOpen}
         onClose={() => setPublishOpen(false)}
-        model={model}
+        model={fullModel}
         courseLabel={data.courseLabel || "This course"}
         publishing={publishing}
         onPublish={(notify) => void onPublish(notify)}

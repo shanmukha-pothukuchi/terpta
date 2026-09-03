@@ -368,6 +368,7 @@ function HoursApprovalPreview() {
 
 function SchedulePreview() {
   const [weekStart, setWeekStart] = useState(fx.TA_WEEK_START_DATED);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
   return (
     <PageFrame>
       <ScheduleView
@@ -388,6 +389,16 @@ function SchedulePreview() {
           weekStart === fx.TA_WEEK_START_DATED ? fx.weekExceptions : []
         }
         onRequestSwap={noop}
+        hiddenDuties={hidden}
+        onToggleDuty={(id) =>
+          setHidden((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+          })
+        }
+        onShowAllDuties={() => setHidden(new Set())}
         onAddToCalendar={noop}
         addingToCalendar={false}
       />

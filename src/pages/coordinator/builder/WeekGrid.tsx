@@ -12,6 +12,7 @@ import { DAY_CODES, DAY_SHORT, formatTimeRange } from "../../../lib/format";
 import type { DayCode } from "../../../lib/format";
 import { dateOfDayInWeek } from "../../../lib/week";
 import { laneStyle, type LaneSpan } from "../../../lib/lanes";
+import { lighten, withAlpha } from "../../../lib/color";
 import { AssignChip } from "./AssignChip";
 import {
   availabilityHint,
@@ -241,16 +242,13 @@ function Slot({
         height,
         left,
         width,
-        background: unfilled
-          ? "rgba(226,24,51,0.05)"
-          : isSection
-            ? "rgba(255,255,255,0.035)"
-            : "rgba(125,147,178,0.10)",
+        // The duty type's own color, so a board of discussions, office hours
+        // and proctoring can be read at a glance. Unfilled keeps the red
+        // dashed alarm: "nobody is on this" outranks "this is a discussion".
+        background: unfilled ? "rgba(226,24,51,0.05)" : withAlpha(duty?.color, 0.1),
         border: unfilled
           ? "1px dashed rgba(226,24,51,0.5)"
-          : isSection
-            ? "1px solid rgba(255,255,255,0.08)"
-            : "1px solid rgba(125,147,178,0.25)",
+          : `1px solid ${withAlpha(duty?.color, 0.32)}`,
         boxShadow: ring,
         // Out of term this week: still on the board, visibly not in play.
         opacity: dormant ? 0.4 : 1,
@@ -259,7 +257,8 @@ function Slot({
       <div className="flex min-w-0 items-center gap-x-[6px] whitespace-nowrap text-[10.5px] leading-3">
         <span
           className="shrink-0 truncate font-mono font-medium"
-          style={{ color: isSection ? "#C9C9CF" : "#B7C6DC" }}
+          // Lifted toward white: UMD red at 10.5px on near-black is harsh.
+          style={{ color: lighten(duty?.color, 0.62) }}
         >
           {label}
         </span>

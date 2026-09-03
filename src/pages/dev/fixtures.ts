@@ -939,6 +939,7 @@ export const TA_WEEK_START_DATED = "2026-09-14";
 export const weekOccurrences: NonNullable<ScheduleViewProps["weekOccurrences"]> = [
   {
     key: "occ-1",
+    dutyTypeRef: "dt-disc",
     date: "2026-09-14",
     day: "M",
     startMin: 600,
@@ -952,6 +953,7 @@ export const weekOccurrences: NonNullable<ScheduleViewProps["weekOccurrences"]> 
   },
   {
     key: "occ-2",
+    dutyTypeRef: "dt-oh",
     date: "2026-09-14",
     day: "M",
     startMin: 780,
@@ -965,6 +967,7 @@ export const weekOccurrences: NonNullable<ScheduleViewProps["weekOccurrences"]> 
   },
   {
     key: "occ-3",
+    dutyTypeRef: "dt-disc",
     date: "2026-09-16",
     day: "W",
     startMin: 660,
@@ -978,6 +981,7 @@ export const weekOccurrences: NonNullable<ScheduleViewProps["weekOccurrences"]> 
   },
   {
     key: "occ-4",
+    dutyTypeRef: "dt-disc",
     date: "2026-09-17",
     day: "Th",
     startMin: 600,

@@ -24,6 +24,8 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { errorMessage } from "../../lib/errorMessage";
 import { usePeriod } from "../../lib/period";
+import { useHiddenIds } from "../../lib/viewFilter";
+import { DutyFilterBar, type DutyFilterItem } from "../../components/DutyFilterBar";
 import { assignLanes, laneStyle, type LaneSpan } from "../../lib/lanes";
 import {
   formatDate,
@@ -213,6 +215,8 @@ function swapTargetFor(item: ScheduleItem): SwapModalTarget {
  */
 export interface WeekOccurrence {
   key: string;
+  /** Which duty type this is, so the view filter can hide it. */
+  dutyTypeRef: string;
   date: string;
   day: DayCode;
   startMin: number;
@@ -259,6 +263,7 @@ export function occurrencesFromItems(
     if (!date || !day) continue;
     out.push({
       key: `${item.assignment._id}:${date}`,
+      dutyTypeRef: item.dutyType._id as string,
       date,
       day,
       startMin: s.startMin,
@@ -512,6 +517,10 @@ export interface ScheduleViewProps {
   onCancelSwap?: (swapId: string) => void;
   onAddToCalendar?: () => void;
   addingToCalendar?: boolean;
+  /** Duty type ids the TA has hidden; display only, never a data change. */
+  hiddenDuties?: Set<string>;
+  onToggleDuty?: (dutyTypeRef: string) => void;
+  onShowAllDuties?: () => void;
 }
 
 export function ScheduleView({
@@ -530,6 +539,9 @@ export function ScheduleView({
   onCancelSwap,
   onAddToCalendar,
   addingToCalendar,
+  hiddenDuties = new Set<string>(),
+  onToggleDuty,
+  onShowAllDuties,
 }: ScheduleViewProps) {
   const today = todayIso();
   const weekStart = weekStartProp ?? mondayOf(today);
@@ -537,18 +549,40 @@ export function ScheduleView({
   // dated query resolves, and lets the preview harness render without it.
   const occurrences = weekOccurrences ?? occurrencesFromItems(items, weekStart);
 
+  // Every kind of work assigned to this TA, for the filter chips. Counted
+  // before hiding so a chip never reads 0 because it is the one hidden.
+  const dutyFilterItems: DutyFilterItem[] = [];
+  for (const item of items) {
+    const id = item.dutyType._id as string;
+    const seen = dutyFilterItems.find((d) => d.id === id);
+    if (seen) seen.count += 1;
+    else {
+      dutyFilterItems.push({
+        id,
+        name: item.dutyType.name,
+        color: item.dutyType.color || "#7d93b2",
+        count: 1,
+      });
+    }
+  }
+
+  // Hours against the cap are a fact about the week, not a view of it: they
+  // stay whole however much of the screen is hidden.
   const weeklyHours = items
     .filter((i) => i.shift.recurrence === "weekly")
     .reduce((s, i) => s + ((i.shift.endMin ?? 0) - (i.shift.startMin ?? 0)) / 60, 0);
 
-  const onceItems = items
+  const shown = items.filter((i) => !hiddenDuties.has(i.dutyType._id as string));
+  const shownOccurrences = occurrences.filter((o) => !hiddenDuties.has(o.dutyTypeRef));
+
+  const onceItems = shown
     .filter((i) => i.shift.recurrence === "once" && (i.shift.date ?? "") >= today)
     .sort((a, b) =>
       (a.shift.date ?? "").localeCompare(b.shift.date ?? "") ||
       (a.shift.startMin ?? 0) - (b.shift.startMin ?? 0),
     );
 
-  const asyncItems = items.filter(
+  const asyncItems = shown.filter(
     (i) => i.shift.recurrence === undefined && i.shift.hoursRequired !== undefined,
   );
 
@@ -627,8 +661,17 @@ export function ScheduleView({
             </div>
           ) : null}
 
+          {onToggleDuty && onShowAllDuties ? (
+            <DutyFilterBar
+              items={dutyFilterItems}
+              hidden={hiddenDuties}
+              onToggle={onToggleDuty}
+              onShowAll={onShowAllDuties}
+            />
+          ) : null}
+
           <WeeklyGrid
-            occurrences={occurrences}
+            occurrences={shownOccurrences}
             weekStart={weekStart}
             onRequestSwap={onRequestSwap}
           />
@@ -854,6 +897,10 @@ export default function TaSchedule() {
   const [swapOpen, setSwapOpen] = useState(false);
   const [minting, setMinting] = useState(false);
   const [weekStart, setWeekStart] = useState(thisMonday);
+  // Kept per profile: a TA in two courses filters each one separately.
+  const hiddenDuties = useHiddenIds(
+    pick.taProfileId ? `terpta:schedule-hidden-duties:${pick.taProfileId}` : null,
+  );
 
   // The dated week: which meetings actually happen, who is away, who is
   // covering. The repeating week cannot express any of that.
@@ -947,6 +994,7 @@ export default function TaSchedule() {
           week
             ? week.occurrences.map((o) => ({
                 key: o.key,
+                dutyTypeRef: o.dutyType._id as string,
                 date: o.date,
                 day: (o.day ?? "M") as DayCode,
                 startMin: o.shift.startMin ?? 0,
@@ -990,6 +1038,9 @@ export default function TaSchedule() {
             .then(() => toast("Swap request withdrawn"))
             .catch((e: unknown) => toast(errorMessage(e), { tone: "error" }));
         }}
+        hiddenDuties={hiddenDuties.hidden}
+        onToggleDuty={hiddenDuties.toggle}
+        onShowAllDuties={hiddenDuties.showAll}
         onAddToCalendar={() => void addToCalendar()}
         addingToCalendar={minting}
       />

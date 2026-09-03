@@ -9,6 +9,7 @@ import {
 import { EmptyState } from "../../../components/ui";
 import { CalendarX2 } from "lucide-react";
 import { AssignChip } from "./AssignChip";
+import { lighten, withAlpha } from "../../../lib/color";
 import { firstName, type BuilderModel, type Highlight, type ShiftRow } from "./model";
 
 export interface EventsStripProps {
@@ -68,13 +69,13 @@ function EventCard({
       style={{
         border: unfilled
           ? "1px dashed rgba(226,24,51,0.5)"
-          : "1px solid rgba(255,255,255,0.08)",
-        background: unfilled ? "rgba(226,24,51,0.05)" : "rgba(255,255,255,0.03)",
+          : `1px solid ${withAlpha(duty?.color, 0.32)}`,
+        background: unfilled ? "rgba(226,24,51,0.05)" : withAlpha(duty?.color, 0.09),
         boxShadow: ring,
       }}
     >
       <div className="flex items-center gap-2">
-        <div className="text-[13px] font-medium">
+        <div className="text-[13px] font-medium" style={{ color: lighten(duty?.color, 0.7) }}>
           {shift.description ?? duty?.name ?? "Event"}
         </div>
         <div className="flex-1" />
