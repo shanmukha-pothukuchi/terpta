@@ -118,7 +118,7 @@ export function normalizeUmdioMeetings(
 
 /** Discussion if any meeting is a Discussion, else lab, else lecture. */
 export function classifyUmdioSection(section: UmdioSection): SectionType {
-  const types = section.meetings.map((m) => m.classtype.toLowerCase());
+  const types = section.meetings.map((m) => (m.classtype ?? "").toLowerCase());
   if (types.some((t) => t.includes("discussion"))) return "discussion";
   if (types.some((t) => t.includes("lab"))) return "lab";
   return "lecture";

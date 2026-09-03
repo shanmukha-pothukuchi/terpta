@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@workos-inc/authkit-react";
+import { useSignOut } from "../lib/useSignOut";
 import { Loader2 } from "lucide-react";
 import { AuthCanvas, isUmdEmail, stashRejectedEmail } from "./Login";
 
@@ -35,7 +36,8 @@ export function CallbackScreen({ label = "Completing sign-in…" }: { label?: st
 /* ------------------------------------------------------------------ */
 
 export default function Callback() {
-  const { user, isLoading, signOut } = useAuth();
+  const { user, isLoading } = useAuth();
+  const signOut = useSignOut();
   const navigate = useNavigate();
 
   useEffect(() => {

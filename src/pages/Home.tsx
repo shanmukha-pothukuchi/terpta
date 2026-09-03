@@ -1,14 +1,14 @@
 import { Navigate } from "react-router-dom";
-import { useAuth } from "@workos-inc/authkit-react";
 import { UserRoundPlus } from "lucide-react";
 import { useCurrentUser } from "../lib/useCurrentUser";
+import { useSignOut } from "../lib/useSignOut";
 import { RoleChooser } from "../components/RoleChooser";
 import { FullPageSpinner, EmptyState } from "../components/ui";
 
 /** Role-based landing: TA -> availability, coordinator -> roster. */
 export default function Home() {
   const me = useCurrentUser();
-  const { signOut } = useAuth();
+  const signOut = useSignOut();
 
   if (me === undefined) {
     return <FullPageSpinner label="Loading your account…" />;

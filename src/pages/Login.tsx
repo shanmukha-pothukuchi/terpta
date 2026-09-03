@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "@workos-inc/authkit-react";
 import { Loader2, TriangleAlert } from "lucide-react";
 import { Tooltip } from "../components/ui";
+import { useSignOut } from "../lib/useSignOut";
 
 /* ------------------------------------------------------------------ */
 /* Domain gate helpers (shared with Callback)                          */
@@ -163,7 +164,8 @@ export function LoginScreen({
 /* ------------------------------------------------------------------ */
 
 export default function Login() {
-  const { user, isLoading, signIn, signOut } = useAuth();
+  const { user, isLoading, signIn } = useAuth();
+  const signOut = useSignOut();
   const [redirecting, setRedirecting] = useState(false);
   // Read the address stashed by the domain gate before sign-out redirected us.
   const [rejectedEmail] = useState<string | null>(() => {

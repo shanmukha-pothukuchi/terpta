@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useCurrentUser } from "../lib/useCurrentUser";
+import { useSignOut } from "../lib/useSignOut";
 import { usePeriod, PeriodProvider, type PeriodStatus } from "../lib/period";
 import type { Role } from "../lib/api";
 import { Toaster } from "./ui";
@@ -378,7 +379,8 @@ export function AppShellView({
 
 function ShellInner() {
   const me = useCurrentUser();
-  const { user: workosUser, signOut } = useAuth();
+  const { user: workosUser } = useAuth();
+  const signOut = useSignOut();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const role = me?.role;

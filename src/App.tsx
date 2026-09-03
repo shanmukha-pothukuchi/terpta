@@ -7,6 +7,7 @@ import { AppShell } from "./components/AppShell";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EmptyState, FullPageSpinner } from "./components/ui";
 import { EnsureUserSynced } from "./lib/useEnsureUserSynced";
+import { useSignOut } from "./lib/useSignOut";
 
 /** Grace period before we call a stalled WorkOS -> Convex handoff broken. */
 const HANDOFF_TIMEOUT_MS = 6000;
@@ -42,7 +43,8 @@ function HandoffFailed({ onSignOut }: { onSignOut: () => void }) {
  */
 export default function App() {
   const { isLoading: convexLoading, isAuthenticated } = useConvexAuth();
-  const { isLoading: authKitLoading, user, signOut } = useAuth();
+  const { isLoading: authKitLoading, user } = useAuth();
+  const signOut = useSignOut();
 
   // Only start the clock once WorkOS has a user but Convex has not caught up.
   const handoffPending = !authKitLoading && !!user && !isAuthenticated;
