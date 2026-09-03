@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { dayValidator, meetingValidator } from "./schema";
 import { requireCoordinator, requireUser } from "./lib/auth";
 
 const periodStatusValidator = v.union(
@@ -28,7 +29,7 @@ const courseDoc = v.object({
   name: v.string(),
 });
 
-const changeLogDoc = v.object({
+const changeLogFields = {
   _id: v.id("changeLog"),
   _creationTime: v.number(),
   periodRef: v.id("staffingPeriods"),
@@ -37,7 +38,7 @@ const changeLogDoc = v.object({
   before: v.any(),
   after: v.any(),
   at: v.number(),
-});
+};
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -233,16 +234,216 @@ export const publish = mutation({
   },
 });
 
-/** Change log for a period, newest first. Coordinator only. */
+/**
+ * Change log for a period, newest first, with the actor's display name
+ * joined in. Coordinator only.
+ */
 export const getChangelog = query({
   args: { periodRef: v.id("staffingPeriods") },
-  returns: v.array(changeLogDoc),
+  returns: v.array(
+    v.object({
+      ...changeLogFields,
+      actorName: v.string(),
+    }),
+  ),
   handler: async (ctx, args) => {
     await requireCoordinator(ctx, args.periodRef);
-    return await ctx.db
+    const entries = await ctx.db
       .query("changeLog")
       .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
       .order("desc")
       .collect();
+    const nameCache = new Map<string, string>();
+    const out = [];
+    for (const entry of entries) {
+      let name = nameCache.get(entry.actorRef);
+      if (name === undefined) {
+        const actor = await ctx.db.get(entry.actorRef);
+        name = actor?.name ?? "(unknown)";
+        nameCache.set(entry.actorRef, name);
+      }
+      out.push({ ...entry, actorName: name });
+    }
+    return out;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Sections of a course (Period setup shows these after importCourse).
+// ---------------------------------------------------------------------------
+
+const sectionDoc = v.object({
+  _id: v.id("sections"),
+  _creationTime: v.number(),
+  courseRef: v.id("courses"),
+  sectionNumber: v.string(),
+  type: v.union(v.literal("lecture"), v.literal("discussion"), v.literal("lab")),
+  meetings: v.array(meetingValidator),
+});
+
+/** All sections of a course, sorted by section number. Coordinator only. */
+export const listSections = query({
+  args: { courseRef: v.id("courses") },
+  returns: v.array(sectionDoc),
+  handler: async (ctx, args) => {
+    const { user } = await requireUser(ctx);
+    if (user.role !== "coordinator") {
+      throw new Error("Coordinator role required");
+    }
+    const sections = await ctx.db
+      .query("sections")
+      .withIndex("by_course", (q) => q.eq("courseRef", args.courseRef))
+      .collect();
+    sections.sort((a, b) => a.sectionNumber.localeCompare(b.sectionNumber));
+    return sections;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Swap requests — coordinator review (Changelog screen).
+// ---------------------------------------------------------------------------
+
+const swapStatusValidator = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("declined"),
+);
+
+/**
+ * Swap requests for a period joined with requester / suggested TA names and
+ * the shift the assignment points at. Pending first, then newest first.
+ * Coordinator only.
+ */
+export const listSwaps = query({
+  args: { periodRef: v.id("staffingPeriods") },
+  returns: v.array(
+    v.object({
+      _id: v.id("swapRequests"),
+      _creationTime: v.number(),
+      status: swapStatusValidator,
+      reason: v.string(),
+      requesterName: v.string(),
+      suggestedTaName: v.union(v.null(), v.string()),
+      /** True when the underlying assignment no longer exists. */
+      assignmentGone: v.boolean(),
+      dutyTypeName: v.string(),
+      description: v.optional(v.string()),
+      recurrence: v.optional(v.union(v.literal("weekly"), v.literal("once"))),
+      day: v.optional(dayValidator),
+      startMin: v.optional(v.number()),
+      endMin: v.optional(v.number()),
+      date: v.optional(v.string()),
+      dueDate: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireCoordinator(ctx, args.periodRef);
+    const swaps = await ctx.db
+      .query("swapRequests")
+      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
+      .collect();
+
+    const out = [];
+    for (const swap of swaps) {
+      let requesterName = "(unknown)";
+      const requester = await ctx.db.get(swap.requesterRef);
+      if (requester) {
+        const user = await ctx.db.get(requester.userRef);
+        requesterName = user?.name ?? requesterName;
+      }
+      let suggestedTaName: string | null = null;
+      if (swap.suggestedTaRef !== undefined) {
+        const suggested = await ctx.db.get(swap.suggestedTaRef);
+        if (suggested) {
+          const user = await ctx.db.get(suggested.userRef);
+          suggestedTaName = user?.name ?? null;
+        }
+      }
+      const assignment = await ctx.db.get(swap.assignmentRef);
+      const shift = assignment ? await ctx.db.get(assignment.shiftRef) : null;
+      const dutyType = shift ? await ctx.db.get(shift.dutyTypeRef) : null;
+      out.push({
+        _id: swap._id,
+        _creationTime: swap._creationTime,
+        status: swap.status,
+        reason: swap.reason,
+        requesterName,
+        suggestedTaName,
+        assignmentGone: assignment === null,
+        dutyTypeName: dutyType?.name ?? "Duty",
+        description: shift?.description,
+        recurrence: shift?.recurrence,
+        day: shift?.day,
+        startMin: shift?.startMin,
+        endMin: shift?.endMin,
+        date: shift?.date,
+        dueDate: shift?.dueDate,
+      });
+    }
+    out.sort((a, b) => {
+      const ap = a.status === "pending" ? 0 : 1;
+      const bp = b.status === "pending" ? 0 : 1;
+      return ap - bp || b._creationTime - a._creationTime;
+    });
+    return out;
+  },
+});
+
+/**
+ * Approve or decline a pending swap request. Approving reassigns the
+ * assignment to the suggested TA when one was given, otherwise removes the
+ * assignment (the shift shows as unfilled in the Builder). Both outcomes are
+ * written to the change log. Idempotent for already-resolved swaps.
+ */
+export const resolveSwap = mutation({
+  args: { swapRef: v.id("swapRequests"), approve: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const swap = await ctx.db.get(args.swapRef);
+    if (!swap) throw new Error("Swap request not found");
+    const { user } = await requireCoordinator(ctx, swap.periodRef);
+    if (swap.status !== "pending") return null;
+
+    const nextStatus = args.approve ? ("approved" as const) : ("declined" as const);
+    let assignmentChange: { before: unknown; after: unknown } | null = null;
+
+    if (args.approve) {
+      const assignment = await ctx.db.get(swap.assignmentRef);
+      if (assignment) {
+        const before = {
+          assignmentRef: assignment._id,
+          shiftRef: assignment.shiftRef,
+          taProfileRef: assignment.taProfileRef,
+        };
+        const suggested =
+          swap.suggestedTaRef !== undefined
+            ? await ctx.db.get(swap.suggestedTaRef)
+            : null;
+        if (suggested && suggested.periodRef === swap.periodRef) {
+          await ctx.db.patch(assignment._id, {
+            taProfileRef: suggested._id,
+            createdBy: "manual",
+          });
+          assignmentChange = {
+            before,
+            after: { ...before, taProfileRef: suggested._id },
+          };
+        } else {
+          await ctx.db.delete(assignment._id);
+          assignmentChange = { before, after: null };
+        }
+      }
+    }
+
+    await ctx.db.patch(swap._id, { status: nextStatus });
+    await ctx.db.insert("changeLog", {
+      periodRef: swap.periodRef,
+      actorRef: user._id,
+      action: args.approve ? "swap.approve" : "swap.decline",
+      before: { swapRef: swap._id, status: "pending", ...(assignmentChange ? { assignment: assignmentChange.before } : {}) },
+      after: { swapRef: swap._id, status: nextStatus, ...(assignmentChange ? { assignment: assignmentChange.after } : {}) },
+      at: Date.now(),
+    });
+    return null;
   },
 });

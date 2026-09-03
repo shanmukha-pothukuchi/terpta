@@ -83,16 +83,41 @@ const EXCEPTION_POOL: { startDate: string; endDate: string; reason: string }[] =
 // seed:run
 // ---------------------------------------------------------------------------
 
+const SEEDED_TABLES = [
+  "users",
+  "courses",
+  "sections",
+  "staffingPeriods",
+  "dutyTypes",
+  "shifts",
+  "taProfiles",
+  "availabilityBlocks",
+  "dateExceptions",
+  "assignments",
+  "hourLogs",
+  "swapRequests",
+  "changeLog",
+  "umdCache",
+] as const;
+
 export const run = internalMutation({
-  args: {},
+  args: { force: v.optional(v.boolean()) },
   returns: v.string(),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const already = await ctx.db
       .query("users")
       .withIndex("by_workos_id", (q) => q.eq("workosId", "seed_nelson"))
       .unique();
-    if (already) {
-      return "Seed data already present (seed_nelson exists) — skipping.";
+    if (already && !args.force) {
+      return "Seed data already present (seed_nelson exists) — skipping. Pass { force: true } to wipe and reseed.";
+    }
+    if (args.force) {
+      for (const table of SEEDED_TABLES) {
+        const rows = await ctx.db.query(table).collect();
+        for (const row of rows) {
+          await ctx.db.delete(row._id);
+        }
+      }
     }
 
     const rand = mulberry32(0x7e21833); // deterministic
@@ -275,11 +300,13 @@ export const run = internalMutation({
           : {}),
       });
 
-      // Manual availability: Mon-Fri 8:00-20:00 in 30-min multiples.
+      // Manual availability: Mon-Fri 8:00-22:00 in 30-min multiples.
+      // (Extends past 20:00 so evening shifts — e.g. 7-9pm exam proctoring —
+      // can be fully covered: unpainted time now counts as unavailable.)
       for (const day of DAYS) {
         let cursor = 480; // 8:00
-        while (cursor < 1200) {
-          const length = Math.min(30 * pickInt(rand, 1, 5), 1200 - cursor);
+        while (cursor < 1320) {
+          const length = Math.min(30 * pickInt(rand, 1, 5), 1320 - cursor);
           const roll = rand();
           if (roll < 0.62) {
             await insertBlock(ctx, taProfileRef, day, cursor, length, "available");

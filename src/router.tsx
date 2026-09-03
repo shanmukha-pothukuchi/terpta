@@ -20,6 +20,17 @@ export const router = createBrowserRouter(
   [
     { path: "/login", element: <Login /> },
     { path: "/callback", element: <Callback /> },
+    // DEV-only preview harness: fixture-driven screens, no auth required.
+    ...(import.meta.env.DEV
+      ? [
+          {
+            path: "/dev/preview/:screen?",
+            lazy: async () => ({
+              Component: (await import("./pages/dev/previews")).DevPreview,
+            }),
+          },
+        ]
+      : []),
     {
       path: "/",
       element: <App />,

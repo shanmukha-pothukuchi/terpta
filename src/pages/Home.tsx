@@ -27,7 +27,7 @@ export default function Home() {
           <button
             type="button"
             onClick={() => void signOut()}
-            className="mt-4 text-sm text-neutral-500 underline hover:text-neutral-700"
+            className="cursor-pointer text-[12.5px] text-muted underline underline-offset-2 hover:text-ink"
           >
             Sign out
           </button>

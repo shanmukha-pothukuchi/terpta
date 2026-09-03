@@ -130,6 +130,8 @@ function validateTiming(mode: "sync" | "async", f: TimingArgs) {
 
 type TaAvailability = {
   profile: Doc<"taProfiles">;
+  /** status === "available" | "prefer_not" — time a TA painted as takeable. */
+  covered: Doc<"availabilityBlocks">[];
   unavailable: Doc<"availabilityBlocks">[]; // status === "unavailable" only
   exceptions: Doc<"dateExceptions">[];
 };
@@ -143,6 +145,28 @@ function overlapsUnavailable(
   return unavailable.some(
     (b) => b.day === day && b.startMin < endMin && b.endMin > startMin,
   );
+}
+
+/**
+ * Unpainted time is UNAVAILABLE: the whole [startMin, endMin) window must be
+ * covered by the union of the TA's "available"/"prefer_not" blocks.
+ */
+function windowFullyCovered(
+  covered: Doc<"availabilityBlocks">[],
+  day: Day,
+  startMin: number,
+  endMin: number,
+): boolean {
+  const intervals = covered
+    .filter((b) => b.day === day)
+    .sort((a, b) => a.startMin - b.startMin);
+  let cur = startMin;
+  for (const b of intervals) {
+    if (b.startMin > cur) break; // gap — not covered
+    if (b.endMin > cur) cur = b.endMin;
+    if (cur >= endMin) return true;
+  }
+  return cur >= endMin;
 }
 
 function countAvailableTas(shift: Doc<"shifts">, tas: TaAvailability[]): number {
@@ -168,7 +192,10 @@ function countAvailableTas(shift: Doc<"shifts">, tas: TaAvailability[]): number 
       );
       if (excluded) continue;
     }
-    if (!overlapsUnavailable(ta.unavailable, shift.day, shift.startMin, shift.endMin)) {
+    if (
+      windowFullyCovered(ta.covered, shift.day, shift.startMin, shift.endMin) &&
+      !overlapsUnavailable(ta.unavailable, shift.day, shift.startMin, shift.endMin)
+    ) {
       count++;
     }
   }
@@ -223,6 +250,7 @@ export const list = query({
         .collect();
       tas.push({
         profile,
+        covered: blocks.filter((b) => b.status !== "unavailable"),
         unavailable: blocks.filter((b) => b.status === "unavailable"),
         exceptions,
       });

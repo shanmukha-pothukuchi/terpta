@@ -140,18 +140,50 @@ function buildContext(input: SolveInput): Ctx {
   const syncShifts = input.shifts.filter((s): s is SyncShift => s.kind !== "async");
   const asyncShifts = input.shifts.filter((s): s is AsyncShift => s.kind === "async");
 
-  // Availability indexes
+  // Availability indexes. Semantics: unpainted time is UNAVAILABLE. A TA can
+  // take a sync shift only if the window is FULLY covered by "available" or
+  // "prefer_not" blocks (coverage), AND no "unavailable" block overlaps it.
   const unavail = new Map<string, Map<Day, Array<[number, number]>>>();
   const preferNot = new Map<string, Map<Day, Array<[number, number]>>>();
+  const coverage = new Map<string, Map<Day, Array<[number, number]>>>();
+  const pushBlock = (
+    target: Map<string, Map<Day, Array<[number, number]>>>,
+    taId: string,
+    day: Day,
+    s: number,
+    e: number,
+  ) => {
+    let byDay = target.get(taId);
+    if (!byDay) target.set(taId, (byDay = new Map()));
+    let arr = byDay.get(day);
+    if (!arr) byDay.set(day, (arr = []));
+    arr.push([s, e]);
+  };
   for (const b of input.availability) {
-    if (b.status === "available") continue;
-    const target = b.status === "unavailable" ? unavail : preferNot;
-    let byDay = target.get(b.taProfileId);
-    if (!byDay) target.set(b.taProfileId, (byDay = new Map()));
-    let arr = byDay.get(b.day);
-    if (!arr) byDay.set(b.day, (arr = []));
-    arr.push([b.startMin, b.endMin]);
+    if (b.status === "unavailable") {
+      pushBlock(unavail, b.taProfileId, b.day, b.startMin, b.endMin);
+    } else {
+      pushBlock(coverage, b.taProfileId, b.day, b.startMin, b.endMin);
+      if (b.status === "prefer_not") {
+        pushBlock(preferNot, b.taProfileId, b.day, b.startMin, b.endMin);
+      }
+    }
   }
+  // Pre-sort coverage intervals so coverage checks are a single sweep.
+  for (const byDay of coverage.values()) {
+    for (const arr of byDay.values()) arr.sort((a, b) => a[0] - b[0]);
+  }
+  const coversWindow = (taId: string, day: Day, s: number, e: number): boolean => {
+    const arr = coverage.get(taId)?.get(day);
+    if (!arr) return false;
+    let cur = s;
+    for (const [bs, be] of arr) {
+      if (bs > cur) break; // gap before `cur` — window not covered
+      if (be > cur) cur = be;
+      if (cur >= e) return true;
+    }
+    return cur >= e;
+  };
   const overlapsBlocks = (
     m: Map<string, Map<Day, Array<[number, number]>>>,
     taId: string,
@@ -187,9 +219,10 @@ function buildContext(input: SolveInput): Ctx {
     const row = new Float64Array(tas.length);
     for (let i = 0; i < tas.length; i++) {
       const ta = tas[i];
+      const covered = coversWindow(ta.id, s.day, s.startMin, s.endMin);
       const blockedUnavail = overlapsBlocks(unavail, ta.id, s.day, s.startMin, s.endMin);
       const blockedEx = s.kind === "once_sync" && exceptionCovers(ta.id, s.date);
-      if (!blockedUnavail && !blockedEx) elig.push(ta.id);
+      if (covered && !blockedUnavail && !blockedEx) elig.push(ta.id);
       let c =
         W.SECTION * rankPenalty(ta.sectionPrefs, "sectionId" in s ? s.sectionId : undefined) +
         W.DUTY * rankPenalty(ta.dutyTypePrefs, s.dutyTypeId) +
@@ -402,7 +435,7 @@ function applyLocked(
               (ex) => ex.taProfileId === ta.id && ex.startDate <= shift.date && shift.date <= ex.endDate,
             )
             ? "blocked by date exception"
-            : "overlaps unavailable block",
+            : "shift window not covered by availability (or overlaps unavailable block)",
         );
       }
       for (const sid of state.taSyncShifts.get(ta.id)!) {

@@ -1,14 +1,64 @@
 @import "tailwindcss";
 
+/* TerpTA dark-only design tokens (from the design board).
+   Usage: bg-page, bg-surface, bg-raised, bg-popover, text-ink, text-muted,
+   text-faint, bg-umd/text-umd, bg-ok, bg-warn, bg-classblue, border-line,
+   font-sans (Geist), font-mono (Geist Mono). */
+@theme {
+  --font-sans:
+    "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* Surfaces (page → surface → raised → popover) */
+  --color-page: #0b0b0e;
+  --color-surface: #0f0f13;
+  --color-raised: #15151a;
+  --color-popover: #1a1a21;
+
+  /* Text tiers */
+  --color-ink: #ededef;
+  --color-muted: #9a9aa3;
+  --color-faint: #6b6b75;
+
+  /* Accents — UMD red only on primary actions, active nav icon, conflicts,
+     role badge. Green = available/OK/submitted. Amber = prefer-not/over-cap.
+     Blue-gray = imported class blocks. */
+  --color-umd: #e21833;
+  --color-ok: #3dd68c;
+  --color-ok-text: #7fe3b1;
+  --color-warn: #f5a524;
+  --color-warn-text: #f7c566;
+  --color-classblue: #7d93b2;
+
+  /* Hairlines */
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-line-strong: rgba(255, 255, 255, 0.12);
+}
+
 /* Base styles must live inside @layer base — unlayered CSS outranks
    Tailwind v4 utilities and silently wins every specificity fight. */
 @layer base {
+  html {
+    color-scheme: dark;
+  }
   html,
   body,
   #root {
     height: 100%;
   }
   body {
-    @apply bg-white text-neutral-900 antialiased;
+    background: var(--color-page);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection {
+    background: rgba(226, 24, 51, 0.35);
+  }
+  ::placeholder {
+    color: var(--color-faint);
   }
 }

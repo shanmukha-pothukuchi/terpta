@@ -4,6 +4,7 @@ import {
   internalMutation,
   internalQuery,
   mutation,
+  query,
   type MutationCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -633,6 +634,324 @@ async function computeConflicts(
   }
   return conflicts;
 }
+
+// ---------------------------------------------------------------------------
+// board — read-only snapshot for the builder UI: every assignment in the
+// period, advisory conflicts per assignment, per-TA weekly loads, and the
+// course's sections (slot labels / rooms). Purely derived; safe to poll live.
+// ---------------------------------------------------------------------------
+
+const boardValidator = v.object({
+  assignments: v.array(
+    v.object({
+      _id: v.id("assignments"),
+      shiftRef: v.id("shifts"),
+      taProfileRef: v.id("taProfiles"),
+      hoursAllocated: v.optional(v.number()),
+      locked: v.boolean(),
+      createdBy: v.union(v.literal("solver"), v.literal("manual")),
+    }),
+  ),
+  conflicts: v.array(
+    v.object({
+      assignmentRef: v.id("assignments"),
+      taProfileRef: v.id("taProfiles"),
+      shiftRef: v.id("shifts"),
+      type: conflictTypeValidator,
+      detail: v.string(),
+    }),
+  ),
+  taLoads: v.array(
+    v.object({
+      taProfileRef: v.id("taProfiles"),
+      weeklyHours: v.number(),
+      maxHoursPerWeek: v.number(),
+    }),
+  ),
+  sections: v.array(
+    v.object({
+      _id: v.id("sections"),
+      sectionNumber: v.string(),
+      meetings: v.array(
+        v.object({
+          day: dayValidator,
+          startMin: v.number(),
+          endMin: v.number(),
+          room: v.string(),
+        }),
+      ),
+    }),
+  ),
+});
+
+export const board = query({
+  args: { periodRef: v.id("staffingPeriods") },
+  returns: boardValidator,
+  handler: async (ctx, args) => {
+    const { period } = await requireCoordinator(ctx, args.periodRef);
+
+    const shifts = await ctx.db
+      .query("shifts")
+      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
+      .collect();
+    const profiles = await ctx.db
+      .query("taProfiles")
+      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
+      .collect();
+
+    const rows: Array<{ a: Doc<"assignments">; shift: Doc<"shifts"> }> = [];
+    for (const shift of shifts) {
+      const list = await ctx.db
+        .query("assignments")
+        .withIndex("by_shift", (q) => q.eq("shiftRef", shift._id))
+        .collect();
+      for (const a of list) rows.push({ a, shift });
+    }
+
+    const weeks = weeksBetween(DEFAULT_PERIOD_START, DEFAULT_PERIOD_END);
+    const loadByTa = new Map<string, number>();
+    for (const { a, shift } of rows) {
+      const key = a.taProfileRef as string;
+      loadByTa.set(
+        key,
+        (loadByTa.get(key) ?? 0) + weeklyHoursOf(shift, a.hoursAllocated, weeks),
+      );
+    }
+
+    // Availability + exceptions only for TAs that actually hold assignments.
+    const assignedTaIds = new Set(rows.map((r) => r.a.taProfileRef as string));
+    const blocksByTa = new Map<string, Doc<"availabilityBlocks">[]>();
+    const excByTa = new Map<string, Doc<"dateExceptions">[]>();
+    for (const profile of profiles) {
+      if (!assignedTaIds.has(profile._id as string)) continue;
+      blocksByTa.set(
+        profile._id as string,
+        await ctx.db
+          .query("availabilityBlocks")
+          .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
+          .collect(),
+      );
+      excByTa.set(
+        profile._id as string,
+        await ctx.db
+          .query("dateExceptions")
+          .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
+          .collect(),
+      );
+    }
+
+    const conflicts: Array<{
+      assignmentRef: Id<"assignments">;
+      taProfileRef: Id<"taProfiles">;
+      shiftRef: Id<"shifts">;
+      type: Conflict["type"];
+      detail: string;
+    }> = [];
+    for (const { a, shift } of rows) {
+      const window = windowOfShiftDoc(shift);
+      if (window === null) continue;
+      const push = (type: Conflict["type"], detail: string) =>
+        conflicts.push({
+          assignmentRef: a._id,
+          taProfileRef: a.taProfileRef,
+          shiftRef: shift._id,
+          type,
+          detail,
+        });
+      for (const block of blocksByTa.get(a.taProfileRef as string) ?? []) {
+        if (block.day !== window.day) continue;
+        if (
+          !minutesOverlap(
+            block.startMin,
+            block.endMin,
+            window.startMin,
+            window.endMin,
+          )
+        ) {
+          continue;
+        }
+        if (block.source === "imported_class") {
+          push(
+            "class_conflict",
+            `Overlaps TA's class ${window.day} ${formatMin(block.startMin)}-${formatMin(block.endMin)}`,
+          );
+        } else if (block.status === "unavailable") {
+          push(
+            "unavailable",
+            `TA marked unavailable ${window.day} ${formatMin(block.startMin)}-${formatMin(block.endMin)}`,
+          );
+        }
+      }
+      for (const exc of excByTa.get(a.taProfileRef as string) ?? []) {
+        const coversOnce =
+          shift.recurrence === "once" &&
+          shift.date !== undefined &&
+          exc.startDate <= shift.date &&
+          shift.date <= exc.endDate;
+        const coversWholeWeekly =
+          shift.recurrence === "weekly" &&
+          exc.startDate <= window.startDate &&
+          window.endDate <= exc.endDate;
+        if (coversOnce || coversWholeWeekly) {
+          push(
+            "unavailable",
+            `Date exception ${exc.startDate} to ${exc.endDate} (${exc.reason})`,
+          );
+        }
+      }
+      for (const other of rows) {
+        if (other.a._id === a._id) continue;
+        if (other.a.taProfileRef !== a.taProfileRef) continue;
+        const otherWindow = windowOfShiftDoc(other.shift);
+        if (otherWindow === null) continue;
+        if (
+          otherWindow.day === window.day &&
+          minutesOverlap(
+            otherWindow.startMin,
+            otherWindow.endMin,
+            window.startMin,
+            window.endMin,
+          ) &&
+          dateRangesOverlap(
+            otherWindow.startDate,
+            otherWindow.endDate,
+            window.startDate,
+            window.endDate,
+          )
+        ) {
+          push(
+            "overlap",
+            `Overlaps another assignment ${otherWindow.day} ${formatMin(otherWindow.startMin)}-${formatMin(otherWindow.endMin)}`,
+          );
+        }
+      }
+    }
+
+    const sections = await ctx.db
+      .query("sections")
+      .withIndex("by_course", (q) => q.eq("courseRef", period.courseRef))
+      .collect();
+
+    return {
+      assignments: rows.map(({ a }) => ({
+        _id: a._id,
+        shiftRef: a.shiftRef,
+        taProfileRef: a.taProfileRef,
+        ...(a.hoursAllocated !== undefined
+          ? { hoursAllocated: a.hoursAllocated }
+          : {}),
+        locked: a.locked,
+        createdBy: a.createdBy,
+      })),
+      conflicts,
+      taLoads: profiles.map((p) => ({
+        taProfileRef: p._id,
+        weeklyHours: round1(loadByTa.get(p._id as string) ?? 0),
+        maxHoursPerWeek: p.maxHoursPerWeek,
+      })),
+      sections: sections.map((s) => ({
+        _id: s._id,
+        sectionNumber: s.sectionNumber,
+        meetings: s.meetings,
+      })),
+    };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// taDetail — read-only TA profile detail for the builder drawer
+// ---------------------------------------------------------------------------
+
+export const taDetail = query({
+  args: { taProfileRef: v.id("taProfiles") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      name: v.string(),
+      email: v.string(),
+      maxHoursPerWeek: v.number(),
+      syncAsyncPreference: v.number(),
+      availabilitySubmitted: v.boolean(),
+      dutyTypePrefNames: v.array(v.string()),
+      sectionPrefNumbers: v.array(v.string()),
+      enrolledSectionNumbers: v.array(v.string()),
+      blocks: v.array(
+        v.object({
+          day: dayValidator,
+          startMin: v.number(),
+          endMin: v.number(),
+          status: v.union(
+            v.literal("available"),
+            v.literal("prefer_not"),
+            v.literal("unavailable"),
+          ),
+          source: v.union(v.literal("manual"), v.literal("imported_class")),
+        }),
+      ),
+      exceptions: v.array(
+        v.object({
+          startDate: v.string(),
+          endDate: v.string(),
+          reason: v.string(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const profile = await ctx.db.get(args.taProfileRef);
+    if (profile === null) return null;
+    await requireCoordinator(ctx, profile.periodRef);
+
+    const user = await ctx.db.get(profile.userRef);
+    const blocks = await ctx.db
+      .query("availabilityBlocks")
+      .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
+      .collect();
+    const exceptions = await ctx.db
+      .query("dateExceptions")
+      .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
+      .collect();
+    const dutyTypes = await ctx.db
+      .query("dutyTypes")
+      .withIndex("by_period", (q) => q.eq("periodRef", profile.periodRef))
+      .collect();
+    const dutyNames = new Map(dutyTypes.map((d) => [d._id as string, d.name]));
+
+    const sectionNumbers = async (ids: Id<"sections">[]) => {
+      const out: string[] = [];
+      for (const id of ids) {
+        const section = await ctx.db.get(id);
+        if (section !== null) out.push(section.sectionNumber);
+      }
+      return out;
+    };
+
+    return {
+      name: user?.name ?? "(unknown)",
+      email: user?.email ?? "",
+      maxHoursPerWeek: profile.maxHoursPerWeek,
+      syncAsyncPreference: profile.syncAsyncPreference,
+      availabilitySubmitted: profile.availabilitySubmittedAt !== undefined,
+      dutyTypePrefNames: profile.dutyTypePrefs
+        .map((id) => dutyNames.get(id as string))
+        .filter((n): n is string => n !== undefined),
+      sectionPrefNumbers: await sectionNumbers(profile.sectionPrefs),
+      enrolledSectionNumbers: await sectionNumbers(profile.enrolledSectionRefs),
+      blocks: blocks.map((b) => ({
+        day: b.day,
+        startMin: b.startMin,
+        endMin: b.endMin,
+        status: b.status,
+        source: b.source,
+      })),
+      exceptions: exceptions.map((e) => ({
+        startDate: e.startDate,
+        endDate: e.endDate,
+        reason: e.reason,
+      })),
+    };
+  },
+});
 
 // ---------------------------------------------------------------------------
 // overrideAssignment — manual upsert; returns conflict flags for the UI

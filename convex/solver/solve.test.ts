@@ -21,6 +21,23 @@ function ta(id: string, overrides: Partial<SolverTaProfile> = {}): SolverTaProfi
   };
 }
 
+/**
+ * Paint a TA fully "available" Mon-Fri. New semantics: unpainted time is
+ * UNAVAILABLE, so every fixture must paint availability explicitly.
+ */
+function fullAvailability(
+  taId: string,
+  status: "available" | "prefer_not" = "available",
+): SolverAvailabilityBlock[] {
+  return DAYS.map((day) => ({
+    taProfileId: taId,
+    day,
+    startMin: 0,
+    endMin: 1440,
+    status,
+  }));
+}
+
 function baseInput(overrides: Partial<SolveInput> = {}): SolveInput {
   return {
     shifts: [],
@@ -50,6 +67,27 @@ function assertHardConstraints(input: SolveInput, out: ReturnType<typeof solve>)
       if (b.taProfileId !== a.taProfileId || b.status !== "unavailable") continue;
       if (b.day === s.day && b.startMin < s.endMin && s.startMin < b.endMin) {
         throw new Error(`assignment ${a.shiftId}/${a.taProfileId} overlaps unavailable block`);
+      }
+    }
+    // coverage: the whole window must be painted available/prefer_not
+    {
+      const intervals = input.availability
+        .filter(
+          (b) =>
+            b.taProfileId === a.taProfileId &&
+            b.day === s.day &&
+            b.status !== "unavailable",
+        )
+        .sort((x, y) => x.startMin - y.startMin);
+      let cur = s.startMin;
+      for (const b of intervals) {
+        if (b.startMin > cur) break;
+        if (b.endMin > cur) cur = b.endMin;
+      }
+      if (cur < s.endMin) {
+        throw new Error(
+          `assignment ${a.shiftId}/${a.taProfileId} window not fully covered by availability`,
+        );
       }
     }
     // date exceptions for once shifts
@@ -97,6 +135,7 @@ describe("solve", () => {
   it("fully fills a feasible case", () => {
     const input = baseInput({
       taProfiles: [ta("ta-a"), ta("ta-b")],
+      availability: [...fullAvailability("ta-a"), ...fullAvailability("ta-b")],
       shifts: [
         {
           id: "w1", kind: "weekly_sync", dutyTypeId: "office", requiredCount: 1,
@@ -130,6 +169,9 @@ describe("solve", () => {
     const input = baseInput({
       taProfiles: [ta("ta-a")],
       availability: [
+        // Painted available all week, but Monday is explicitly unavailable:
+        // an overlapping "unavailable" block is hard even when covered.
+        ...fullAvailability("ta-a"),
         { taProfileId: "ta-a", day: "M", startMin: 0, endMin: 1440, status: "unavailable" },
       ],
       shifts: [
@@ -148,12 +190,103 @@ describe("solve", () => {
     assertHardConstraints(input, out);
   });
 
+  it("treats unpainted time as unavailable (no availability at all)", () => {
+    const input = baseInput({
+      taProfiles: [ta("ta-a")], // never painted anything
+      shifts: [
+        {
+          id: "w1", kind: "weekly_sync", dutyTypeId: "office", requiredCount: 1,
+          day: "M", startMin: 600, endMin: 660,
+          startDate: "2026-02-02", endDate: "2026-02-27",
+        },
+      ],
+    });
+    const out = solve(input);
+    expect(out.assignments).toEqual([]);
+    expect(out.diagnostics.unfilledShifts).toEqual([{ shiftId: "w1", missing: 1 }]);
+  });
+
+  it("requires the FULL shift window to be covered", () => {
+    const shifts: SolverShift[] = [
+      {
+        id: "w1", kind: "weekly_sync", dutyTypeId: "office", requiredCount: 1,
+        day: "M", startMin: 600, endMin: 660,
+        startDate: "2026-02-02", endDate: "2026-02-27",
+      },
+    ];
+    // Partial cover (600-630 of a 600-660 shift) -> ineligible
+    const partial = solve(
+      baseInput({
+        taProfiles: [ta("ta-a")],
+        availability: [
+          { taProfileId: "ta-a", day: "M", startMin: 600, endMin: 630, status: "available" },
+        ],
+        shifts,
+      }),
+    );
+    expect(partial.assignments).toEqual([]);
+    expect(partial.diagnostics.unfilledShifts).toEqual([{ shiftId: "w1", missing: 1 }]);
+
+    // Adjacent available + prefer_not blocks together cover the window -> eligible
+    const stitched = solve(
+      baseInput({
+        taProfiles: [ta("ta-a")],
+        availability: [
+          { taProfileId: "ta-a", day: "M", startMin: 600, endMin: 630, status: "available" },
+          { taProfileId: "ta-a", day: "M", startMin: 630, endMin: 660, status: "prefer_not" },
+        ],
+        shifts,
+      }),
+    );
+    expect(stitched.assignments).toEqual([
+      { shiftId: "w1", taProfileId: "ta-a", locked: false },
+    ]);
+    expect(stitched.diagnostics.unfilledShifts).toEqual([]);
+  });
+
+  it("keeps prefer_not as a soft penalty: assignable, but loses to available", () => {
+    const shifts: SolverShift[] = [
+      {
+        id: "w1", kind: "weekly_sync", dutyTypeId: "office", requiredCount: 1,
+        day: "M", startMin: 600, endMin: 660,
+        startDate: "2026-02-02", endDate: "2026-02-27",
+      },
+    ];
+    // Only choice is prefer_not-covered -> still assigned (soft, not hard)
+    const solo = solve(
+      baseInput({
+        taProfiles: [ta("ta-a")],
+        availability: fullAvailability("ta-a", "prefer_not"),
+        shifts,
+      }),
+    );
+    expect(solo.assignments).toEqual([
+      { shiftId: "w1", taProfileId: "ta-a", locked: false },
+    ]);
+
+    // Given an equally-preferenced available TA, the available one wins
+    const duo = solve(
+      baseInput({
+        taProfiles: [ta("ta-a"), ta("ta-b")],
+        availability: [
+          ...fullAvailability("ta-a", "prefer_not"),
+          ...fullAvailability("ta-b", "available"),
+        ],
+        shifts,
+      }),
+    );
+    expect(duo.assignments).toEqual([
+      { shiftId: "w1", taProfileId: "ta-b", locked: false },
+    ]);
+  });
+
   it("gives a section-ranked TA the shift over an indifferent equal", () => {
     const input = baseInput({
       taProfiles: [
         ta("ta-b"), // indifferent, listed first on purpose
         ta("ta-a", { sectionPrefs: ["sec-1"] }),
       ],
+      availability: [...fullAvailability("ta-a"), ...fullAvailability("ta-b")],
       shifts: [
         {
           id: "w1", kind: "weekly_sync", dutyTypeId: "office", sectionId: "sec-1",
@@ -171,6 +304,7 @@ describe("solve", () => {
   it("preserves locked assignments across regenerate", () => {
     const input = baseInput({
       taProfiles: [ta("ta-a", { sectionPrefs: ["sec-1"] }), ta("ta-b")],
+      availability: [...fullAvailability("ta-a"), ...fullAvailability("ta-b")],
       shifts: [
         {
           id: "w1", kind: "weekly_sync", dutyTypeId: "office", sectionId: "sec-1",
@@ -202,6 +336,7 @@ describe("solve", () => {
     const solo = solve(
       baseInput({
         taProfiles: [ta("ta-a")],
+        availability: fullAvailability("ta-a"),
         dateExceptions: [
           { taProfileId: "ta-a", startDate: "2026-02-09", endDate: "2026-02-13" },
         ],
@@ -215,6 +350,7 @@ describe("solve", () => {
     const duo = solve(
       baseInput({
         taProfiles: [ta("ta-a"), ta("ta-b")],
+        availability: [...fullAvailability("ta-a"), ...fullAvailability("ta-b")],
         dateExceptions: [
           { taProfileId: "ta-a", startDate: "2026-02-09", endDate: "2026-02-13" },
           { taProfileId: "ta-b", startDate: "2026-02-16", endDate: "2026-02-17" },
@@ -253,6 +389,7 @@ describe("solve", () => {
   it("reports hard violations for conflicting locked assignments but keeps them", () => {
     const input = baseInput({
       taProfiles: [ta("ta-a")],
+      availability: fullAvailability("ta-a"),
       shifts: [
         {
           id: "w1", kind: "weekly_sync", dutyTypeId: "office", requiredCount: 1,
@@ -319,16 +456,23 @@ function generateFixture(numTas: number, numShifts: number, seed: number): Solve
       dutyTypePrefs: [...dutyTypes].sort(() => rnd() - 0.5).slice(0, 3),
       sectionPrefs: [...sections].sort(() => rnd() - 0.5).slice(0, 4),
     });
-    // a couple of unavailable / prefer_not blocks per TA
-    for (let b = 0; b < 3; b++) {
-      const start = 480 + Math.floor(rnd() * 8) * 60;
-      availability.push({
-        taProfileId: id,
-        day: pick(DAYS),
-        startMin: start,
-        endMin: start + 120,
-        status: rnd() < 0.6 ? "unavailable" : "prefer_not",
-      });
+    // Paint availability explicitly: unpainted time is UNAVAILABLE. Walk
+    // each day 8:00-20:00 in hour chunks; mostly available, with some
+    // prefer_not, unavailable, and unpainted gaps.
+    for (const day of DAYS) {
+      for (let start = 480; start < 1200; start += 60) {
+        const roll = rnd();
+        const status =
+          roll < 0.7 ? "available" : roll < 0.85 ? "prefer_not" : roll < 0.95 ? "unavailable" : null;
+        if (status === null) continue; // unpainted gap
+        availability.push({
+          taProfileId: id,
+          day,
+          startMin: start,
+          endMin: start + 60,
+          status,
+        });
+      }
     }
   }
 

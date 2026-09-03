@@ -1,27 +1,38 @@
-import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@workos-inc/authkit-react";
 import {
-  CalendarClock,
+  CalendarCheck,
   CalendarDays,
+  CalendarRange,
+  Check,
+  ChevronDown,
   ChevronsUpDown,
-  Clock3,
-  Command as CommandIcon,
+  Clock,
   History,
-  LayoutGrid,
   LogOut,
+  Plus,
+  Search,
   SlidersHorizontal,
-  Tags,
+  Tag,
   Users,
   Wand2,
   type LucideIcon,
 } from "lucide-react";
 import { useCurrentUser } from "../lib/useCurrentUser";
-import { usePeriod, PeriodProvider } from "../lib/period";
+import { usePeriod, PeriodProvider, type PeriodStatus } from "../lib/period";
 import type { Role } from "../lib/api";
+import { Toaster } from "./ui";
 import { CommandPalette } from "./CommandPalette";
 import { DevRoleSwitcher } from "./DevRoleSwitcher";
 import { ErrorBoundary } from "./ErrorBoundary";
+
+/* App shell per Shell.dc.html / Nav.dc.html: 208px left nav (full height),
+   52px top bar, scrollable content. Dark-only, tokens from src/index.css. */
+
+function cx(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
 
 interface NavItem {
   label: string;
@@ -30,83 +41,289 @@ interface NavItem {
 }
 
 const TA_NAV: NavItem[] = [
-  { label: "Availability", to: "/ta/availability", icon: CalendarDays },
-  { label: "My Schedule", to: "/ta/schedule", icon: CalendarClock },
-  { label: "Hours", to: "/ta/hours", icon: Clock3 },
+  { label: "Availability", to: "/ta/availability", icon: CalendarCheck },
+  { label: "My Schedule", to: "/ta/schedule", icon: CalendarDays },
+  { label: "Hours", to: "/ta/hours", icon: Clock },
   { label: "Preferences", to: "/ta/onboarding", icon: SlidersHorizontal },
 ];
 
 const COORDINATOR_NAV: NavItem[] = [
   { label: "Roster", to: "/coordinator/roster", icon: Users },
-  { label: "Duty Types", to: "/coordinator/duty-types", icon: Tags },
-  { label: "Shifts", to: "/coordinator/shifts", icon: LayoutGrid },
+  { label: "Duty Types", to: "/coordinator/duty-types", icon: Tag },
+  { label: "Shifts", to: "/coordinator/shifts", icon: CalendarRange },
   { label: "Builder", to: "/coordinator/builder", icon: Wand2 },
-  { label: "Hours", to: "/coordinator/hours", icon: Clock3 },
+  { label: "Hours", to: "/coordinator/hours", icon: Clock },
   { label: "Changelog", to: "/coordinator/changelog", icon: History },
 ];
 
-function RoleBadge({ role }: { role?: Role }) {
-  if (!role) return null;
+const STATUS_LABEL: Record<PeriodStatus, string> = {
+  draft: "Draft",
+  collecting: "Collecting",
+  generated: "Generated",
+  published: "Published",
+};
+
+/* ------------------------------------------------------------------ */
+/* Left nav — 208px, surface bg, red active icon, mono footer          */
+/* ------------------------------------------------------------------ */
+
+function SideNav({ role, userLoading }: { role?: Role; userLoading: boolean }) {
+  const { selected, loading: periodLoading } = usePeriod();
+  const items = role === "coordinator" ? COORDINATOR_NAV : TA_NAV;
+
+  const footer = periodLoading
+    ? "Loading…"
+    : selected
+      ? `${selected.term} · ${STATUS_LABEL[selected.status]}`
+      : "No period selected";
+
   return (
-    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-neutral-600">
-      {role === "coordinator" ? "Coordinator" : "TA"}
-    </span>
+    <aside className="row-span-2 flex flex-col gap-0.5 border-r border-line bg-surface px-2.5 pb-4 pt-3.5">
+      <div className="flex items-center gap-2 px-2 pb-4 pt-1">
+        <span
+          className="size-2 rounded-full bg-umd shadow-[0_0_10px_rgba(226,24,51,0.6)]"
+          aria-hidden
+        />
+        <span className="text-[14px] font-semibold tracking-[-0.02em]">TerpTA</span>
+      </div>
+      <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
+        {userLoading ? (
+          <>
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-8 animate-pulse rounded-lg bg-[rgba(255,255,255,0.03)]"
+              />
+            ))}
+          </>
+        ) : role === undefined ? (
+          <p className="px-2 py-1 text-[12px] text-faint">Choose a role to get started.</p>
+        ) : (
+          items.map(({ label, to, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                cx(
+                  "flex h-8 shrink-0 items-center gap-2.5 rounded-lg px-2 text-[13px] transition-colors duration-150",
+                  isActive
+                    ? "bg-[rgba(255,255,255,0.06)] text-[#F4F4F5]"
+                    : "text-muted hover:bg-[rgba(255,255,255,0.06)] hover:text-ink",
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon
+                    size={16}
+                    strokeWidth={1.5}
+                    className={cx("shrink-0", isActive ? "text-umd" : "text-faint")}
+                    aria-hidden
+                  />
+                  {label}
+                </>
+              )}
+            </NavLink>
+          ))
+        )}
+      </nav>
+      <div className="flex items-center gap-2 border-t border-[rgba(255,255,255,0.06)] px-2 pt-2 font-mono text-[11px] text-faint">
+        {footer}
+      </div>
+    </aside>
   );
 }
 
-function CourseSwitcherStub() {
-  const { label } = usePeriod();
-  return (
-    <button
-      type="button"
-      disabled
-      title="Course/term switching lands with period setup"
-      className="flex w-full items-center justify-between rounded-md border border-neutral-200 px-2.5 py-2 text-left text-sm text-neutral-500"
-    >
-      <span className="truncate">{label}</span>
-      <ChevronsUpDown className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden />
-    </button>
-  );
+/* ------------------------------------------------------------------ */
+/* Top bar pieces                                                      */
+/* ------------------------------------------------------------------ */
+
+function useEscape(active: boolean, onEscape: () => void) {
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onEscape();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [active, onEscape]);
 }
 
-function UserMenu({ name, email }: { name?: string; email?: string }) {
-  const { signOut } = useAuth();
+function CourseSwitcher({ role }: { role?: Role }) {
+  const { entries, selected, loading, selectPeriod } = usePeriod();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  useEscape(open, () => setOpen(false));
 
   return (
     <div className="relative">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-neutral-100"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex h-[30px] cursor-pointer items-center gap-2 rounded-lg border border-line bg-[rgba(255,255,255,0.03)] pl-3 pr-2.5 transition-colors duration-150 hover:bg-[rgba(255,255,255,0.07)]"
       >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-xs font-semibold text-neutral-700">
-          {(name ?? email ?? "?").slice(0, 1).toUpperCase()}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-neutral-800">
-            {name ?? "Account"}
+        {selected ? (
+          <>
+            <span className="font-mono text-[12.5px] font-medium">{selected.courseId}</span>
+            <span className="text-[#5B5B64]">·</span>
+            <span className="text-[12.5px] text-[#C9C9CF]">{selected.term}</span>
+          </>
+        ) : (
+          <span className="text-[12.5px] text-faint">
+            {loading ? "Loading…" : "No course"}
           </span>
-          <span className="block truncate text-xs text-neutral-500">
-            {email}
-          </span>
-        </span>
+        )}
+        <ChevronsUpDown size={14} strokeWidth={1.5} className="text-faint" aria-hidden />
       </button>
       {open ? (
         <>
           <button
             type="button"
             aria-label="Close menu"
-            className="fixed inset-0 z-10 cursor-default"
+            className="fixed inset-0 z-40 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute bottom-full left-0 z-20 mb-1 w-full rounded-md border border-neutral-200 bg-white py-1 shadow-lg">
+          <div
+            role="menu"
+            className="absolute left-0 top-[34px] z-50 min-w-[240px] rounded-[10px] border border-line-strong bg-popover p-1 shadow-[0_16px_48px_rgba(0,0,0,0.55)]"
+          >
+            {entries.length === 0 ? (
+              <p className="px-2.5 py-3 text-[12.5px] text-faint">
+                {loading ? "Loading…" : "No staffing periods yet"}
+              </p>
+            ) : (
+              entries.map((e) => {
+                const isSelected = e.periodId === selected?.periodId;
+                return (
+                  <button
+                    key={e.periodId}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      selectPeriod(e.periodId);
+                      setOpen(false);
+                    }}
+                    className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-[7px] px-2.5 text-left transition-colors duration-100 hover:bg-[rgba(255,255,255,0.06)]"
+                  >
+                    <span className="font-mono text-[12.5px] font-medium">{e.courseId}</span>
+                    <span className="text-[#5B5B64]">·</span>
+                    <span className="flex-1 truncate text-[12.5px] text-muted">{e.term}</span>
+                    {isSelected ? (
+                      <Check size={14} strokeWidth={1.5} className="text-ink" aria-hidden />
+                    ) : null}
+                  </button>
+                );
+              })
+            )}
+            {role === "coordinator" ? (
+              <>
+                <div className="mx-1 my-1 border-t border-line" aria-hidden />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    navigate("/coordinator/setup");
+                  }}
+                  className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-[7px] px-2.5 text-left text-[12.5px] text-muted transition-colors duration-100 hover:bg-[rgba(255,255,255,0.06)] hover:text-ink"
+                >
+                  <Plus size={14} strokeWidth={1.5} aria-hidden />
+                  New staffing period…
+                </button>
+              </>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function PaletteTrigger({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex h-[30px] w-[260px] cursor-pointer items-center gap-2 rounded-lg border border-line bg-[rgba(255,255,255,0.03)] pl-2.5 pr-2 text-[12.5px] text-faint transition-colors duration-150 hover:border-[rgba(255,255,255,0.14)] hover:bg-[rgba(255,255,255,0.06)]"
+    >
+      <Search size={14} strokeWidth={1.5} aria-hidden />
+      <span className="flex-1 text-left">Search or jump to…</span>
+      <span className="rounded-[5px] border border-[rgba(255,255,255,0.10)] bg-[rgba(255,255,255,0.04)] px-[5px] py-px font-mono text-[10.5px] text-[#8A8A93]">
+        ⌘K
+      </span>
+    </button>
+  );
+}
+
+function RoleBadge({ role }: { role?: Role }) {
+  if (!role) return null;
+  return (
+    <span className="flex h-6 items-center rounded-[6px] border border-[rgba(226,24,51,0.28)] bg-[rgba(226,24,51,0.12)] px-2 text-[11.5px] font-medium tracking-[0.01em] text-[#F4A3AE]">
+      {role === "coordinator" ? "Coordinator" : "TA"}
+    </span>
+  );
+}
+
+function initialsOf(name?: string, email?: string) {
+  const source = name?.trim() || email || "?";
+  const words = source.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return source.slice(0, 2).toUpperCase();
+}
+
+function UserMenu({
+  name,
+  email,
+  onSignOut,
+}: {
+  name?: string;
+  email?: string;
+  onSignOut: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  useEscape(open, () => setOpen(false));
+  const firstName = name?.trim().split(/\s+/)[0] ?? "Account";
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex h-[30px] cursor-pointer items-center gap-2 rounded-lg pl-1 pr-1.5 transition-colors duration-150 hover:bg-[rgba(255,255,255,0.06)]"
+      >
+        <span className="flex size-6 items-center justify-center rounded-full bg-gradient-to-br from-[#2B2B33] to-[#3A3A45] text-[10.5px] font-semibold text-ink">
+          {initialsOf(name, email)}
+        </span>
+        <span className="text-[12.5px]">{firstName}</span>
+        <ChevronDown size={14} strokeWidth={1.5} className="text-faint" aria-hidden />
+      </button>
+      {open ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="fixed inset-0 z-40 cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            role="menu"
+            className="absolute right-0 top-[36px] z-50 w-56 rounded-[10px] border border-line-strong bg-popover p-1 shadow-[0_16px_48px_rgba(0,0,0,0.55)]"
+          >
+            <div className="border-b border-line px-2.5 py-2">
+              <p className="truncate text-[12.5px] font-medium text-ink">{name ?? "Account"}</p>
+              {email ? <p className="truncate text-[11.5px] text-faint">{email}</p> : null}
+            </div>
             <button
               type="button"
-              onClick={() => void signOut()}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+              role="menuitem"
+              onClick={onSignOut}
+              className="mt-1 flex h-8 w-full cursor-pointer items-center gap-2 rounded-[7px] px-2.5 text-left text-[12.5px] text-ink transition-colors duration-100 hover:bg-[rgba(255,255,255,0.06)]"
             >
-              <LogOut className="h-4 w-4" aria-hidden />
+              <LogOut size={14} strokeWidth={1.5} className="text-faint" aria-hidden />
               Sign out
             </button>
           </div>
@@ -116,13 +333,55 @@ function UserMenu({ name, email }: { name?: string; email?: string }) {
   );
 }
 
-export function AppShell() {
+/* ------------------------------------------------------------------ */
+/* Shell layout — pure view, so a DEV preview harness can render it    */
+/* (wrap in a router + StaticPeriodProvider; pass data via props).     */
+/* ------------------------------------------------------------------ */
+
+export function AppShellView({
+  role,
+  userLoading = false,
+  userName,
+  userEmail,
+  onSignOut,
+  onOpenPalette,
+  children,
+}: {
+  role?: Role;
+  userLoading?: boolean;
+  userName?: string;
+  userEmail?: string;
+  onSignOut: () => void;
+  onOpenPalette: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid h-dvh grid-cols-[208px_1fr] grid-rows-[52px_1fr] bg-page text-ink">
+      <SideNav role={role} userLoading={userLoading} />
+      <header className="flex h-[52px] items-center gap-3 border-b border-line px-5">
+        <CourseSwitcher role={role} />
+        <div className="flex-1" />
+        {role === "coordinator" ? <PaletteTrigger onOpen={onOpenPalette} /> : null}
+        <RoleBadge role={role} />
+        <UserMenu name={userName} email={userEmail} onSignOut={onSignOut} />
+      </header>
+      <main className="min-w-0 overflow-y-auto">
+        <div className="px-7 py-6">{children}</div>
+      </main>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Connected shell                                                     */
+/* ------------------------------------------------------------------ */
+
+function ShellInner() {
   const me = useCurrentUser();
-  const { user: workosUser } = useAuth();
+  const { user: workosUser, signOut } = useAuth();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const role = me?.role;
-  const nav = role === "coordinator" ? COORDINATOR_NAV : TA_NAV;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -135,72 +394,36 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const name =
+    me?.name ??
+    [workosUser?.firstName, workosUser?.lastName].filter(Boolean).join(" ") ??
+    undefined;
+
+  return (
+    <>
+      <AppShellView
+        role={role}
+        userLoading={me === undefined}
+        userName={name || undefined}
+        userEmail={me?.email ?? workosUser?.email}
+        onSignOut={() => void signOut()}
+        onOpenPalette={() => setPaletteOpen(true)}
+      >
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
+      </AppShellView>
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} role={role} />
+      <Toaster />
+      <DevRoleSwitcher currentRole={role} />
+    </>
+  );
+}
+
+export function AppShell() {
   return (
     <PeriodProvider>
-      <div className="flex min-h-screen">
-        <aside className="flex w-60 shrink-0 flex-col border-r border-neutral-200">
-          <div className="flex items-center justify-between px-4 pb-2 pt-4">
-            <span className="text-base font-bold tracking-tight">TerpTA</span>
-            <RoleBadge role={role} />
-          </div>
-          <div className="px-3 pb-3">
-            <CourseSwitcherStub />
-          </div>
-          <nav className="flex-1 space-y-0.5 px-3">
-            {role === undefined && me === undefined ? (
-              <p className="px-2 py-1 text-xs text-neutral-400">Loading…</p>
-            ) : (
-              nav.map(({ label, to, icon: Icon }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  className={({ isActive }) =>
-                    "flex items-center gap-2 rounded-md px-2 py-2 text-sm " +
-                    (isActive
-                      ? "bg-neutral-100 font-medium text-neutral-900"
-                      : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900")
-                  }
-                >
-                  <Icon className="h-4 w-4" aria-hidden />
-                  {label}
-                </NavLink>
-              ))
-            )}
-          </nav>
-          {role === "coordinator" ? (
-            <div className="px-3 pb-1">
-              <button
-                type="button"
-                onClick={() => setPaletteOpen(true)}
-                className="flex w-full items-center gap-2 rounded-md border border-neutral-200 px-2.5 py-2 text-sm text-neutral-500 hover:bg-neutral-50"
-              >
-                <CommandIcon className="h-4 w-4" aria-hidden />
-                Command menu
-                <kbd className="ml-auto rounded border border-neutral-200 px-1 text-[10px] text-neutral-400">
-                  ⌘K
-                </kbd>
-              </button>
-            </div>
-          ) : null}
-          <div className="border-t border-neutral-200 p-2">
-            <UserMenu
-              name={me?.name ?? workosUser?.firstName ?? undefined}
-              email={me?.email ?? workosUser?.email}
-            />
-          </div>
-        </aside>
-        <main className="min-w-0 flex-1 px-8 py-6">
-          <ErrorBoundary>
-            <Outlet />
-          </ErrorBoundary>
-        </main>
-      </div>
-      <CommandPalette
-        open={paletteOpen}
-        onOpenChange={setPaletteOpen}
-        role={role}
-      />
-      <DevRoleSwitcher currentRole={role} />
+      <ShellInner />
     </PeriodProvider>
   );
 }
