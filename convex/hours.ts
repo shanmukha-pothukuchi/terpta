@@ -43,6 +43,7 @@ export const list = query({
       hours: v.number(),
       status: hourLogStatusValidator,
       note: v.optional(v.string()),
+      flagNote: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -108,6 +109,7 @@ export const list = query({
           hours: log.hours,
           status: log.status,
           note: log.note,
+          flagNote: log.flagNote,
         });
       }
     }
@@ -160,14 +162,56 @@ export const flag = mutation({
     const profile = await ctx.db.get(log.taProfileRef);
     if (!profile) throw new ConvexError("TA profile not found");
     await requireCoordinator(ctx, profile.periodRef);
-    if (args.note !== undefined && args.note !== "") {
-      const combined = log.note
-        ? `${log.note} | flagged: ${args.note}`
-        : `flagged: ${args.note}`;
-      await ctx.db.patch(args.hourLogId, { status: "flagged", note: combined });
-    } else {
-      await ctx.db.patch(args.hourLogId, { status: "flagged" });
+    // Replaces any previous reason rather than appending, so flagging twice
+    // does not build up a run-on note.
+    await ctx.db.patch(args.hourLogId, {
+      status: "flagged",
+      flagNote: args.note?.trim() ? args.note.trim() : undefined,
+    });
+    return null;
+  },
+});
+
+/**
+ * Lift a flag, returning the log to the queue for a normal decision.
+ *
+ * Flagging is a question, not a verdict — without this a coordinator who
+ * flagged the wrong row could only escape by approving it.
+ */
+export const unflag = mutation({
+  args: { hourLogId: v.id("hourLogs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const log = await ctx.db.get(args.hourLogId);
+    if (!log) throw new ConvexError("Hour log not found");
+    const profile = await ctx.db.get(log.taProfileRef);
+    if (!profile) throw new ConvexError("TA profile not found");
+    await requireCoordinator(ctx, profile.periodRef);
+    if (log.status !== "flagged") {
+      throw new ConvexError("That hour log is not flagged");
     }
+    await ctx.db.patch(args.hourLogId, {
+      status: "submitted",
+      flagNote: undefined,
+    });
+    return null;
+  },
+});
+
+/** Undo an approval made by mistake, back to the pending queue. */
+export const unapprove = mutation({
+  args: { hourLogId: v.id("hourLogs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const log = await ctx.db.get(args.hourLogId);
+    if (!log) throw new ConvexError("Hour log not found");
+    const profile = await ctx.db.get(log.taProfileRef);
+    if (!profile) throw new ConvexError("TA profile not found");
+    await requireCoordinator(ctx, profile.periodRef);
+    if (log.status !== "approved") {
+      throw new ConvexError("That hour log is not approved");
+    }
+    await ctx.db.patch(args.hourLogId, { status: "submitted" });
     return null;
   },
 });

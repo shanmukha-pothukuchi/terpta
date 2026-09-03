@@ -16,6 +16,7 @@ export interface EventsStripProps {
   highlight: Highlight;
   onOpenTa: (taProfileRef: Id<"taProfiles">) => void;
   onToggleLock: (assignmentRef: Id<"assignments">) => void;
+  onRemoveAssignment: (assignmentRef: Id<"assignments">) => void;
 }
 
 function EventCard({
@@ -24,12 +25,14 @@ function EventCard({
   highlight,
   onOpenTa,
   onToggleLock,
+  onRemoveAssignment,
 }: {
   model: BuilderModel;
   shift: ShiftRow;
   highlight: Highlight;
   onOpenTa: (taProfileRef: Id<"taProfiles">) => void;
   onToggleLock: (assignmentRef: Id<"assignments">) => void;
+  onRemoveAssignment: (assignmentRef: Id<"assignments">) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `shift:${shift._id}` });
   const assigned = model.assignmentsByShift.get(shift._id as string) ?? [];
@@ -111,6 +114,7 @@ function EventCard({
               tooltip={conflicts.map((c) => c.detail).join(" · ") || undefined}
               onOpen={() => onOpenTa(a.taProfileRef)}
               onToggleLock={() => onToggleLock(a._id)}
+              onRemove={() => onRemoveAssignment(a._id)}
             />
           );
         })}
@@ -133,6 +137,7 @@ export function EventsStrip({
   highlight,
   onOpenTa,
   onToggleLock,
+  onRemoveAssignment,
 }: EventsStripProps) {
   const staffed = model.events.reduce(
     (n, e) => n + (model.assignmentsByShift.get(e._id as string)?.length ?? 0),
@@ -168,6 +173,7 @@ export function EventsStrip({
               highlight={highlight}
               onOpenTa={onOpenTa}
               onToggleLock={onToggleLock}
+          onRemoveAssignment={onRemoveAssignment}
             />
           ))}
         </div>

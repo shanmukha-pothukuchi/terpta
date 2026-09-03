@@ -1,6 +1,7 @@
-import { useDraggable } from "@dnd-kit/core";
-import { GripVertical } from "lucide-react";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { GripVertical, TriangleAlert } from "lucide-react";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { Tooltip } from "../../../components/ui";
 import { firstName, type BuilderModel, type Highlight, type RosterRow } from "./model";
 
 export interface RosterPanelProps {
@@ -60,20 +61,30 @@ function RosterRowView({
           {name}
         </button>
       </span>
-      <span className="relative h-1 flex-1 overflow-hidden rounded-[2px] bg-[rgba(255,255,255,0.06)]">
+      {/* The track carries its own ring so an empty bar reads as a real zero
+          rather than a bar that failed to render. A non-zero load never
+          rounds away to nothing either — it keeps a visible sliver. */}
+      <span className="relative h-1 min-w-0 flex-1 overflow-hidden rounded-[2px] bg-[rgba(255,255,255,0.05)] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.10)]">
         <span
-          className="absolute bottom-0 left-0 top-0 rounded-[2px] transition-[width] duration-200"
+          className="absolute top-0 bottom-0 left-0 rounded-[2px] transition-[width] duration-200"
           style={{
-            width: `${pct}%`,
-            background: isOver ? "#F5A524" : hours === 0 ? "transparent" : "#3DD68C",
+            width: hours > 0 ? `${Math.max(pct, 4)}%` : 0,
+            background: isOver ? "#F5A524" : "#3DD68C",
           }}
         />
       </span>
       <span
-        className="min-w-12 text-right font-mono text-[11px]"
+        className="flex shrink-0 items-center justify-end gap-[4px] text-right font-mono text-[11px]"
         style={{ color: isOver ? "#F7C566" : "#9A9AA3" }}
       >
-        {row.status === "missing" ? "no avail." : `${hours} / ${cap}h`}
+        {/* "No availability" is a separate signal — it must not replace the
+            numbers, or an assigned TA's real load disappears behind a word. */}
+        {row.status === "missing" ? (
+          <Tooltip label="No availability submitted" className="shrink-0 items-center">
+            <TriangleAlert size={11} strokeWidth={1.5} className="text-warn" />
+          </Tooltip>
+        ) : null}
+        <span className="min-w-12 truncate">{`${hours} / ${cap}h`}</span>
       </span>
     </div>
   );
@@ -84,11 +95,23 @@ export function RosterPanel({ model, highlight, onOpenTa }: RosterPanelProps) {
   const rows = [...model.rosterByTa.values()].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
+  // Dropping an assigned chip back here unassigns it. Shifts used to be the
+  // only droppables, so a drag meant to remove someone hit nothing at all.
+  const { setNodeRef, isOver } = useDroppable({ id: "unassign" });
+
   return (
-    <div className="overflow-hidden rounded-[12px] border border-line bg-surface">
+    <div
+      ref={setNodeRef}
+      className={
+        "overflow-hidden rounded-[12px] border bg-surface transition-colors duration-150 " +
+        (isOver ? "border-[rgba(226,24,51,0.7)]" : "border-line")
+      }
+    >
       <div className="flex h-10 items-center gap-[10px] border-b border-line px-[14px]">
-        <div className="text-[13px] font-medium">Roster</div>
-        <div className="text-xs text-faint">Drag a name into any slot</div>
+        <div className="shrink-0 text-[13px] font-medium">Roster</div>
+        <div className="min-w-0 truncate text-xs text-faint">
+          {isOver ? "Drop to unassign" : "Drag a name into any slot"}
+        </div>
       </div>
       <div className="flex flex-col gap-px p-[6px]">
         {rows.length === 0 ? (

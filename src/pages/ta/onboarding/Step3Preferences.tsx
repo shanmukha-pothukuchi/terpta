@@ -12,6 +12,10 @@
  *    (syncAsyncFromDuties() in model.ts derives the axis the solver wants);
  *  - only ranked sections are listed; the rest hide behind "+ Add a section",
  *    and the "No preference" toggle is gone (an empty list says it already);
+ *  - the picker is split: a TA can only rank a section they could physically
+ *    attend. Sections that collide with their step-1 classes are still shown,
+ *    disabled and captioned with the clash, because "why can't I pick 0104?"
+ *    deserves an answer on screen rather than a silent omission;
  *  - a new advisory conflict card reconciles the step-1 classes against the
  *    ranking. It never blocks and never disables anything.
  *
@@ -30,16 +34,18 @@ import {
 } from "@dnd-kit/core";
 import { GripVertical, Plus, TriangleAlert, X } from "lucide-react";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { Card } from "../../../components/ui";
+import { Card, Tooltip } from "../../../components/ui";
 import { DAY_SHORT, formatMeeting, formatTime } from "../../../lib/format";
 import {
   DEFAULT_HOURS,
   MAX_HOURS,
   MIN_HOURS,
+  conflictBySectionId,
   findConflicts,
   type ClassesValue,
   type PreferencesValue,
   type SchedulableSection,
+  type SectionConflict,
 } from "./model";
 
 /* ------------------------------------------------------------------ */
@@ -85,6 +91,11 @@ function meetingsLabel(meetings: SchedulableSection["meetings"]): string {
   return meetings.map((m) => formatMeeting(m.day, m.startMin, m.endMin)).join(" · ");
 }
 
+/** "Tu 9:30a · CMSC131" — when the section meets and what it runs into. */
+function conflictLabel(c: SectionConflict): string {
+  return `${c.day} ${formatTime(c.startMin)} · ${c.courseId}`;
+}
+
 /* ------------------------------------------------------------------ */
 /* Ranked section row (dnd-kit core, carried over from Step4)          */
 /* ------------------------------------------------------------------ */
@@ -94,12 +105,15 @@ function RankedSectionRow({
   index,
   sectionNumber,
   meetings,
+  conflict,
   onRemove,
 }: {
   id: string;
   index: number;
   sectionNumber: string;
   meetings: string;
+  /** Set when a class added *after* this was ranked now collides with it. */
+  conflict: SectionConflict | undefined;
   onRemove: () => void;
 }) {
   const {
@@ -140,6 +154,22 @@ function RankedSectionRow({
         <span className="w-12 shrink-0 truncate font-mono text-[13px] text-ink">
           {sectionNumber}
         </span>
+        {/* A choice the TA already made is never dropped for them — it is
+            flagged where they can see it and left in their ranking. The icon
+            sits left of centre so its tooltip cannot run off a 390px screen. */}
+        {conflict ? (
+          <Tooltip
+            label={`Clashes with ${conflict.courseId}, ${conflict.day} ${formatTime(conflict.startMin)}`}
+            className="shrink-0"
+          >
+            <TriangleAlert
+              size={14}
+              strokeWidth={1.5}
+              className="text-warn"
+              aria-label={`Section ${sectionNumber} clashes with your ${conflict.courseId} class`}
+            />
+          </Tooltip>
+        ) : null}
         <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-muted">
           {meetings}
         </span>
@@ -180,7 +210,10 @@ export function Step3Preferences({
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const hours = clampHours(value.maxHoursPerWeek);
-  const fillPct = ((hours - MIN_HOURS) / (MAX_HOURS - MIN_HOURS)) * 100;
+  const fillRatio = (hours - MIN_HOURS) / (MAX_HOURS - MIN_HOURS);
+  const fillPct = fillRatio * 100;
+  /** Half a 16px thumb, shifted so the fill ends under the thumb's centre. */
+  const fillStop = `calc(${fillPct}% + ${(0.5 - fillRatio) * 16}px)`;
 
   const sectionById = useMemo(
     () => new Map(sections.map((s) => [String(s._id), s])),
@@ -207,6 +240,21 @@ export function Step3Preferences({
     () => findConflicts(classes, sections, value.sectionPrefs),
     [classes, sections, value.sectionPrefs],
   );
+  const conflictById = useMemo(() => conflictBySectionId(conflicts), [conflicts]);
+
+  /* The picker is split rather than filtered: a TA who cannot attend a section
+     still needs to see it and read why, otherwise the omission looks like a
+     bug in the import. */
+  const [available, blocked] = useMemo(() => {
+    const free: SchedulableSection[] = [];
+    const clashing: Array<{ section: SchedulableSection; conflict: SectionConflict }> = [];
+    for (const s of unranked) {
+      const conflict = conflictById.get(String(s._id));
+      if (conflict) clashing.push({ section: s, conflict });
+      else free.push(s);
+    }
+    return [free, clashing] as const;
+  }, [unranked, conflictById]);
 
   const patch = (next: Partial<PreferencesValue>) => onChange({ ...value, ...next });
   const setRanked = (ids: string[]) => patch({ sectionPrefs: ids as Id<"sections">[] });
@@ -233,7 +281,7 @@ export function Step3Preferences({
   };
 
   return (
-    <div className="flex min-w-0 max-w-[720px] flex-col gap-3">
+    <div className="mx-auto flex min-w-0 max-w-[720px] flex-col gap-3">
       {/* The reference card is one 18px-gap stack; zero the Card title's own
           bottom margin so the rhythm stays even. */}
       <Card
@@ -261,7 +309,7 @@ export function Step3Preferences({
             aria-label="Max hours per week"
             onChange={(e) => patch({ maxHoursPerWeek: clampHours(Number(e.target.value)) })}
             style={{
-              background: `linear-gradient(to right, var(--color-ink) 0 ${fillPct}%, rgba(255,255,255,0.14) ${fillPct}% 100%)`,
+              background: `linear-gradient(to right, var(--color-ink) 0 ${fillStop}, rgba(255,255,255,0.14) ${fillStop} 100%)`,
               backgroundSize: "100% 3px",
               backgroundPosition: "center",
               backgroundRepeat: "no-repeat",
@@ -351,6 +399,7 @@ export function Step3Preferences({
                         index={i}
                         sectionNumber={s?.sectionNumber ?? "Section"}
                         meetings={meetingsLabel(s?.meetings ?? [])}
+                        conflict={conflictById.get(id)}
                         onRemove={() => setRanked(ranked.filter((x) => x !== id))}
                       />
                     );
@@ -388,7 +437,7 @@ export function Step3Preferences({
                         aria-label="Sections you have not ranked"
                         className="absolute top-full left-0 z-30 mt-1.5 max-h-[220px] w-full min-w-0 overflow-y-auto rounded-[10px] border border-line-strong bg-popover p-1 shadow-[0_18px_40px_rgba(0,0,0,0.55)]"
                       >
-                        {unranked.map((s) => (
+                        {available.map((s) => (
                           <button
                             key={String(s._id)}
                             type="button"
@@ -408,6 +457,52 @@ export function Step3Preferences({
                             </span>
                           </button>
                         ))}
+
+                        {available.length === 0 ? (
+                          <p className="px-2 py-1.5 text-[12px] text-faint [text-wrap:pretty]">
+                            {
+                              "Every remaining section runs during one of your classes."
+                            }
+                          </p>
+                        ) : null}
+
+                        {blocked.length > 0 ? (
+                          <>
+                            <p
+                              role="presentation"
+                              className="mt-1 truncate px-2 pt-1.5 pb-1 text-[11px] text-faint"
+                            >
+                              Conflicts with your classes
+                            </p>
+                            {blocked.map(({ section: s, conflict }) => (
+                              <button
+                                key={String(s._id)}
+                                type="button"
+                                role="option"
+                                aria-selected={false}
+                                aria-disabled
+                                disabled
+                                title={`${s.sectionNumber} meets during your ${conflict.courseId} class`}
+                                className="flex h-8 w-full min-w-0 cursor-not-allowed items-center gap-2 rounded-[6px] px-2 text-left opacity-55"
+                              >
+                                <span className="w-12 shrink-0 truncate font-mono text-[12.5px] text-muted">
+                                  {s.sectionNumber}
+                                </span>
+                                {/* The reason already names the meeting that
+                                    clashes, so the full list only earns its
+                                    space when there is more than one. */}
+                                {s.meetings.length > 1 ? (
+                                  <span className="min-w-0 truncate font-mono text-[11.5px] text-faint">
+                                    {meetingsLabel(s.meetings)}
+                                  </span>
+                                ) : null}
+                                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-faint">
+                                  {conflictLabel(conflict)}
+                                </span>
+                              </button>
+                            ))}
+                          </>
+                        ) : null}
                       </div>
                     </>
                   ) : null}

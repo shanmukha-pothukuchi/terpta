@@ -25,6 +25,7 @@ import {
   DAY_SHORT,
   formatDate,
   formatTimeRange,
+  shortShiftName,
   type DayCode,
 } from "../../lib/format";
 import { errorMessage } from "../../lib/errorMessage";
@@ -54,15 +55,17 @@ const fromTimeInput = (s: string): number | undefined => {
 export function AvailabilityHint({ available, required }: { available: number; required: number }) {
   if (available >= required) {
     return (
-      <span className="font-mono text-[10.5px] text-faint">
-        {available} TA{available === 1 ? "" : "s"} available
+      <span className="truncate font-mono text-[10.5px] text-faint">
+        {available} free
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 font-mono text-[10.5px] text-warn-text">
-      <AlertTriangle size={11} strokeWidth={1.5} aria-hidden />
-      {available === 0 ? "no TAs available" : `only ${available} available`} · needs {required}
+    <span className="inline-flex min-w-0 items-center gap-1 font-mono text-[10.5px] text-warn-text">
+      <AlertTriangle size={11} strokeWidth={1.5} className="shrink-0" aria-hidden />
+      <span className="truncate">
+        {available === 0 ? "none free" : `only ${available} free`}
+      </span>
     </span>
   );
 }
@@ -343,23 +346,36 @@ function ShiftFormModal({
 /* Blocks                                                              */
 /* ------------------------------------------------------------------ */
 
-function WeeklyBlock({ shift, name, onClick }: { shift: ShiftRow; name: string; onClick: () => void }) {
+function WeeklyBlock({
+  shift,
+  name,
+  dutyTypeName,
+  onClick,
+}: {
+  shift: ShiftRow;
+  name: string;
+  dutyTypeName: string;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
+      title={name}
       className="flex w-full cursor-pointer flex-col gap-1 rounded-[8px] border border-line bg-[rgba(255,255,255,0.035)] px-2 py-1.5 text-left transition-colors duration-100 hover:bg-[rgba(255,255,255,0.06)]"
     >
-      <span className="flex items-baseline gap-1.5 whitespace-nowrap">
-        <span className="truncate font-mono text-[11px] font-medium text-[#C9C9CF]">{name}</span>
-        <span className="font-mono text-[10.5px] text-faint">
+      <span className="flex w-full items-baseline gap-1.5 whitespace-nowrap">
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-medium text-[#C9C9CF]">
+          {shortShiftName(name, dutyTypeName)}
+        </span>
+        <span className="shrink-0 font-mono text-[10.5px] text-faint">
           {shift.startMin !== undefined && shift.endMin !== undefined
             ? formatTimeRange(shift.startMin, shift.endMin, { compact: true })
             : ""}
         </span>
       </span>
-      <span className="flex items-center gap-1.5 text-[10.5px] text-muted">
-        <span className="font-mono">needs {shift.requiredCount}</span>
+      <span className="flex w-full min-w-0 items-center gap-1.5 whitespace-nowrap text-[10.5px] text-muted">
+        <span className="shrink-0 font-mono">needs {shift.requiredCount}</span>
         <AvailabilityHint available={shift.availableTaCount} required={shift.requiredCount} />
       </span>
     </button>
@@ -555,6 +571,7 @@ export function ShiftsView({
                                 key={s._id}
                                 shift={s}
                                 name={nameOf(s)}
+                                dutyTypeName={dt.name}
                                 onClick={() => setModal({ dutyType: dt, shift: s })}
                               />
                             ))}

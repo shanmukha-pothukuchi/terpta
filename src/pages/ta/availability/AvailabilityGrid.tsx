@@ -5,6 +5,7 @@ import {
   DAY_SHORT,
   formatTimeRange,
 } from "../../../lib/format";
+import { assignLanes, laneStyle } from "../../../lib/lanes";
 import {
   CELL_PX,
   SLOT_COUNT,
@@ -176,27 +177,43 @@ export function AvailabilityGrid({
                 }}
               />
             ))}
-            {/* Imported class blocks — locked */}
-            {importedBlocks
-              .filter((b) => dayIndex(b.day) === d)
-              .map((b, i) => {
+            {/* Imported class blocks — locked. Two classes at the same hour
+                would otherwise stack and double their labels, so they split
+                into side-by-side lanes the way the week grids do. */}
+            {(() => {
+              const dayBlocks = importedBlocks.filter((b) => dayIndex(b.day) === d);
+              const spans = assignLanes(
+                dayBlocks.map((b, i) => ({
+                  id: String(i),
+                  start: b.startMin,
+                  end: b.endMin,
+                })),
+              );
+              return dayBlocks.map((b, i) => {
                 const [s0, s1] = slotRange(b.startMin, b.endMin);
                 if (s1 <= s0) return null;
+                const { left, width } = laneStyle(spans.get(String(i)), {
+                  inset: 3,
+                  gutter: 2,
+                });
                 const style: CSSProperties = {
                   top: s0 * CELL_PX + 1,
                   height: (s1 - s0) * CELL_PX - 3,
+                  left,
+                  width,
                 };
                 return (
                   <div
                     key={i}
-                    className="absolute left-[3px] right-[3px] flex cursor-not-allowed flex-col gap-[1px] overflow-hidden rounded-[5px] bg-[rgba(125,147,178,0.16)] p-[4px_5px] shadow-[inset_0_0_0_1px_rgba(125,147,178,0.35)] sm:left-1 sm:right-1 sm:flex-row sm:items-start sm:justify-between sm:rounded-[6px] sm:p-[5px_8px]"
+                    title={`${b.label ?? "Class"} · ${formatTimeRange(b.startMin, b.endMin)}`}
+                    className="absolute flex cursor-not-allowed flex-col gap-[1px] overflow-hidden rounded-[5px] bg-[rgba(125,147,178,0.16)] p-[4px_5px] shadow-[inset_0_0_0_1px_rgba(125,147,178,0.35)] sm:flex-row sm:items-start sm:justify-between sm:rounded-[6px] sm:p-[5px_8px]"
                     style={style}
                   >
                     <div className="flex min-w-0 flex-col gap-[1px]">
-                      <span className="whitespace-nowrap font-mono text-[9.5px] font-medium text-[#B7C6DC] sm:text-[11px]">
+                      <span className="truncate font-mono text-[9.5px] font-medium text-[#B7C6DC] sm:text-[11px]">
                         {b.label ?? "Class"}
                       </span>
-                      <span className="hidden text-[10.5px] text-classblue sm:block">
+                      <span className="hidden truncate text-[10.5px] text-classblue sm:block">
                         {formatTimeRange(b.startMin, b.endMin)}
                       </span>
                     </div>
@@ -206,7 +223,8 @@ export function AvailabilityGrid({
                     />
                   </div>
                 );
-              })}
+              });
+            })()}
           </div>
         ))}
       </div>

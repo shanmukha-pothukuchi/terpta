@@ -82,3 +82,23 @@ export function formatHourCount(hours: number): string {
 function trimNum(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10);
 }
+
+/**
+ * "Discussion 0101" shown under a "Discussion" heading -> "0101".
+ *
+ * Shift descriptions coming from the section importer repeat the duty type,
+ * so anywhere the duty type is already on screen the prefix is dead weight —
+ * and in a narrow day column it was pushing the section number, the only part
+ * that identifies the shift, out of view. Returns the name unchanged when it
+ * does not start with the prefix, or when stripping it would leave nothing.
+ */
+export function shortShiftName(name: string, dutyTypeName: string): string {
+  const trimmed = name.trim();
+  const prefix = dutyTypeName.trim();
+  if (!prefix || trimmed.length <= prefix.length) return trimmed;
+  if (trimmed.slice(0, prefix.length).toLowerCase() !== prefix.toLowerCase()) {
+    return trimmed;
+  }
+  const rest = trimmed.slice(prefix.length).replace(/^[\s·:-]+/, "");
+  return rest.length > 0 ? rest : trimmed;
+}

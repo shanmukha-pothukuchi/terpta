@@ -3,11 +3,13 @@ import { useDroppable } from "@dnd-kit/core";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { DAY_CODES, DAY_SHORT, formatTimeRange } from "../../../lib/format";
 import type { DayCode } from "../../../lib/format";
+import { laneStyle, type LaneSpan } from "../../../lib/lanes";
 import { AssignChip } from "./AssignChip";
 import {
   availabilityHint,
   firstName,
   roomOf,
+  weeklyLaneSpans,
   type BuilderModel,
   type Highlight,
   type ShiftRow,
@@ -20,6 +22,7 @@ export interface WeekGridProps {
   highlight: Highlight;
   onOpenTa: (taProfileRef: Id<"taProfiles">) => void;
   onToggleLock: (assignmentRef: Id<"assignments">) => void;
+  onRemoveAssignment: (assignmentRef: Id<"assignments">) => void;
 }
 
 function Legend({ swatch, label }: { swatch: ReactNode; label: string }) {
@@ -41,15 +44,20 @@ function hourLabel(min: number, first: boolean): string {
 function Slot({
   model,
   shift,
+  span,
   highlight,
   onOpenTa,
   onToggleLock,
+  onRemoveAssignment,
 }: {
   model: BuilderModel;
   shift: ShiftRow;
+  /** Column within the day's overlap cluster; undefined means "alone". */
+  span: LaneSpan | undefined;
   highlight: Highlight;
   onOpenTa: (taProfileRef: Id<"taProfiles">) => void;
   onToggleLock: (assignmentRef: Id<"assignments">) => void;
+  onRemoveAssignment: (assignmentRef: Id<"assignments">) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `shift:${shift._id}` });
   const assigned = model.assignmentsByShift.get(shift._id as string) ?? [];
@@ -65,6 +73,12 @@ function Slot({
   const endMin = shift.endMin ?? startMin + 60;
   const top = ((startMin - model.gridStartMin) / 60) * PX_PER_HOUR + 2;
   const height = ((endMin - startMin) / 60) * PX_PER_HOUR - 4;
+  const { left, width } = laneStyle(span);
+  // Split lanes are far too narrow for label + time + hint on one line, so the
+  // hint drops out there and lives on the block's tooltip instead.
+  const narrow = (span?.lanes ?? 1) > 1;
+  const label = section ? section.sectionNumber : (duty?.name ?? "Shift");
+  const timeText = formatTimeRange(startMin, endMin, { compact: true });
 
   const hint = unfilled
     ? availabilityHint(shift.availableTaCount, !isSection)
@@ -77,10 +91,13 @@ function Slot({
   return (
     <div
       ref={setNodeRef}
-      className="absolute left-1 right-1 box-border flex flex-col gap-1 overflow-hidden rounded-[8px] px-[7px] py-[5px] transition-[box-shadow,background] duration-150"
+      title={`${label} · ${timeText}${hint.text ? ` · ${hint.text}` : ""}`}
+      className="absolute box-border flex flex-col gap-1 overflow-hidden rounded-[8px] px-[7px] py-[5px] transition-[box-shadow,background] duration-150"
       style={{
         top,
         height,
+        left,
+        width,
         background: unfilled
           ? "rgba(226,24,51,0.05)"
           : isSection
@@ -94,24 +111,21 @@ function Slot({
         boxShadow: ring,
       }}
     >
-      <div className="flex flex-wrap items-center gap-x-[6px] gap-y-[2px] whitespace-nowrap text-[10.5px] leading-3">
+      <div className="flex min-w-0 items-center gap-x-[6px] whitespace-nowrap text-[10.5px] leading-3">
         <span
-          className="font-mono font-medium"
+          className="shrink-0 truncate font-mono font-medium"
           style={{ color: isSection ? "#C9C9CF" : "#B7C6DC" }}
         >
-          {section ? section.sectionNumber : (duty?.name ?? "Shift")}
+          {label}
         </span>
-        <span className="text-faint">
-          {formatTimeRange(startMin, endMin, { compact: true })}
-        </span>
-        <span
-          className="ml-auto overflow-hidden text-ellipsis"
-          style={{ color: hint.color }}
-        >
-          {hint.text}
-        </span>
+        <span className="truncate text-faint">{timeText}</span>
+        {narrow ? null : (
+          <span className="ml-auto truncate" style={{ color: hint.color }}>
+            {hint.text}
+          </span>
+        )}
       </div>
-      <div className="flex flex-wrap gap-1">
+      <div className="flex min-w-0 flex-wrap gap-1">
         {assigned.map((a) => {
           const conflicts = model.conflictsByAssignment.get(a._id as string) ?? [];
           const conflict = conflicts.length > 0;
@@ -150,15 +164,20 @@ function Slot({
               }
               onOpen={() => onOpenTa(a.taProfileRef)}
               onToggleLock={() => onToggleLock(a._id)}
+              onRemove={() => onRemoveAssignment(a._id)}
             />
           );
         })}
         {Array.from({ length: missing }, (_, i) => (
           <span
             key={`empty-${i}`}
-            className="flex h-5 items-center gap-[5px] whitespace-nowrap rounded-[6px] border border-dashed border-[rgba(226,24,51,0.55)] px-[7px] text-[10.5px] text-[#F4A3AE]"
+            className="flex h-5 min-w-0 items-center gap-[5px] overflow-hidden rounded-[6px] border border-dashed border-[rgba(226,24,51,0.55)] px-[7px] text-[10.5px] whitespace-nowrap text-[#F4A3AE]"
           >
-            {missing > 1 ? `Drop TA ${assigned.length + i + 1}` : "Drop a TA"}
+            {narrow
+              ? `TA ${assigned.length + i + 1}`
+              : missing > 1
+                ? `Drop TA ${assigned.length + i + 1}`
+                : "Drop a TA"}
           </span>
         ))}
       </div>
@@ -167,10 +186,17 @@ function Slot({
 }
 
 /** Recurring weekly grid: time gutter + Mon–Fri columns with slot cards. */
-export function WeekGrid({ model, highlight, onOpenTa, onToggleLock }: WeekGridProps) {
+export function WeekGrid({
+  model,
+  highlight,
+  onOpenTa,
+  onToggleLock,
+  onRemoveAssignment,
+}: WeekGridProps) {
   const hours: number[] = [];
   for (let m = model.gridStartMin; m < model.gridEndMin; m += 60) hours.push(m);
   const columnHeight = hours.length * PX_PER_HOUR;
+  const laneSpans = weeklyLaneSpans(model);
 
   const sectionCount = model.weekly.filter((s) => s.sectionRef !== undefined).length;
   const otherCount = model.weekly.length - sectionCount;
@@ -242,9 +268,11 @@ export function WeekGrid({ model, highlight, onOpenTa, onToggleLock }: WeekGridP
                   key={shift._id as string}
                   model={model}
                   shift={shift}
+                  span={laneSpans.get(shift._id as string)}
                   highlight={highlight}
                   onOpenTa={onOpenTa}
                   onToggleLock={onToggleLock}
+                  onRemoveAssignment={onRemoveAssignment}
                 />
               ))}
           </div>

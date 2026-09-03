@@ -1,5 +1,5 @@
 import { useDraggable } from "@dnd-kit/core";
-import { Lock, LockOpen, TriangleAlert } from "lucide-react";
+import { Lock, LockOpen, TriangleAlert, X } from "lucide-react";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 /** Payload carried by every drag source (chips and roster names). */
@@ -23,6 +23,12 @@ export interface AssignChipProps {
   tooltip?: string;
   onOpen?: () => void;
   onToggleLock?: () => void;
+  /**
+   * Unassign this TA. Dragging a chip off its slot used to be the only way,
+   * and it silently did nothing — dropping outside a shift hit no droppable —
+   * so removal needs a plain button that works on a trackpad too.
+   */
+  onRemove?: () => void;
 }
 
 /**
@@ -41,6 +47,7 @@ export function AssignChip({
   tooltip,
   onOpen,
   onToggleLock,
+  onRemove,
 }: AssignChipProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: dragId,
@@ -98,6 +105,21 @@ export function AssignChip({
           <LockOpen size={10} strokeWidth={1.5} className="text-muted" />
         )}
       </button>
+      {onRemove && !locked && (
+        <button
+          type="button"
+          title={`Remove ${name}`}
+          aria-label={`Remove ${name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] opacity-0 transition-opacity duration-150 group-hover:opacity-60 hover:bg-[rgba(226,24,51,0.22)] hover:opacity-100 focus-visible:opacity-100"
+        >
+          <X size={10} strokeWidth={1.5} className="text-[#F4A3AE]" />
+        </button>
+      )}
     </span>
   );
 }

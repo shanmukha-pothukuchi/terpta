@@ -38,6 +38,7 @@ import { EventsStrip } from "./builder/EventsStrip";
 import { AsyncTable } from "./builder/AsyncTable";
 import { DiagnosticsPanel } from "./builder/DiagnosticsPanel";
 import { RosterPanel } from "./builder/RosterPanel";
+import { CoveragePanel } from "./builder/CoveragePanel";
 import { TaDrawer } from "./builder/TaDrawer";
 import { PublishModal } from "./builder/PublishModal";
 
@@ -245,6 +246,31 @@ export function BuilderScreen({
     }
   };
 
+  /** Take a TA off a slot, with the inverse op recorded for Undo. */
+  const doUnassign = async (assignmentRef: Id<"assignments">) => {
+    const existing = data.board?.assignments.find((a) => a._id === assignmentRef);
+    if (!existing) return;
+    if (existing.locked) {
+      toast("Unlock the assignment first", { tone: "error" });
+      return;
+    }
+    try {
+      await removeAssignment({ assignmentRef });
+      pushUndo(async () => {
+        await overrideAssignment({
+          shiftRef: existing.shiftRef,
+          taProfileRef: existing.taProfileRef,
+          ...(existing.hoursAllocated !== undefined
+            ? { hoursAllocated: existing.hoursAllocated }
+            : {}),
+        });
+      });
+      toast(`${firstName(model.taName(existing.taProfileRef))} removed`);
+    } catch (e) {
+      err(e, "Could not remove that assignment");
+    }
+  };
+
   const onChangeHours = async (
     shift: ShiftRow,
     taProfileRef: Id<"taProfiles">,
@@ -347,9 +373,16 @@ export function BuilderScreen({
     setDragName(null);
     if (!e.over) return;
     const overId = String(e.over.id);
-    if (!overId.startsWith("shift:")) return;
     const payload = e.active.data.current as DragPayload | undefined;
     if (!payload) return;
+    // Dragging a chip back to the roster takes the TA off the slot. Without
+    // this the only droppables were shifts, so a drag meant to remove someone
+    // landed on nothing and looked like the drag itself had failed.
+    if (overId === "unassign") {
+      if (payload.fromAssignmentRef) void doUnassign(payload.fromAssignmentRef);
+      return;
+    }
+    if (!overId.startsWith("shift:")) return;
     const source = payload.fromAssignmentRef
       ? data.board!.assignments.find((a) => a._id === payload.fromAssignmentRef)
       : undefined;
@@ -417,12 +450,14 @@ export function BuilderScreen({
                 highlight={highlight}
                 onOpenTa={setDrawerTa}
                 onToggleLock={(ref) => void onToggleLock(ref)}
+                onRemoveAssignment={(ref) => void doUnassign(ref)}
               />
               <EventsStrip
                 model={model}
                 highlight={highlight}
                 onOpenTa={setDrawerTa}
                 onToggleLock={(ref) => void onToggleLock(ref)}
+                onRemoveAssignment={(ref) => void doUnassign(ref)}
               />
               <AsyncTable
                 model={model}
@@ -442,6 +477,8 @@ export function BuilderScreen({
                 onClear={() => setHighlight(null)}
               />
               <RosterPanel model={model} highlight={highlight} onOpenTa={setDrawerTa} />
+              {/* Approved single-date swaps land here as fill-in slots. */}
+              {!fixture && <CoveragePanel periodRef={periodRef} />}
             </div>
           </div>
         )}

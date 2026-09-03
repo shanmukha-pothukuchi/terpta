@@ -9,7 +9,23 @@ import { useMutation } from "convex/react";
 import { ArrowLeftRight } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { Button, Label, Modal, Select, Textarea, toast } from "../../components/ui";
+import {
+  Button,
+  Input,
+  Label,
+  Modal,
+  SegmentedControl,
+  Select,
+  Textarea,
+  toast,
+} from "../../components/ui";
+
+/**
+ * How long an approved swap lasts. "date" leaves the recurring assignment
+ * alone and only needs cover for that one meeting; "permanent" hands the
+ * shift over for the rest of the staffing period.
+ */
+export type SwapScope = "date" | "permanent";
 
 export interface SwapSuggestion {
   /** Id<"taProfiles"> as a plain string. */
@@ -32,8 +48,18 @@ export interface SwapRequestModalViewProps {
   target: SwapModalTarget | null;
   /** TAs the requester may suggest. Empty/omitted hides the selector. */
   suggestableTas?: SwapSuggestion[];
-  onSubmit: (fields: { reason: string; suggestedTaId?: string }) => Promise<void>;
+  onSubmit: (fields: {
+    reason: string;
+    suggestedTaId?: string;
+    scope: SwapScope;
+    date?: string;
+  }) => Promise<void>;
 }
+
+const SCOPE_OPTIONS = [
+  { value: "date" as const, label: "Just one date" },
+  { value: "permanent" as const, label: "Rest of the term" },
+];
 
 export function SwapRequestModalView({
   open,
@@ -44,6 +70,8 @@ export function SwapRequestModalView({
 }: SwapRequestModalViewProps) {
   const [reason, setReason] = useState("");
   const [suggested, setSuggested] = useState("");
+  const [scope, setScope] = useState<SwapScope>("date");
+  const [date, setDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +79,9 @@ export function SwapRequestModalView({
     if (open) {
       setReason("");
       setSuggested("");
+      // One date is the common case and the reversible one, so it leads.
+      setScope("date");
+      setDate("");
       setError(null);
       setBusy(false);
     }
@@ -61,12 +92,18 @@ export function SwapRequestModalView({
       setError("A reason is required.");
       return;
     }
+    if (scope === "date" && !date) {
+      setError("Pick the date you need covered.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       await onSubmit({
         reason: reason.trim(),
         suggestedTaId: suggested || undefined,
+        scope,
+        date: scope === "date" ? date : undefined,
       });
       onClose();
     } catch (err) {
@@ -102,6 +139,33 @@ export function SwapRequestModalView({
             ) : null}
           </div>
         ) : null}
+
+        <div>
+          <Label htmlFor="swap-scope">How long?</Label>
+          <div id="swap-scope" className="flex flex-wrap items-center gap-2.5">
+            <SegmentedControl
+              options={SCOPE_OPTIONS}
+              value={scope}
+              onChange={setScope}
+            />
+            {scope === "date" ? (
+              <Input
+                type="date"
+                aria-label="Date to cover"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-[168px]"
+              />
+            ) : null}
+          </div>
+          {/* The old flow said nothing about duration, and approving always
+              handed the shift over for good — spell out which one this is. */}
+          <p className="mt-1.5 text-[12px] text-faint">
+            {scope === "date"
+              ? "Someone covers this one meeting. You keep the shift every other week."
+              : "This hands the shift off for the rest of the term. You will not be scheduled for it again."}
+          </p>
+        </div>
 
         <div>
           <Label htmlFor="swap-reason">Reason</Label>
@@ -153,8 +217,13 @@ export default function SwapRequestModal({
   onClose: () => void;
   target: SwapModalTarget | null;
   suggestableTas?: SwapSuggestion[];
-  /** Called after the mutation succeeds (e.g. to append to a pending list). */
-  onRequested?: (fields: { reason: string; suggestedTaId?: string }) => void;
+  /** Called after the mutation succeeds. */
+  onRequested?: (fields: {
+    reason: string;
+    suggestedTaId?: string;
+    scope: SwapScope;
+    date?: string;
+  }) => void;
 }) {
   const requestSwap = useMutation(api.ta.requestSwap);
   return (
@@ -163,17 +232,19 @@ export default function SwapRequestModal({
       onClose={onClose}
       target={target}
       suggestableTas={suggestableTas}
-      onSubmit={async ({ reason, suggestedTaId }) => {
+      onSubmit={async (fields) => {
         if (!target) return;
         await requestSwap({
           assignmentRef: target.assignmentRef as Id<"assignments">,
-          reason,
-          suggestedTaRef: suggestedTaId
-            ? (suggestedTaId as Id<"taProfiles">)
+          reason: fields.reason,
+          suggestedTaRef: fields.suggestedTaId
+            ? (fields.suggestedTaId as Id<"taProfiles">)
             : undefined,
+          scope: fields.scope,
+          date: fields.date,
         });
         toast("Swap requested — your coordinator will review");
-        onRequested?.({ reason, suggestedTaId });
+        onRequested?.(fields);
       }}
     />
   );

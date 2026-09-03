@@ -10,6 +10,7 @@
 
 import type * as authkit from "../authkit.js";
 import type * as builder from "../builder.js";
+import type * as coverage from "../coverage.js";
 import type * as dutyTypes from "../dutyTypes.js";
 import type * as emails from "../emails.js";
 import type * as exportTokens from "../exportTokens.js";
@@ -39,6 +40,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   authkit: typeof authkit;
   builder: typeof builder;
+  coverage: typeof coverage;
   dutyTypes: typeof dutyTypes;
   emails: typeof emails;
   exportTokens: typeof exportTokens;

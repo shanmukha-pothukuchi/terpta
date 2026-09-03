@@ -308,7 +308,10 @@ const swapStatusValidator = v.union(
   v.literal("pending"),
   v.literal("approved"),
   v.literal("declined"),
+  v.literal("cancelled"),
 );
+
+const swapScopeValidator = v.union(v.literal("date"), v.literal("permanent"));
 
 /**
  * Swap requests for a period joined with requester / suggested TA names and
@@ -323,6 +326,10 @@ export const listSwaps = query({
       _creationTime: v.number(),
       status: swapStatusValidator,
       reason: v.string(),
+      /** How long an approval lasts. Legacy rows read as "permanent". */
+      scope: swapScopeValidator,
+      /** The single date being covered, when `scope` is "date". */
+      swapDate: v.optional(v.string()),
       requesterName: v.string(),
       suggestedTaName: v.union(v.null(), v.string()),
       /** True when the underlying assignment no longer exists. */
@@ -368,6 +375,8 @@ export const listSwaps = query({
         _creationTime: swap._creationTime,
         status: swap.status,
         reason: swap.reason,
+        scope: swap.scope ?? ("permanent" as const),
+        swapDate: swap.date,
         requesterName,
         suggestedTaName,
         assignmentGone: assignment === null,
@@ -408,7 +417,39 @@ export const resolveSwap = mutation({
     const nextStatus = args.approve ? ("approved" as const) : ("declined" as const);
     let assignmentChange: { before: unknown; after: unknown } | null = null;
 
-    if (args.approve) {
+    // A one-date swap covers a single meeting, so approving it must NOT move
+    // the recurring assignment — the TA is still on that shift every other
+    // week. All the approval does is put the coverage on the record.
+    const scope = swap.scope ?? "permanent";
+
+    // Approving a one-date swap opens a fill-in slot for that meeting instead,
+    // seeded with the TA the requester suggested. The Builder's Coverage panel
+    // is where it gets filled, by hand or from the pool.
+    if (args.approve && scope === "date" && swap.date) {
+      const assignment = await ctx.db.get(swap.assignmentRef);
+      if (assignment) {
+        const existing = await ctx.db
+          .query("shiftCoverages")
+          .withIndex("by_shift_date", (q) =>
+            q.eq("shiftRef", assignment.shiftRef).eq("date", swap.date!),
+          )
+          .filter((q) => q.eq(q.field("absentTaRef"), swap.requesterRef))
+          .unique();
+        if (!existing) {
+          await ctx.db.insert("shiftCoverages", {
+            periodRef: swap.periodRef,
+            shiftRef: assignment.shiftRef,
+            date: swap.date,
+            absentTaRef: swap.requesterRef,
+            coverTaRef: swap.suggestedTaRef,
+            filledBy: swap.suggestedTaRef ? ("manual" as const) : undefined,
+            swapRef: swap._id,
+          });
+        }
+      }
+    }
+
+    if (args.approve && scope === "permanent") {
       const assignment = await ctx.db.get(swap.assignmentRef);
       if (assignment) {
         const before = {
@@ -442,7 +483,13 @@ export const resolveSwap = mutation({
       actorRef: user._id,
       action: args.approve ? "swap.approve" : "swap.decline",
       before: { swapRef: swap._id, status: "pending", ...(assignmentChange ? { assignment: assignmentChange.before } : {}) },
-      after: { swapRef: swap._id, status: nextStatus, ...(assignmentChange ? { assignment: assignmentChange.after } : {}) },
+      after: {
+        swapRef: swap._id,
+        status: nextStatus,
+        scope,
+        ...(swap.date ? { date: swap.date } : {}),
+        ...(assignmentChange ? { assignment: assignmentChange.after } : {}),
+      },
       at: Date.now(),
     });
     return null;

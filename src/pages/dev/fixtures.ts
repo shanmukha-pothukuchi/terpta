@@ -112,6 +112,7 @@ function weeklyShift(
   availableTaCount: number,
   sectionRef?: Id<"sections">,
   instructor?: string,
+  description?: string,
 ): ShiftRow {
   return {
     _id: fid<"shifts">(id),
@@ -119,6 +120,7 @@ function weeklyShift(
     periodRef: PERIOD_ID,
     dutyTypeRef,
     requiredCount,
+    description,
     sectionInstructors: instructor ? [instructor] : undefined,
     sectionRef,
     recurrence: "weekly",
@@ -142,11 +144,24 @@ const discussionShifts: ShiftRow[] = SECTION_SEEDS.map((s, i) =>
     fid<"sections">(s.id),
     // Sections split across two instructors of record, as umd.io reports them.
     Number(s.number) < 105 ? "Anwar Mamat" : "Cliff Bakalian",
+    // Real descriptions repeat the duty type, which is what used to push the
+    // section number out of a narrow day column.
+    `Discussion ${s.number}`,
   ),
 );
 
 const ohMonday = weeklyShift("shift-oh-mon", DT_OH._id, "M", 780, 900, 2, 6);
 const ohTuesday = weeklyShift("shift-oh-tue", DT_OH._id, "Tu", 840, 960, 2, 3);
+
+/* Collision cases for the week grid's lane splitting.
+   - Monday 10:00–10:50 sits exactly on top of section 0101: two blocks, same
+     day, same time — the pair must render side by side, while 0102 right after
+     it stays full width.
+   - Wednesday 10:30–11:40 straddles both 0104 and 0105, so the three of them
+     form one cluster: 0104/0105 share a lane (they do not overlap each other)
+     and the office-hour block takes the second. */
+const ohMondayClash = weeklyShift("shift-oh-mon-clash", DT_OH._id, "M", 600, 650, 1, 1);
+const ohWedStraddle = weeklyShift("shift-oh-wed-straddle", DT_OH._id, "W", 630, 700, 1, 0);
 
 const examShift: ShiftRow = {
   _id: fid<"shifts">("shift-exam-midterm"),
@@ -180,6 +195,8 @@ export const shifts: ShiftRow[] = [
   ...discussionShifts,
   ohMonday,
   ohTuesday,
+  ohMondayClash,
+  ohWedStraddle,
   examShift,
   gradingPool,
 ];
@@ -240,6 +257,8 @@ export const roster: RosterRow[] = [
     status: "missing",
     availabilitySubmittedAt: undefined,
     maxHoursPerWeek: 12,
+    // Assigned despite never submitting availability — the load must show.
+    assignedWeeklyHours: 0.8,
     topDutyTypeNames: [],
     sectionPrefCount: 0,
   }),
@@ -281,6 +300,9 @@ const assignments: BoardData["assignments"] = [
   assignment("as-0105", discussionShifts[4]._id, EMMA.taProfileRef),
   assignment("as-0106", discussionShifts[5]._id, PRIYA.taProfileRef),
   // 0107 intentionally unfilled (design-mock scenario)
+  // Alex has not submitted availability but IS assigned — the roster row must
+  // still show real numbers, with the "no availability" warning beside them.
+  assignment("as-oh-mon-clash", ohMondayClash._id, ALEX.taProfileRef),
   assignment("as-oh-mon-1", ohMonday._id, MARCUS.taProfileRef),
   assignment("as-oh-mon-2", ohMonday._id, SARAH.taProfileRef),
   assignment("as-oh-tue-1", ohTuesday._id, DANIEL.taProfileRef),
@@ -323,7 +345,7 @@ export const board: BoardData = {
     { taProfileRef: DANIEL.taProfileRef, weeklyHours: 2.8, maxHoursPerWeek: 8 },
     { taProfileRef: MARCUS.taProfileRef, weeklyHours: 11, maxHoursPerWeek: 10 },
     { taProfileRef: SARAH.taProfileRef, weeklyHours: 4.8, maxHoursPerWeek: 10 },
-    { taProfileRef: ALEX.taProfileRef, weeklyHours: 0, maxHoursPerWeek: 12 },
+    { taProfileRef: ALEX.taProfileRef, weeklyHours: 0.8, maxHoursPerWeek: 12 },
     { taProfileRef: EMMA.taProfileRef, weeklyHours: 3.5, maxHoursPerWeek: 10 },
   ],
   sections: boardSections,
@@ -401,6 +423,8 @@ function hourLog(
     hours,
     status,
     note,
+    // The coordinator's flag reason is a separate field from the TA's note.
+    flagNote: status === "flagged" ? note : undefined,
   };
 }
 
@@ -529,13 +553,53 @@ export const taHourLogs: ScheduleHourLogs = [
     note: "Graded quiz 2",
     status: "draft",
   },
+  // The flagged case: the TA has to be able to see why and fix it in place.
+  {
+    _id: fid<"hourLogs">("ta-hl-4"),
+    _creationTime: T0,
+    assignmentRef: fid<"assignments">("sa-5"),
+    taProfileRef: PRIYA.taProfileRef,
+    date: "2026-09-17",
+    hours: 6,
+    note: "Grading marathon",
+    status: "flagged",
+    flagNote: "6h on one day is over the daily cap — split this across two days.",
+  },
 ];
 
 export const pendingSwaps: ScheduleViewProps["pendingSwaps"] = [
   {
     id: "swap-1",
     label: "Discussion 0106 · Thu 10:00–10:50 AM",
-    reason: "Recurring doctor appointment on Thursdays",
+    reason: "Conference travel that week",
+    status: "pending",
+    scope: "date",
+    date: "2026-10-08",
+  },
+  {
+    id: "swap-2",
+    label: "Office Hours · Mon 2:00–4:00 PM",
+    reason: "Recurring doctor appointment on Mondays",
+    status: "approved",
+    scope: "permanent",
+    suggestedName: "Ravi Patel",
+  },
+];
+
+export const coverageNotices: ScheduleViewProps["coverage"] = [
+  {
+    id: "cov-1",
+    date: "2026-10-08",
+    label: "Discussion 0106",
+    role: "off",
+    otherName: "Ravi Patel",
+  },
+  {
+    id: "cov-2",
+    date: "2026-10-15",
+    label: "Office Hours",
+    role: "covering",
+    otherName: "Ana Cruz",
   },
 ];
 

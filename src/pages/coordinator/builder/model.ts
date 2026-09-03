@@ -7,6 +7,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import { api } from "../../../../convex/_generated/api";
 import { DAY_CODES, DAY_SHORT, type DayCode } from "../../../lib/format";
 import { formatTime } from "../../../lib/format";
+import { assignLanes, type LaneSpan } from "../../../lib/lanes";
 
 export type ShiftRow = FunctionReturnType<typeof api.shifts.list>[number];
 export type DutyType = FunctionReturnType<typeof api.dutyTypes.list>[number];
@@ -108,8 +109,10 @@ export function buildModel(
   const taName = (id: Id<"taProfiles">) =>
     rosterByTa.get(id as string)?.name ?? "(unknown)";
 
+  // Default window is 8 AM – 9 PM so evening office hours land on the grid
+  // instead of off the bottom of it. Real shifts still widen it either way.
   let gridStartMin = 8 * 60;
-  let gridEndMin = 18 * 60;
+  let gridEndMin = 21 * 60;
   for (const s of weekly) {
     if (s.startMin !== undefined) {
       gridStartMin = Math.min(gridStartMin, Math.floor(s.startMin / 60) * 60);
@@ -137,6 +140,28 @@ export function buildModel(
     gridStartMin,
     gridEndMin,
   };
+}
+
+/**
+ * Lane placement for every weekly shift, keyed by shift id.
+ *
+ * Shifts are positioned absolutely inside their day column, so two shifts at
+ * the same day+time would paint on top of each other. Cluster each day's
+ * shifts by overlap and hand every block a column; a shift with no neighbour
+ * gets `{ lane: 0, lanes: 1 }` and still spans the whole day column.
+ */
+export function weeklyLaneSpans(model: BuilderModel): Map<string, LaneSpan> {
+  const spans = new Map<string, LaneSpan>();
+  for (const day of DAY_CODES) {
+    const items = model.weekly
+      .filter((s) => s.day === day)
+      .map((s) => {
+        const start = s.startMin ?? model.gridStartMin;
+        return { id: s._id as string, start, end: s.endMin ?? start + 60 };
+      });
+    for (const [id, span] of assignLanes(items)) spans.set(id, span);
+  }
+  return spans;
 }
 
 /** First name only — chips read like the board ("Priya", not full names). */

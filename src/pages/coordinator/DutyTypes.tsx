@@ -58,7 +58,7 @@ function ModeToggle({
   const toggle = (
     <div
       className={
-        "inline-flex h-6 items-center gap-0.5 rounded-[7px] border border-line bg-[rgba(255,255,255,0.03)] p-0.5 " +
+        "inline-flex h-6 w-fit shrink-0 items-center gap-0.5 justify-self-start rounded-[7px] border border-line bg-[rgba(255,255,255,0.03)] p-0.5 " +
         (lockedReason ? "opacity-60" : "")
       }
     >
@@ -85,7 +85,9 @@ function ModeToggle({
     </div>
   );
   return lockedReason ? (
-    <Tooltip label={lockedReason}>{toggle}</Tooltip>
+    <Tooltip label={lockedReason} className="w-fit justify-self-start">
+      {toggle}
+    </Tooltip>
   ) : (
     toggle
   );

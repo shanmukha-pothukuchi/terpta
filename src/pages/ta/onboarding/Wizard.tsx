@@ -10,7 +10,7 @@ import type { DayCode } from "../../../lib/format";
 import { usePeriod } from "../../../lib/period";
 import type { AvailabilityData } from "../availability/model";
 import { WizardChrome } from "./WizardChrome";
-import { Step1Courses } from "./Step1Courses";
+import { Step1Courses, type ContactDetails } from "./Step1Courses";
 import { Step2Availability } from "./Step2Availability";
 import { Step3Preferences } from "./Step3Preferences";
 import {
@@ -78,14 +78,18 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
   const addDateException = useMutation(api.ta.addDateException);
   const removeDateException = useMutation(api.ta.removeDateException);
   const completeOnboarding = useMutation(api.ta.completeOnboarding);
+  const updateContact = useMutation(api.users.updateContact);
 
   const [stepIndex, setStepIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [state, setState] = useState<WizardState>(emptyWizardState);
   const [hydrated, setHydrated] = useState(false);
+  const [details, setDetails] = useState<ContactDetails>({ preferredName: "", phone: "" });
+  const [detailsSeeded, setDetailsSeeded] = useState(false);
 
   const term = info?.period.term ?? "";
+  const firstName = firstWord(me?.name ?? "");
 
   // Seed from whatever is already saved, exactly once.
   if (!hydrated && profile !== undefined) {
@@ -99,6 +103,18 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
           sectionPrefs: profile.sectionPrefs,
         },
       }));
+    }
+  }
+
+  // Same once-only seeding for the contact fields. `me` resolves on its own
+  // schedule, so it gets its own latch rather than riding on `hydrated`.
+  if (!detailsSeeded && me !== undefined) {
+    setDetailsSeeded(true);
+    if (me) {
+      setDetails({
+        preferredName: me.preferredName || firstWord(me.name),
+        phone: me.phone ?? "",
+      });
     }
   }
 
@@ -202,6 +218,22 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
     void (async () => {
       try {
         await persistProfile(state);
+        // Step 1 also carries the "About you" block. Both fields are optional,
+        // so a phone the server rejects must not trap the TA on step 1: say so,
+        // save the name on its own, and let Continue through.
+        if (stepIndex === 0) {
+          try {
+            await updateContact({
+              preferredName: details.preferredName,
+              phone: details.phone,
+            });
+          } catch (e) {
+            toast(errorMessage(e), { tone: "error" });
+            await updateContact({ preferredName: details.preferredName }).catch(
+              () => {},
+            );
+          }
+        }
         if (stepIndex < WIZARD_STEPS.length - 1) {
           setStepIndex((i) => i + 1);
         } else {
@@ -215,7 +247,16 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
         setSaving(false);
       }
     })();
-  }, [persistProfile, state, stepIndex, profile, completeOnboarding, navigate]);
+  }, [
+    persistProfile,
+    state,
+    stepIndex,
+    profile,
+    completeOnboarding,
+    navigate,
+    updateContact,
+    details,
+  ]);
 
   if (me === undefined || info === undefined || profile === undefined) {
     return <FullPageSpinner label="Loading your setup…" />;
@@ -258,6 +299,9 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
               sections: r.sections as EnrollableSection[],
             };
           }}
+          details={details}
+          onDetailsChange={setDetails}
+          firstName={firstName}
         />
       )}
       {stepIndex === 1 &&
@@ -298,6 +342,11 @@ function WizardLoader({ periodId }: { periodId: Id<"staffingPeriods"> }) {
       )}
     </WizardChrome>
   );
+}
+
+/** "Priya Shah" -> "Priya". The placeholder for the preferred-name field. */
+function firstWord(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? "";
 }
 
 function describeAgo(at: number): string {

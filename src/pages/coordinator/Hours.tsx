@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { CheckCheck, Clock3, Download, Flag } from "lucide-react";
+import { CheckCheck, Clock3, Download, Flag, FlagOff, Undo2 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import {
@@ -53,7 +53,7 @@ export interface HoursFilters {
 }
 
 const ROW_GRID =
-  "grid grid-cols-[24px_84px_minmax(0,1fr)_120px_56px_104px_minmax(0,1.1fr)_56px] items-center gap-2.5 px-3.5";
+  "grid grid-cols-[24px_84px_minmax(0,0.9fr)_104px_56px_98px_minmax(0,1fr)_minmax(0,1fr)_68px] items-center gap-2.5 px-3.5";
 
 /* ------------------------------------------------------------------ */
 /* Pure view                                                           */
@@ -69,7 +69,12 @@ export interface HoursViewProps {
   onFiltersChange: (f: HoursFilters) => void;
   approving: boolean;
   onBulkApprove: (ids: Id<"hourLogs">[]) => void;
-  onFlag: (id: Id<"hourLogs">, note: string) => void;
+  /** `editing` is true when the row was already flagged and only the reason changed. */
+  onFlag: (id: Id<"hourLogs">, note: string, editing: boolean) => void;
+  /** Flagged → submitted. Optional so the DEV preview harness can omit it. */
+  onUnflag?: (id: Id<"hourLogs">) => void;
+  /** Approved → submitted. Optional so the DEV preview harness can omit it. */
+  onUnapprove?: (id: Id<"hourLogs">) => void;
   exporting: boolean;
   onExport: () => void;
 }
@@ -84,6 +89,8 @@ export function HoursView({
   approving,
   onBulkApprove,
   onFlag,
+  onUnflag,
+  onUnapprove,
   exporting,
   onExport,
 }: HoursViewProps) {
@@ -250,10 +257,16 @@ export function HoursView({
                 <span>Duty</span>
                 <span className="text-right">Hours</span>
                 <span>Status</span>
-                <span>Note</span>
+                <span>TA note</span>
+                <span>Flag reason</span>
                 <span />
               </div>
-              {logs.map((log) => (
+              {logs.map((log) => {
+                const flagged = log.status === "flagged";
+                const flagReason = flagged
+                  ? (log.flagNote?.trim() ?? "") || "No reason given"
+                  : null;
+                return (
                 <div
                   key={log.hourLogId}
                   className={`${ROW_GRID} h-11 border-b border-[rgba(255,255,255,0.04)] last:border-b-0 hover:bg-[rgba(255,255,255,0.02)]`}
@@ -288,21 +301,65 @@ export function HoursView({
                   ) : (
                     <span className="text-[11.5px] text-faint">—</span>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Flag log from ${log.taName}`}
-                    disabled={log.status === "flagged"}
-                    onClick={() => {
-                      setFlagTarget(log);
-                      setFlagNote("");
-                    }}
-                    className="w-7 justify-self-end px-0"
-                  >
-                    <Flag size={13} strokeWidth={1.5} aria-hidden />
-                  </Button>
+                  {flagReason !== null ? (
+                    <Tooltip label={flagReason} className="min-w-0 max-w-full">
+                      <span className="inline-flex min-w-0 items-center gap-1 text-[11.5px] text-[#ff8b9b]">
+                        <Flag size={14} strokeWidth={1.5} className="shrink-0" aria-hidden />
+                        <span className="truncate">{flagReason}</span>
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    <span className="text-[11.5px] text-faint">—</span>
+                  )}
+                  <div className="flex items-center justify-end gap-0.5">
+                    <Tooltip label={flagged ? "Edit flag reason" : "Flag for follow-up"}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={
+                          flagged
+                            ? `Edit flag reason for ${log.taName}'s log`
+                            : `Flag log from ${log.taName}`
+                        }
+                        onClick={() => {
+                          setFlagTarget(log);
+                          setFlagNote(log.flagNote ?? "");
+                        }}
+                        className="w-7 shrink-0 px-0"
+                      >
+                        <Flag size={14} strokeWidth={1.5} aria-hidden />
+                      </Button>
+                    </Tooltip>
+                    {flagged ? (
+                      <Tooltip label="Unflag — back to submitted">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Unflag log from ${log.taName}`}
+                          onClick={() => onUnflag?.(log.hourLogId)}
+                          className="w-7 shrink-0 px-0"
+                        >
+                          <FlagOff size={14} strokeWidth={1.5} aria-hidden />
+                        </Button>
+                      </Tooltip>
+                    ) : null}
+                    {log.status === "approved" ? (
+                      <Tooltip label="Unapprove — back to submitted">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Unapprove log from ${log.taName}`}
+                          onClick={() => onUnapprove?.(log.hourLogId)}
+                          className="w-7 shrink-0 px-0"
+                        >
+                          <Undo2 size={14} strokeWidth={1.5} aria-hidden />
+                        </Button>
+                      </Tooltip>
+                    ) : null}
+                  </div>
                 </div>
-              ))}
+                );
+              })}
             </>
           )}
         </Surface>
@@ -353,32 +410,36 @@ export function HoursView({
       <Modal
         open={flagTarget !== null}
         onClose={() => setFlagTarget(null)}
-        title="Flag hour log"
+        title={flagTarget?.status === "flagged" ? "Edit flag reason" : "Flag hour log"}
         footer={
           <>
             <Button onClick={() => setFlagTarget(null)}>Cancel</Button>
             <Button
               variant="danger"
               onClick={() => {
-                if (flagTarget) onFlag(flagTarget.hourLogId, flagNote.trim());
+                if (flagTarget) {
+                  onFlag(flagTarget.hourLogId, flagNote.trim(), flagTarget.status === "flagged");
+                }
                 setFlagTarget(null);
               }}
             >
-              Flag log
+              {flagTarget?.status === "flagged" ? "Save reason" : "Flag log"}
             </Button>
           </>
         }
       >
         <p className="mb-3 text-[12.5px] text-muted">
-          Flag{" "}
+          {flagTarget?.status === "flagged" ? "Replace the reason on " : "Flag "}
           <span className="font-medium text-ink">
             {flagTarget ? `${formatHourCount(flagTarget.hours)} · ${flagTarget.dutyTypeName}` : ""}
           </span>{" "}
           logged by <span className="font-medium text-ink">{flagTarget?.taName}</span> on{" "}
-          <span className="font-mono">{flagTarget ? formatDate(flagTarget.date) : ""}</span> for
-          follow-up.
+          <span className="font-mono">{flagTarget ? formatDate(flagTarget.date) : ""}</span>
+          {flagTarget?.status === "flagged"
+            ? ". The row stays flagged — this replaces the reason, it does not add a second flag."
+            : " for follow-up."}
         </p>
-        <Label htmlFor="flag-note">Note (optional, visible to the TA)</Label>
+        <Label htmlFor="flag-note">Reason (optional, visible to the TA)</Label>
         <Textarea
           id="flag-note"
           autoFocus
@@ -422,6 +483,8 @@ export default function CoordinatorHours() {
   const dutyTypes = useQuery(api.dutyTypes.list, periodId ? { periodRef: periodId } : "skip");
   const bulkApprove = useMutation(api.hours.bulkApprove);
   const flag = useMutation(api.hours.flag);
+  const unflag = useMutation(api.hours.unflag);
+  const unapprove = useMutation(api.hours.unapprove);
   const mint = useMutation(api.exportTokens.mint);
 
   return (
@@ -440,9 +503,19 @@ export default function CoordinatorHours() {
           .catch((e) => toast(errorMessage(e), { tone: "error" }))
           .finally(() => setApproving(false));
       }}
-      onFlag={(id, note) => {
+      onFlag={(id, note, editing) => {
         flag({ hourLogId: id, note: note === "" ? undefined : note })
-          .then(() => toast("Hour log flagged", { tone: "info" }))
+          .then(() => toast(editing ? "Flag reason updated" : "Hour log flagged", { tone: "info" }))
+          .catch((e) => toast(errorMessage(e), { tone: "error" }));
+      }}
+      onUnflag={(id) => {
+        unflag({ hourLogId: id })
+          .then(() => toast("Flag lifted — back in the pending queue"))
+          .catch((e) => toast(errorMessage(e), { tone: "error" }));
+      }}
+      onUnapprove={(id) => {
+        unapprove({ hourLogId: id })
+          .then(() => toast("Approval undone — back in the pending queue"))
           .catch((e) => toast(errorMessage(e), { tone: "error" }));
       }}
       exporting={exporting}

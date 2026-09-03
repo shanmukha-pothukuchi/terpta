@@ -731,8 +731,20 @@ export function ProgressBar({
   const auto = tone ?? (value > max ? "warn" : "ok");
   const fill =
     auto === "ok" ? "bg-ok" : auto === "warn" ? "bg-warn" : auto === "red" ? "bg-umd" : "bg-faint";
+  // `cx` only concatenates, and Tailwind resolves conflicts by stylesheet
+  // order, not by the order classes appear here — so a base `w-full` beat the
+  // `w-28` a caller passed, stretched the bar across the row and squeezed the
+  // neighbouring truncating text down to nothing. Only fall back to full width
+  // when the caller has not sized the bar itself.
+  const sized = /(^|\s)(w-|min-w-|max-w-|basis-|flex-1|grow)/.test(className ?? "");
   return (
-    <div className={cx("h-1 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]", className)}>
+    <div
+      className={cx(
+        "h-1 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]",
+        sized ? "" : "w-full",
+        className,
+      )}
+    >
       <div className={cx("h-full rounded-full", fill)} style={{ width: `${pct}%` }} />
     </div>
   );

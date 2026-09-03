@@ -80,6 +80,33 @@ export interface PreviewMeeting extends ClassMeeting {
   preview: boolean;
 }
 
+/**
+ * Split "CMSC330 0201" into its course and section parts.
+ *
+ * The search box takes both, so a TA adds the exact section they are in rather
+ * than accepting whatever default a course happens to list first. Returns a
+ * null courseId while the code is still incomplete ("CMSC3"), which is the
+ * signal to keep suggesting courses instead of sections.
+ */
+export function parseCourseQuery(raw: string): {
+  courseId: string | null;
+  sectionPrefix: string;
+} {
+  const q = raw.trim().toUpperCase().replace(/\s+/g, " ");
+  const m = q.match(/^([A-Z]{2,4}\d{3}[A-Z]?)[\s-]*(\d*)$/);
+  return m ? { courseId: m[1], sectionPrefix: m[2] } : { courseId: null, sectionPrefix: "" };
+}
+
+/** "CMSC330 0201" — what a committed course reads as in the input. */
+export function chipLabel(course: EnrolledCourse): string {
+  const numbers = course.sections
+    .filter((s) => course.selectedSectionIds.includes(s._id))
+    .map((s) => s.sectionNumber);
+  return numbers.length > 0
+    ? `${course.courseId} ${numbers.join("/")}`
+    : course.courseId;
+}
+
 /** Default section per type — the first of each, matching the reference. */
 export function defaultSectionIds(sections: EnrollableSection[]): Id<"sections">[] {
   const byType = new Map<string, EnrollableSection>();
@@ -204,6 +231,7 @@ export interface SchedulableSection {
  * an imported class time, flagged with whether the TA has ranked it.
  */
 export interface SectionConflict {
+  sectionId: Id<"sections">;
   sectionNumber: string;
   day: DayCode;
   startMin: number;
@@ -228,6 +256,7 @@ export function findConflicts(
       );
       if (!hit) continue;
       out.push({
+        sectionId: section._id,
         sectionNumber: section.sectionNumber,
         day: meeting.day,
         startMin: meeting.startMin,
@@ -238,6 +267,16 @@ export function findConflicts(
     }
   }
   return out;
+}
+
+/**
+ * Conflicts keyed by section id, so a section row can ask "can this TA
+ * actually be here?" in one lookup instead of re-scanning the list.
+ */
+export function conflictBySectionId(
+  conflicts: SectionConflict[],
+): Map<string, SectionConflict> {
+  return new Map(conflicts.map((c) => [String(c.sectionId), c]));
 }
 
 /* ------------------------------------------------------------------ */

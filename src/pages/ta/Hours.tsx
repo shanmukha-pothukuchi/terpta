@@ -14,12 +14,17 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Pencil,
   Plus,
   Send,
+  Trash2,
+  TriangleAlert,
+  Undo2,
   UserRoundPlus,
 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { errorMessage } from "../../lib/errorMessage";
 import { usePeriod } from "../../lib/period";
 import {
   formatDate,
@@ -27,6 +32,7 @@ import {
   formatHours,
   formatMeeting,
   formatTimeRange,
+  shortShiftName,
   type DayCode,
 } from "../../lib/format";
 import {
@@ -45,6 +51,7 @@ import {
   TD,
   TH,
   THead,
+  Tooltip,
   TR,
   toast,
   type BadgeTone,
@@ -122,8 +129,11 @@ const LOG_STATUS: Record<HourLog["status"], { tone: BadgeTone; label: string }> 
 };
 
 function itemLabel(item: ScheduleItem): string {
-  return item.shift.description && item.shift.description !== item.dutyType.name
-    ? `${item.dutyType.name} · ${item.shift.description}`
+  const detail = item.shift.description
+    ? shortShiftName(item.shift.description, item.dutyType.name)
+    : "";
+  return detail && detail !== item.dutyType.name
+    ? `${item.dutyType.name} · ${detail}`
     : item.dutyType.name;
 }
 
@@ -148,6 +158,20 @@ export interface HoursViewProps {
   }) => Promise<void>;
   onSubmitWeek: () => Promise<void>;
   submittingWeek?: boolean;
+  /**
+   * Fix a draft or flagged entry in place. A flagged entry drops back to
+   * draft, so the TA can correct what the coordinator objected to and
+   * resubmit instead of being stuck with a red badge.
+   */
+  onUpdateLog?: (fields: {
+    hourLogId: string;
+    hours: number;
+    note?: string;
+  }) => Promise<void>;
+  /** Delete a draft or flagged entry outright. */
+  onDeleteLog?: (hourLogId: string) => Promise<void>;
+  /** Pull the whole week back to draft after submitting it too early. */
+  onUnsubmitWeek?: () => Promise<void>;
 }
 
 export function HoursView({
@@ -161,9 +185,18 @@ export function HoursView({
   onLogHours,
   onSubmitWeek,
   submittingWeek,
+  onUpdateLog,
+  onDeleteLog,
+  onUnsubmitWeek,
 }: HoursViewProps) {
   const weekEnd = addDaysIso(weekStart, 6);
   const [loggingId, setLoggingId] = useState<string | null>(null);
+  // Inline edit of one row at a time; `editHours`/`editNote` mirror it.
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [editHours, setEditHours] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const [unsubmitting, setUnsubmitting] = useState(false);
 
   // Manual entry form state
   const [entryAssignment, setEntryAssignment] = useState("");
@@ -179,6 +212,36 @@ export function HoursView({
     .sort((a, b) => a.date.localeCompare(b.date) || a._creationTime - b._creationTime);
   const weekTotal = weekLogs.reduce((s, l) => s + l.hours, 0);
   const draftCount = weekLogs.filter((l) => l.status === "draft").length;
+  const submittedCount = weekLogs.filter((l) => l.status === "submitted").length;
+  const flaggedCount = weekLogs.filter((l) => l.status === "flagged").length;
+  /** Draft and flagged entries are the TA's to change; the rest are not. */
+  const isEditable = (status: HourLog["status"]) =>
+    status === "draft" || status === "flagged";
+
+  const beginEdit = (log: HourLog) => {
+    setEditingLogId(log._id as string);
+    setEditHours(String(log.hours));
+    setEditNote(log.note ?? "");
+  };
+
+  const saveEdit = async (log: HourLog) => {
+    const hours = Number(editHours);
+    if (!Number.isFinite(hours) || hours <= 0) {
+      toast("Enter a number of hours greater than zero", { tone: "error" });
+      return;
+    }
+    setRowBusy(log._id as string);
+    try {
+      await onUpdateLog?.({
+        hourLogId: log._id as string,
+        hours,
+        note: editNote.trim() || undefined,
+      });
+      setEditingLogId(null);
+    } finally {
+      setRowBusy(null);
+    }
+  };
 
   // Sync occurrences inside this week: weekly shifts (active that week) +
   // one-off shifts dated within it.
@@ -301,6 +364,21 @@ export function HoursView({
                 <ChevronRight size={14} strokeWidth={1.5} />
               </Button>
             </div>
+            {/* Submitting is not a one-way door: pull the week back while
+                the coordinator has not approved any of it yet. */}
+            {submittedCount > 0 && onUnsubmitWeek ? (
+              <Button
+                variant="secondary"
+                loading={unsubmitting}
+                onClick={() => {
+                  setUnsubmitting(true);
+                  void onUnsubmitWeek().finally(() => setUnsubmitting(false));
+                }}
+              >
+                <Undo2 size={14} strokeWidth={1.5} aria-hidden />
+                Unsubmit week
+              </Button>
+            ) : null}
             <Button
               variant="primary"
               onClick={() => void onSubmitWeek()}
@@ -336,9 +414,11 @@ export function HoursView({
               <ProgressBar value={weekTotal} max={maxHoursPerWeek} className="max-w-56 flex-1" />
             ) : null}
             <span className="ml-auto text-[12px] text-faint">
-              {draftCount === 0
-                ? "All entries submitted"
-                : `${draftCount} draft ${draftCount === 1 ? "entry" : "entries"} to submit`}
+              {flaggedCount > 0
+                ? `${flaggedCount} flagged ${flaggedCount === 1 ? "entry" : "entries"} to fix`
+                : draftCount === 0
+                  ? "All entries submitted"
+                  : `${draftCount} draft ${draftCount === 1 ? "entry" : "entries"} to submit`}
             </span>
           </Surface>
 
@@ -465,12 +545,13 @@ export function HoursView({
                   <TH className="w-20">Hours</TH>
                   <TH className="w-32">Status</TH>
                   <TH>Note</TH>
+                  <TH className="w-24 text-right">Actions</TH>
                 </TR>
               </THead>
               <TBody>
                 {weekLogs.length === 0 ? (
                   <TR>
-                    <TD colSpan={5} className="py-6 text-center text-faint">
+                    <TD colSpan={6} className="py-6 text-center text-faint">
                       No hours logged this week.
                     </TD>
                   </TR>
@@ -478,15 +559,123 @@ export function HoursView({
                   weekLogs.map((log) => {
                     const item = itemByAssignment.get(log.assignmentRef);
                     const status = LOG_STATUS[log.status];
+                    const id = log._id as string;
+                    const editing = editingLogId === id;
+                    const busy = rowBusy === id;
                     return (
                       <TR key={log._id}>
                         <TD className="font-mono text-[12px]">{formatDate(log.date)}</TD>
                         <TD>{item ? itemLabel(item) : "—"}</TD>
-                        <TD className="font-mono text-[12px]">{formatHourCount(log.hours)}</TD>
+                        <TD className="font-mono text-[12px]">
+                          {editing ? (
+                            <Input
+                              type="number"
+                              step="0.25"
+                              min="0.25"
+                              aria-label="Hours"
+                              value={editHours}
+                              onChange={(e) => setEditHours(e.target.value)}
+                              className="h-7 w-20 text-[12px]"
+                            />
+                          ) : (
+                            formatHourCount(log.hours)
+                          )}
+                        </TD>
                         <TD>
                           <Badge tone={status.tone}>{status.label}</Badge>
                         </TD>
-                        <TD className="text-muted">{log.note ?? ""}</TD>
+                        <TD className="text-muted">
+                          {editing ? (
+                            <Input
+                              aria-label="Note"
+                              value={editNote}
+                              onChange={(e) => setEditNote(e.target.value)}
+                              placeholder="Note"
+                              className="h-7 text-[12px]"
+                            />
+                          ) : (
+                            <div className="flex min-w-0 flex-col gap-0.5">
+                              <span className="truncate">{log.note ?? ""}</span>
+                              {/* Why it was flagged, so the fix is obvious. */}
+                              {log.status === "flagged" && log.flagNote ? (
+                                <span className="flex items-start gap-1 text-[12px] text-[#F4A3AE]">
+                                  <TriangleAlert
+                                    size={12}
+                                    strokeWidth={1.5}
+                                    className="mt-[2px] shrink-0"
+                                    aria-hidden
+                                  />
+                                  <span className="min-w-0">{log.flagNote}</span>
+                                </span>
+                              ) : null}
+                            </div>
+                          )}
+                        </TD>
+                        <TD>
+                          {isEditable(log.status) && onUpdateLog ? (
+                            <div className="flex items-center justify-end gap-1">
+                              {editing ? (
+                                <>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    loading={busy}
+                                    onClick={() => void saveEdit(log)}
+                                  >
+                                    Save
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setEditingLogId(null)}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Tooltip
+                                    label={
+                                      log.status === "flagged"
+                                        ? "Fix and return to draft"
+                                        : "Edit this entry"
+                                    }
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => beginEdit(log)}
+                                      aria-label={`Edit ${formatDate(log.date)} entry`}
+                                      className="cursor-pointer rounded-[5px] p-1 text-faint transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-ink"
+                                    >
+                                      <Pencil size={13} strokeWidth={1.5} aria-hidden />
+                                    </button>
+                                  </Tooltip>
+                                  {onDeleteLog ? (
+                                    <Tooltip label="Delete this entry">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setRowBusy(id);
+                                          void onDeleteLog(id).finally(() =>
+                                            setRowBusy(null),
+                                          );
+                                        }}
+                                        aria-label={`Delete ${formatDate(log.date)} entry`}
+                                        className="cursor-pointer rounded-[5px] p-1 text-faint transition-colors hover:bg-[rgba(226,24,51,0.18)] hover:text-[#F4A3AE]"
+                                      >
+                                        <Trash2 size={13} strokeWidth={1.5} aria-hidden />
+                                      </button>
+                                    </Tooltip>
+                                  ) : null}
+                                </>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="block text-right text-[12px] text-faint">
+                              {log.status === "approved" ? "Locked" : ""}
+                            </span>
+                          )}
+                        </TD>
                       </TR>
                     );
                   })
@@ -520,6 +709,9 @@ export default function TaHours() {
   );
   const logHours = useMutation(api.ta.logHours);
   const submitWeek = useMutation(api.ta.submitWeek);
+  const updateHourLog = useMutation(api.ta.updateHourLog);
+  const deleteHourLog = useMutation(api.ta.deleteHourLog);
+  const unsubmitWeek = useMutation(api.ta.unsubmitWeek);
 
   const [weekStart, setWeekStart] = useState(() => mondayOf(todayIso()));
   const [submitting, setSubmitting] = useState(false);
@@ -591,6 +783,43 @@ export default function TaHours() {
       }}
       onSubmitWeek={handleSubmitWeek}
       submittingWeek={submitting}
+      onUpdateLog={async ({ hourLogId, hours, note }) => {
+        try {
+          await updateHourLog({
+            hourLogRef: hourLogId as Id<"hourLogs">,
+            hours,
+            note,
+          });
+          toast("Entry updated — back to draft");
+        } catch (e) {
+          toast(errorMessage(e), { tone: "error" });
+        }
+      }}
+      onDeleteLog={async (hourLogId) => {
+        try {
+          await deleteHourLog({ hourLogRef: hourLogId as Id<"hourLogs"> });
+          toast("Entry deleted");
+        } catch (e) {
+          toast(errorMessage(e), { tone: "error" });
+        }
+      }}
+      onUnsubmitWeek={async () => {
+        if (!pick.taProfileId) return;
+        try {
+          const n = await unsubmitWeek({
+            taProfileRef: pick.taProfileId,
+            weekStart,
+          });
+          toast(
+            n === 0
+              ? "Nothing to pull back — those entries are already approved"
+              : `${n} ${n === 1 ? "entry" : "entries"} back to draft`,
+            { tone: n === 0 ? "error" : "success" },
+          );
+        } catch (e) {
+          toast(errorMessage(e), { tone: "error" });
+        }
+      }}
     />
   );
 }

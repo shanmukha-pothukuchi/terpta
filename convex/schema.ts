@@ -152,6 +152,8 @@ export default defineSchema({
       v.literal("approved"),
       v.literal("flagged"),
     ),
+    /** Why a coordinator flagged this. Cleared when the flag is lifted. */
+    flagNote: v.optional(v.string()),
   })
     .index("by_profile", ["taProfileRef"])
     .index("by_assignment", ["assignmentRef"]),
@@ -162,12 +164,49 @@ export default defineSchema({
     requesterRef: v.id("taProfiles"),
     suggestedTaRef: v.optional(v.id("taProfiles")),
     reason: v.string(),
+    /**
+     * How long the swap lasts. "date" covers a single meeting and leaves the
+     * recurring assignment alone; "permanent" hands the shift over for the
+     * rest of the period. Optional so rows written before this field existed
+     * keep working — read them as "permanent", which is what they did.
+     */
+    scope: v.optional(v.union(v.literal("date"), v.literal("permanent"))),
+    /** ISO date, required when `scope` is "date". */
+    date: v.optional(v.string()),
     status: v.union(
       v.literal("pending"),
       v.literal("approved"),
       v.literal("declined"),
+      v.literal("cancelled"),
     ),
-  }).index("by_period", ["periodRef"]),
+  })
+    .index("by_period", ["periodRef"])
+    .index("by_requester", ["requesterRef"]),
+
+  /**
+   * A one-off substitution on a single date.
+   *
+   * A date-scoped swap leaves the recurring assignment alone, so the fact that
+   * someone else is standing in for one meeting has to live somewhere of its
+   * own. The Builder reads these to paint the fill-in over the regular chip on
+   * that date; `coverTaRef` stays unset while the slot is still open.
+   */
+  shiftCoverages: defineTable({
+    periodRef: v.id("staffingPeriods"),
+    shiftRef: v.id("shifts"),
+    date: v.string(), // ISO date
+    /** The TA who is out that day. */
+    absentTaRef: v.id("taProfiles"),
+    /** Who is standing in. Unset means nobody has been found yet. */
+    coverTaRef: v.optional(v.id("taProfiles")),
+    /** How the cover was chosen. */
+    filledBy: v.optional(v.union(v.literal("manual"), v.literal("auto"))),
+    /** The approved request this came from, when it came from one. */
+    swapRef: v.optional(v.id("swapRequests")),
+  })
+    .index("by_period", ["periodRef"])
+    .index("by_shift_date", ["shiftRef", "date"])
+    .index("by_cover", ["coverTaRef"]),
 
   changeLog: defineTable({
     periodRef: v.id("staffingPeriods"),

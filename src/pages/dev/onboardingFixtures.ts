@@ -107,10 +107,27 @@ export const staffedSections = [
     meetings: [{ day: "Th" as const, startMin: 780, endMin: 830 }],
     instructors: ["Cliff Bakalian"],
   },
+  // Clashes with the CMSC131 Friday discussion *and* is ranked below, so the
+  // preview exercises both new states: a blocked picker row and a ranked row
+  // that has since gone red.
+  {
+    _id: sid("sec-132-0301"),
+    sectionNumber: "0301",
+    meetings: [{ day: "F" as const, startMin: 540, endMin: 590 }],
+    instructors: ["Fawzi Emad"],
+  },
 ];
 
 export const preferencesValue: PreferencesValue = {
   maxHoursPerWeek: 10,
   dutyTypePrefs: [did("dt-disc"), did("dt-oh")],
-  sectionPrefs: [sid("sec-132-0101")],
+  sectionPrefs: [sid("sec-132-0101"), sid("sec-132-0301")],
 };
+
+/**
+ * Seeds the "About you" block on the step-1 preview. The name is deliberately
+ * blank so the preview shows the first-name placeholder doing its job.
+ */
+export const contactDetails = { preferredName: "", phone: "301-555-0147" };
+
+export const firstName = "Priya";

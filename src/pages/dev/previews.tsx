@@ -236,6 +236,8 @@ function SchedulePreview() {
         hourLogs={fx.taHourLogs}
         maxHoursPerWeek={10}
         pendingSwaps={fx.pendingSwaps}
+        coverage={fx.coverageNotices}
+        onCancelSwap={() => {}}
         onRequestSwap={noop}
         onAddToCalendar={noop}
         addingToCalendar={false}
@@ -259,6 +261,9 @@ function TaHoursPreview() {
         onLogHours={asyncNoop}
         onSubmitWeek={asyncNoop}
         submittingWeek={false}
+        onUpdateLog={asyncNoop}
+        onDeleteLog={asyncNoop}
+        onUnsubmitWeek={asyncNoop}
       />
     </PageFrame>
   );
@@ -280,6 +285,7 @@ function OnboardingCoursesPreview() {
   const [value, setValue] = useState<ClassesValue>(
     state === "empty" ? ofx.emptyClassesValue : ofx.classesValue,
   );
+  const [details, setDetails] = useState(ofx.contactDetails);
   return (
     <Frame>
       <WizardChrome stepIndex={0} onContinue={noop} identity={WIZ_IDENTITY}>
@@ -290,6 +296,9 @@ function OnboardingCoursesPreview() {
           onImportCourse={
             state === "error" ? ofx.previewImportFailure : ofx.previewImport
           }
+          details={details}
+          onDetailsChange={setDetails}
+          firstName={ofx.firstName}
         />
       </WizardChrome>
     </Frame>

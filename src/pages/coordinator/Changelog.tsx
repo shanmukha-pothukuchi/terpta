@@ -38,6 +38,7 @@ const SWAP_TONE: Record<SwapRow["status"], BadgeTone> = {
   pending: "amber",
   approved: "green",
   declined: "neutral",
+  cancelled: "neutral",
 };
 
 /* ------------------------------------------------------------------ */
