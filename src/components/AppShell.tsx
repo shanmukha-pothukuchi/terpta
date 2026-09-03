@@ -45,7 +45,7 @@ const TA_NAV: NavItem[] = [
   { label: "Availability", to: "/ta/availability", icon: CalendarCheck },
   { label: "My Schedule", to: "/ta/schedule", icon: CalendarDays },
   { label: "Hours", to: "/ta/hours", icon: Clock },
-  { label: "Preferences", to: "/ta/onboarding", icon: SlidersHorizontal },
+  { label: "Preferences", to: "/ta/preferences", icon: SlidersHorizontal },
 ];
 
 const COORDINATOR_NAV: NavItem[] = [

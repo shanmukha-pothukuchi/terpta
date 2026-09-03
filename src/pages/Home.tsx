@@ -1,4 +1,7 @@
 import { Navigate } from "react-router-dom";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import { UserRoundPlus } from "lucide-react";
 import { useCurrentUser } from "../lib/useCurrentUser";
 import { useSignOut } from "../lib/useSignOut";
@@ -40,9 +43,32 @@ export default function Home() {
     return <RoleChooser />;
   }
 
+  if (me.role === "coordinator") {
+    return <Navigate to="/coordinator/roster" replace />;
+  }
+  // A TA with no profile at all has never been through setup.
+  if (me.taProfiles.length === 0) {
+    return <Navigate to="/ta/onboarding" replace />;
+  }
+  return <TaLanding periodRef={me.taProfiles[0].periodRef} />;
+}
+
+/**
+ * Sends a TA to setup until they finish it once, then to their availability.
+ * The wizard is still reachable later from Preferences.
+ */
+function TaLanding({ periodRef }: { periodRef: Id<"staffingPeriods"> }) {
+  const profile = useQuery(api.ta.getProfile, { periodRef });
+  if (profile === undefined) {
+    return <FullPageSpinner label="Loading your account…" />;
+  }
   return (
     <Navigate
-      to={me.role === "coordinator" ? "/coordinator/roster" : "/ta/availability"}
+      to={
+        profile === null || profile.onboardingCompletedAt === undefined
+          ? "/ta/onboarding"
+          : "/ta/availability"
+      }
       replace
     />
   );

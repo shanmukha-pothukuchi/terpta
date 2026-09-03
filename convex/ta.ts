@@ -3,7 +3,7 @@ import type { FunctionReference } from "convex/server";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { blockStatusValidator, dayValidator } from "./schema";
+import { blockStatusValidator, dayValidator, meetingValidator } from "./schema";
 import { requireOwnProfile, requireUser } from "./lib/auth";
 import { dutyTypeDoc } from "./dutyTypes";
 import { assignmentDoc, shiftDoc } from "./shifts";
@@ -41,6 +41,8 @@ const taProfileDoc = v.object({
   dutyTypePrefs: v.array(v.id("dutyTypes")),
   sectionPrefs: v.array(v.id("sections")),
   availabilitySubmittedAt: v.optional(v.number()),
+  manualClassMeetings: v.optional(v.array(meetingValidator)),
+  onboardingCompletedAt: v.optional(v.number()),
 });
 
 const availabilityBlockDoc = v.object({
@@ -192,6 +194,8 @@ export const saveProfile = mutation({
     syncAsyncPreference: v.number(),
     dutyTypePrefs: v.array(v.id("dutyTypes")),
     sectionPrefs: v.array(v.id("sections")),
+    /** Class times typed by hand when umd.io could not be reached. */
+    manualClassMeetings: v.optional(v.array(meetingValidator)),
   },
   returns: v.id("taProfiles"),
   handler: async (ctx, args) => {
@@ -218,12 +222,20 @@ export const saveProfile = mutation({
       if (!section) throw new ConvexError("Unknown section reference");
     }
 
+    const manualClassMeetings = args.manualClassMeetings ?? [];
+    for (const m of manualClassMeetings) {
+      if (m.endMin <= m.startMin) {
+        throw new ConvexError("A class block must end after it starts");
+      }
+    }
+
     const fields = {
       maxHoursPerWeek: args.maxHoursPerWeek,
       enrolledSectionRefs: args.enrolledSectionRefs,
       syncAsyncPreference: args.syncAsyncPreference,
       dutyTypePrefs: args.dutyTypePrefs,
       sectionPrefs: args.sectionPrefs,
+      manualClassMeetings,
     };
 
     const existing = await ctx.db
@@ -236,11 +248,23 @@ export const saveProfile = mutation({
     let taProfileRef: Id<"taProfiles">;
     let enrolledChanged: boolean;
     if (existing) {
-      enrolledChanged =
-        existing.enrolledSectionRefs.length !== args.enrolledSectionRefs.length ||
-        existing.enrolledSectionRefs.some(
-          (ref, i) => ref !== args.enrolledSectionRefs[i],
+      const sameEnrolled =
+        existing.enrolledSectionRefs.length === args.enrolledSectionRefs.length &&
+        existing.enrolledSectionRefs.every(
+          (ref, i) => ref === args.enrolledSectionRefs[i],
         );
+      const previousManual = existing.manualClassMeetings ?? [];
+      const sameManual =
+        previousManual.length === manualClassMeetings.length &&
+        previousManual.every((m, i) => {
+          const next = manualClassMeetings[i];
+          return (
+            m.day === next.day &&
+            m.startMin === next.startMin &&
+            m.endMin === next.endMin
+          );
+        });
+      enrolledChanged = !sameEnrolled || !sameManual;
       await ctx.db.patch(existing._id, fields);
       taProfileRef = existing._id;
     } else {
@@ -249,7 +273,8 @@ export const saveProfile = mutation({
         periodRef: args.periodRef,
         ...fields,
       });
-      enrolledChanged = args.enrolledSectionRefs.length > 0;
+      enrolledChanged =
+        args.enrolledSectionRefs.length > 0 || manualClassMeetings.length > 0;
     }
 
     if (enrolledChanged) {
@@ -449,5 +474,94 @@ export const requestSwap = mutation({
       reason: args.reason.trim(),
       status: "pending",
     });
+  },
+});
+
+/** Stamp the setup wizard as finished (or skipped through). Idempotent. */
+export const completeOnboarding = mutation({
+  args: { taProfileRef: v.id("taProfiles") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { profile } = await requireOwnProfile(ctx, args.taProfileRef);
+    if (profile.onboardingCompletedAt === undefined) {
+      await ctx.db.patch(profile._id, { onboardingCompletedAt: Date.now() });
+    }
+    return null;
+  },
+});
+
+/**
+ * The caller's enrolled classes, grouped by course and joined with every
+ * section of that course, so the Classes tab can rehydrate the picker.
+ *
+ * Courses and sections are public reference data; the profile that selects
+ * them is the caller's own.
+ */
+export const getEnrolledClasses = query({
+  args: { periodRef: v.id("staffingPeriods") },
+  returns: v.array(
+    v.object({
+      courseId: v.string(),
+      courseName: v.string(),
+      selectedSectionIds: v.array(v.id("sections")),
+      sections: v.array(
+        v.object({
+          _id: v.id("sections"),
+          sectionNumber: v.string(),
+          type: v.union(
+            v.literal("lecture"),
+            v.literal("discussion"),
+            v.literal("lab"),
+          ),
+          meetings: v.array(meetingValidator),
+          instructors: v.optional(v.array(v.string())),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const { user } = await requireUser(ctx);
+    const profile = await ctx.db
+      .query("taProfiles")
+      .withIndex("by_user_period", (q) =>
+        q.eq("userRef", user._id).eq("periodRef", args.periodRef),
+      )
+      .unique();
+    if (!profile) return [];
+
+    // Which courses do the selected sections belong to?
+    const selectedByCourse = new Map<string, Id<"sections">[]>();
+    for (const sectionRef of profile.enrolledSectionRefs) {
+      const section = await ctx.db.get(sectionRef);
+      if (!section) continue;
+      const key = section.courseRef as string;
+      selectedByCourse.set(key, [...(selectedByCourse.get(key) ?? []), sectionRef]);
+    }
+
+    const out = [];
+    for (const [courseKey, selectedSectionIds] of selectedByCourse) {
+      const courseRef = courseKey as Id<"courses">;
+      const course = await ctx.db.get(courseRef);
+      if (!course) continue;
+      const sections = await ctx.db
+        .query("sections")
+        .withIndex("by_course", (q) => q.eq("courseRef", courseRef))
+        .collect();
+      sections.sort((a, b) => a.sectionNumber.localeCompare(b.sectionNumber));
+      out.push({
+        courseId: course.courseId,
+        courseName: course.name,
+        selectedSectionIds,
+        sections: sections.map((s) => ({
+          _id: s._id,
+          sectionNumber: s.sectionNumber,
+          type: s.type,
+          meetings: s.meetings,
+          instructors: s.instructors,
+        })),
+      });
+    }
+    out.sort((a, b) => a.courseId.localeCompare(b.courseId));
+    return out;
   },
 });

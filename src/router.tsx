@@ -4,7 +4,8 @@ import Login from "./pages/Login";
 import Callback from "./pages/Callback";
 import Home from "./pages/Home";
 import NotFound from "./pages/NotFound";
-import TaOnboarding from "./pages/ta/Onboarding";
+import TaOnboardingWizard from "./pages/ta/onboarding/Wizard";
+import TaPreferences from "./pages/ta/Preferences";
 import TaAvailability from "./pages/ta/Availability";
 import TaSchedule from "./pages/ta/Schedule";
 import TaHours from "./pages/ta/Hours";
@@ -36,7 +37,8 @@ export const router = createBrowserRouter(
       element: <App />,
       children: [
         { index: true, element: <Home /> },
-        { path: "ta/onboarding", element: <TaOnboarding /> },
+        { path: "ta/onboarding", element: <TaOnboardingWizard /> },
+        { path: "ta/preferences", element: <TaPreferences /> },
         { path: "ta/availability", element: <TaAvailability /> },
         { path: "ta/schedule", element: <TaSchedule /> },
         { path: "ta/hours", element: <TaHours /> },

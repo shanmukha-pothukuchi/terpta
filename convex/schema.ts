@@ -29,6 +29,10 @@ export default defineSchema({
     workosId: v.string(),
     email: v.string(),
     name: v.string(),
+    /** What the TA asked to be called; falls back to `name` when unset. */
+    preferredName: v.optional(v.string()),
+    /** Optional, for exam-day reminders. Never shown to other TAs. */
+    phone: v.optional(v.string()),
     role: v.optional(roleValidator),
   })
     .index("by_workos_id", ["workosId"])
@@ -99,6 +103,13 @@ export default defineSchema({
     dutyTypePrefs: v.array(v.id("dutyTypes")), // ranked, best first
     sectionPrefs: v.array(v.id("sections")), // ranked, best first
     availabilitySubmittedAt: v.optional(v.number()),
+    /**
+     * Class times typed by hand when umd.io could not be reached. Treated
+     * exactly like enrolled-section meetings when imported blocks are rebuilt.
+     */
+    manualClassMeetings: v.optional(v.array(meetingValidator)),
+    /** Set when the TA finishes (or skips to the end of) the setup wizard. */
+    onboardingCompletedAt: v.optional(v.number()),
   })
     .index("by_period", ["periodRef"])
     .index("by_user_period", ["userRef", "periodRef"]),

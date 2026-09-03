@@ -34,7 +34,15 @@ import {
 } from "../coordinator/Hours";
 import { ScheduleView } from "../ta/Schedule";
 import { HoursView as TaHoursView } from "../ta/Hours";
+import { WizardChrome } from "../ta/onboarding/WizardChrome";
+import { Step1Basics } from "../ta/onboarding/Step1Basics";
+import { Step2Classes } from "../ta/onboarding/Step2Classes";
+import { Step3Availability } from "../ta/onboarding/Step3Availability";
+import { Step4Preferences } from "../ta/onboarding/Step4Preferences";
+import { DoneScreen } from "../ta/onboarding/DoneScreen";
+import type { BasicsValue, ClassesValue, PreferencesValue } from "../ta/onboarding/model";
 import * as fx from "./fixtures";
+import * as ofx from "./onboardingFixtures";
 
 const noop = () => {};
 const asyncNoop = async () => {};
@@ -262,6 +270,104 @@ function TaHoursPreview() {
 /* Index + dispatcher                                                  */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* TA setup wizard                                                     */
+/* ------------------------------------------------------------------ */
+
+function OnboardingStep1Preview() {
+  const [value, setValue] = useState<BasicsValue>({ preferredName: "Priya", phone: "" });
+  return (
+    <Frame>
+      <WizardChrome stepIndex={0} onContinue={noop}>
+        <Step1Basics
+          value={value}
+          onChange={setValue}
+          firstName="Priya"
+          courseLabel="CMSC132 · Fall 2026"
+        />
+      </WizardChrome>
+    </Frame>
+  );
+}
+
+function OnboardingStep2Preview() {
+  const [params] = useSearchParams();
+  const state = params.get("state");
+  const [value, setValue] = useState<ClassesValue>(
+    state === "empty" ? ofx.emptyClassesValue : ofx.classesValue,
+  );
+  return (
+    <Frame>
+      <WizardChrome
+        stepIndex={1}
+        onBack={noop}
+        onContinue={noop}
+        onSkip={noop}
+        continueDisabled={!value.confirmedComplete}
+        continueHint="Confirm you have added all your classes"
+      >
+        <Step2Classes
+          value={value}
+          onChange={setValue}
+          onSearch={ofx.previewSearch}
+          onImportCourse={
+            state === "error" ? ofx.previewImportFailure : ofx.previewImport
+          }
+        />
+      </WizardChrome>
+    </Frame>
+  );
+}
+
+function OnboardingStep3Preview() {
+  return (
+    <Frame>
+      <WizardChrome stepIndex={2} onBack={noop} onContinue={noop}>
+        <Step3Availability
+          data={availabilityFixture}
+          markedPercent={64}
+          showFirstVisitHint
+          onSave={asyncNoop}
+          onAddException={asyncNoop}
+          onRemoveException={asyncNoop}
+        />
+      </WizardChrome>
+    </Frame>
+  );
+}
+
+function OnboardingStep4Preview() {
+  const [value, setValue] = useState<PreferencesValue>(ofx.preferencesValue);
+  return (
+    <Frame>
+      <WizardChrome stepIndex={3} onBack={noop} onContinue={noop} onSkip={noop} continueLabel="Finish">
+        <Step4Preferences
+          value={value}
+          onChange={setValue}
+          dutyTypes={ofx.dutyTypes}
+          sections={ofx.staffedSections}
+        />
+      </WizardChrome>
+    </Frame>
+  );
+}
+
+function OnboardingDonePreview() {
+  return (
+    <Frame>
+      <DoneScreen
+        publishDateLabel="Oct 3"
+        coursesAdded={3}
+        hoursMarked={22}
+        maxHoursPerWeek={10}
+        topPreferences={["Discussion", "Office Hours", "Grading"]}
+        onGoToSchedule={noop}
+        onEditAvailability={noop}
+      />
+    </Frame>
+  );
+}
+
 const SCREENS: Record<string, { label: string; element: ReactNode }> = {
   login: { label: "Login (add ?state=loading or ?state=error)", element: <LoginPreview /> },
   shell: { label: "App shell + command palette", element: <ShellPreview /> },
@@ -274,6 +380,14 @@ const SCREENS: Record<string, { label: string; element: ReactNode }> = {
   "hours-approval": { label: "Coordinator hours approval", element: <HoursApprovalPreview /> },
   schedule: { label: "TA schedule", element: <SchedulePreview /> },
   "ta-hours": { label: "TA hour logging", element: <TaHoursPreview /> },
+  "onboarding-1": { label: "Setup 1 — welcome & basics", element: <OnboardingStep1Preview /> },
+  "onboarding-2": {
+    label: "Setup 2 — your classes (?state=empty | ?state=error)",
+    element: <OnboardingStep2Preview />,
+  },
+  "onboarding-3": { label: "Setup 3 — your availability", element: <OnboardingStep3Preview /> },
+  "onboarding-4": { label: "Setup 4 — preferences", element: <OnboardingStep4Preview /> },
+  "onboarding-done": { label: "Setup — done", element: <OnboardingDonePreview /> },
 };
 
 function PreviewIndex() {

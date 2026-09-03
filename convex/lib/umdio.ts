@@ -14,6 +14,17 @@ export interface UmdScheduleSource {
   /** Throws on network/HTTP failure or if the course does not exist. */
   fetchCourse(courseId: string, term: string): Promise<UmdioCourse>;
   fetchSections(courseId: string, term: string): Promise<UmdioSection[]>;
+  /** Every course in a department, for onboarding's course autocomplete. */
+  fetchDepartmentCourses(
+    deptId: string,
+    term: string,
+  ): Promise<Array<{ courseId: string; name: string }>>;
+}
+
+/** "cmsc1" -> "CMSC". Autocomplete needs the letters before the digits. */
+export function departmentOf(query: string): string | null {
+  const letters = query.trim().toUpperCase().match(/^[A-Z]+/);
+  return letters && letters[0].length >= 2 ? letters[0].slice(0, 4) : null;
 }
 
 export const UMDIO_BASE = "https://api.umd.io/v0";
@@ -55,5 +66,22 @@ export const umdioSource: UmdScheduleSource = {
       throw new Error(`umd.io returned unexpected sections payload for ${courseId}`);
     }
     return data as UmdioSection[];
+  },
+
+  async fetchDepartmentCourses(deptId, term) {
+    // 100 per page is umd.io's maximum; departments run to a few hundred.
+    const out: Array<{ courseId: string; name: string }> = [];
+    for (let page = 1; page <= 5; page++) {
+      const data = await umdioGet(
+        `${UMDIO_BASE}/courses?dept_id=${encodeURIComponent(deptId)}` +
+          `&semester=${encodeURIComponent(term)}&per_page=100&page=${page}`,
+      );
+      if (!Array.isArray(data) || data.length === 0) break;
+      for (const raw of data as UmdioCourse[]) {
+        if (raw.course_id) out.push({ courseId: raw.course_id, name: raw.name });
+      }
+      if (data.length < 100) break;
+    }
+    return out;
   },
 };

@@ -28,6 +28,8 @@ export const current = query({
       workosId: v.string(),
       email: v.string(),
       name: v.string(),
+      preferredName: v.optional(v.string()),
+      phone: v.optional(v.string()),
       role: v.optional(roleValidator),
       /** Empty unless role === "ta". */
       taProfiles: v.array(
@@ -163,6 +165,37 @@ export const upsertFromWorkos = internalMutation({
       firstName: args.firstName,
       lastName: args.lastName,
     });
+    return null;
+  },
+});
+
+/** Onboarding step 1: what to call the TA, and where to text exam reminders. */
+export const updateContact = mutation({
+  args: {
+    preferredName: v.optional(v.string()),
+    phone: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { user } = await requireUser(ctx);
+    const patch: { preferredName?: string; phone?: string } = {};
+    if (args.preferredName !== undefined) {
+      const trimmed = args.preferredName.trim();
+      if (trimmed.length > 60) {
+        throw new ConvexError("Preferred name is too long");
+      }
+      patch.preferredName = trimmed;
+    }
+    if (args.phone !== undefined) {
+      const trimmed = args.phone.trim();
+      // Deliberately permissive: TAs paste all sorts of shapes, and this is
+      // only ever read by a human sending an exam-day reminder.
+      if (trimmed.length > 0 && !/^[0-9+()\-.\s]{7,20}$/.test(trimmed)) {
+        throw new ConvexError("That does not look like a phone number");
+      }
+      patch.phone = trimmed;
+    }
+    if (Object.keys(patch).length > 0) await ctx.db.patch(user._id, patch);
     return null;
   },
 });

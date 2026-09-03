@@ -8,6 +8,7 @@
 import { ConvexError, v } from "convex/values";
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
 } from "./_generated/server";
@@ -21,10 +22,11 @@ import {
   normalizeUmdioMeetings,
   type NormalizedMeeting,
   type SectionType,
+  type UmdDay,
   type UmdioCourse,
   type UmdioSection,
 } from "./lib/umdFixtures";
-import { umdioSource } from "./lib/umdio";
+import { departmentOf, umdioSource } from "./lib/umdio";
 
 // ---------------------------------------------------------------------------
 // umdCache internal helpers (actions cannot touch ctx.db)
@@ -208,33 +210,44 @@ function normalizePayload(payload: RawPayload): {
   };
 }
 
+const importResultValidator = v.object({
+  courseRef: v.id("courses"),
+  courseName: v.string(),
+  sectionRefs: v.array(v.id("sections")),
+  source: v.union(v.literal("umdio"), v.literal("cache"), v.literal("fixture")),
+  sectionsImported: v.number(),
+});
+
+interface ImportResult {
+  courseRef: Id<"courses">;
+  courseName: string;
+  sectionRefs: Id<"sections">[];
+  source: "umdio" | "cache" | "fixture";
+  sectionsImported: number;
+}
+
 /**
  * Imports a course + its sections from umd.io (24h-cached), falling back to
  * bundled fixtures when umd.io is down. Coordinator-only.
  */
 export const importCourse = action({
   args: { courseId: v.string(), term: v.string() },
-  returns: v.object({
-    courseRef: v.id("courses"),
-    sectionRefs: v.array(v.id("sections")),
-    source: v.union(
-      v.literal("umdio"),
-      v.literal("cache"),
-      v.literal("fixture"),
-    ),
-    sectionsImported: v.number(),
-  }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    courseRef: Id<"courses">;
-    sectionRefs: Id<"sections">[];
-    source: "umdio" | "cache" | "fixture";
-    sectionsImported: number;
-  }> => {
+  returns: importResultValidator,
+  handler: async (ctx, args): Promise<ImportResult> => {
     await ctx.runQuery(internal.umd.assertCoordinator, {});
+    return await ctx.runAction(internal.umd.importCourseUnchecked, args);
+  },
+});
 
+/**
+ * The import pipeline itself, with no authorization of its own. Callers gate
+ * it: importCourse requires a coordinator, importForEnrollment only a signed-in
+ * user (course data is public and the upsert is idempotent).
+ */
+export const importCourseUnchecked = internalAction({
+  args: { courseId: v.string(), term: v.string() },
+  returns: importResultValidator,
+  handler: async (ctx, args): Promise<ImportResult> => {
     const courseId = args.courseId.toUpperCase().trim();
     const term = args.term.trim();
     const key = cacheKey(courseId, term);
@@ -296,6 +309,7 @@ export const importCourse = action({
 
     return {
       courseRef,
+      courseName: normalized.name,
       sectionRefs,
       source: resultSource,
       sectionsImported: sectionRefs.length,
@@ -331,10 +345,17 @@ export const regenerateImportedBlocks = internalMutation({
     }
 
     const seen = new Set<string>();
+    const meetingSources = [];
     for (const sectionRef of profile.enrolledSectionRefs) {
       const section = await ctx.db.get(sectionRef);
-      if (!section) continue;
-      for (const meeting of section.meetings) {
+      if (section) meetingSources.push(section.meetings);
+    }
+    // Times typed by hand during onboarding lock the grid just like imports.
+    if (profile.manualClassMeetings?.length) {
+      meetingSources.push(profile.manualClassMeetings);
+    }
+    for (const meetings of meetingSources) {
+      for (const meeting of meetings) {
         const dedupeKey = `${meeting.day}:${meeting.startMin}:${meeting.endMin}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
@@ -349,5 +370,150 @@ export const regenerateImportedBlocks = internalMutation({
       }
     }
     return null;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// TA onboarding: course autocomplete + self-service section import
+// ---------------------------------------------------------------------------
+
+/**
+ * Course autocomplete for "which classes are you taking?".
+ *
+ * Matches on the course id prefix, so "CMSC1" offers CMSC131, CMSC132, ...
+ * The department listing behind it is cached for a day, because a TA types
+ * several characters per course and the departments barely change.
+ */
+export const searchCourses = action({
+  args: { query: v.string(), term: v.string(), limit: v.optional(v.number()) },
+  returns: v.array(v.object({ courseId: v.string(), name: v.string() })),
+  handler: async (ctx, args): Promise<Array<{ courseId: string; name: string }>> => {
+    await ctx.runQuery(internal.umd.assertSignedIn, {});
+
+    const query = args.query.trim().toUpperCase().replace(/\s+/g, "");
+    const dept = departmentOf(query);
+    if (!dept) return []; // fewer than two letters is not worth a round trip
+
+    const term = args.term.trim();
+    const key = `umdio:dept:${dept}:${term}`;
+    const now = Date.now();
+    const cached: { payload: unknown; fetchedAt: number } | null =
+      await ctx.runQuery(internal.umd.getCacheEntry, { key });
+
+    let courses: Array<{ courseId: string; name: string }>;
+    if (cached && now - cached.fetchedAt < CACHE_TTL_MS) {
+      courses = cached.payload as Array<{ courseId: string; name: string }>;
+    } else {
+      try {
+        courses = await umdioSource.fetchDepartmentCourses(dept, term);
+      } catch {
+        // Autocomplete is a convenience; the caller falls back to manual entry.
+        return cached ? (cached.payload as Array<{ courseId: string; name: string }>) : [];
+      }
+      await ctx.runMutation(internal.umd.setCacheEntry, { key, payload: courses });
+    }
+
+    return courses
+      .filter((c) => c.courseId.startsWith(query))
+      .sort((a, b) => a.courseId.localeCompare(b.courseId))
+      .slice(0, args.limit ?? 8);
+  },
+});
+
+/** Any signed-in user. Course data is public; only the write paths are gated. */
+export const assertSignedIn = internalQuery({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    await requireUser(ctx);
+    return null;
+  },
+});
+
+/**
+ * Import a course a TA is *enrolled in* so its sections can be picked in
+ * onboarding. Same pipeline as importCourse, minus the coordinator gate:
+ * courses/sections are shared public reference data keyed by course + term,
+ * and the upsert is idempotent.
+ */
+export const importForEnrollment = action({
+  args: { courseId: v.string(), term: v.string() },
+  returns: v.object({
+    courseRef: v.id("courses"),
+    courseName: v.string(),
+    source: v.union(v.literal("umdio"), v.literal("cache"), v.literal("fixture")),
+    sections: v.array(
+      v.object({
+        _id: v.id("sections"),
+        sectionNumber: v.string(),
+        type: sectionTypeValidator,
+        meetings: v.array(meetingValidator),
+        instructors: v.optional(v.array(v.string())),
+      }),
+    ),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    courseRef: Id<"courses">;
+    courseName: string;
+    source: "umdio" | "cache" | "fixture";
+    sections: Array<{
+      _id: Id<"sections">;
+      sectionNumber: string;
+      type: "lecture" | "discussion" | "lab";
+      meetings: Array<{ day: UmdDay; startMin: number; endMin: number; room: string }>;
+      instructors?: string[];
+    }>;
+  }> => {
+    await ctx.runQuery(internal.umd.assertSignedIn, {});
+    const result: ImportResult = await ctx.runAction(internal.umd.importCourseUnchecked, {
+      courseId: args.courseId,
+      term: args.term,
+    });
+    const sections: Array<{
+      _id: Id<"sections">;
+      sectionNumber: string;
+      type: "lecture" | "discussion" | "lab";
+      meetings: Array<{ day: UmdDay; startMin: number; endMin: number; room: string }>;
+      instructors?: string[];
+    }> = await ctx.runQuery(internal.umd.listSectionsOfCourse, {
+      courseRef: result.courseRef,
+    });
+    return {
+      courseRef: result.courseRef,
+      courseName: result.courseName,
+      source: result.source,
+      sections,
+    };
+  },
+});
+
+/** Sections of any course. Public reference data, so no ownership check. */
+export const listSectionsOfCourse = internalQuery({
+  args: { courseRef: v.id("courses") },
+  returns: v.array(
+    v.object({
+      _id: v.id("sections"),
+      sectionNumber: v.string(),
+      type: sectionTypeValidator,
+      meetings: v.array(meetingValidator),
+      instructors: v.optional(v.array(v.string())),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const sections = await ctx.db
+      .query("sections")
+      .withIndex("by_course", (q) => q.eq("courseRef", args.courseRef))
+      .collect();
+    sections.sort((a, b) => a.sectionNumber.localeCompare(b.sectionNumber));
+    return sections.map((s) => ({
+      _id: s._id,
+      sectionNumber: s.sectionNumber,
+      type: s.type,
+      meetings: s.meetings,
+      instructors: s.instructors,
+    }));
   },
 });
