@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet"><style>body{margin:0;background:#0B0B0E}*{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.18) transparent}a{color:#EDEDEF}a:hover{color:#fff}@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}</style></helmet>
+<div data-screen-label="App shell" style="position:relative;width:1440px;height:900px;background:#0B0B0E;overflow:hidden;font-family:Geist,system-ui,sans-serif;color:#EDEDEF;display:grid;grid-template-columns:208px 1fr;grid-template-rows:52px 1fr">
+  <div style="grid-row:1 / span 2"><dc-import name="Nav" role="coordinator" active="Builder" hint-size="208px,900px" style="height:100%"></dc-import></div>
+  <div style="height:52px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;padding:0 20px;gap:12px;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:8px;height:30px;padding:0 10px 0 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);cursor:pointer;transition:background 150ms" style-hover="background:rgba(255,255,255,0.07)">
+      <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;font-weight:500">CMSC132</span><span style="color:#5B5B64">·</span><span style="font-size:12.5px;color:#C9C9CF">Fall 2026</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" style="fill:none;stroke:#6B6B75;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="m7 15 5 5 5-5"></path><path d="m7 9 5-5 5 5"></path></svg>
+    </div>
+    <div style="flex:1"></div>
+    <div onClick="{{ openPalette }}" style="display:flex;align-items:center;gap:8px;width:260px;height:30px;padding:0 8px 0 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#6B6B75;font-size:12.5px;cursor:pointer;transition:background 150ms,border-color 150ms" style-hover="background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.14)">
+      <svg width="14" height="14" viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+      <span style="flex:1">Search or jump to…</span>
+      <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;color:#8A8A93;border:1px solid rgba(255,255,255,0.10);border-radius:5px;padding:1px 5px;background:rgba(255,255,255,0.04)">⌘K</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:6px;background:rgba(226,24,51,0.12);border:1px solid rgba(226,24,51,0.28);color:#F4A3AE;font-size:11.5px;font-weight:500;letter-spacing:0.01em">Coordinator</div>
+    <div style="display:flex;align-items:center;gap:8px;height:30px;padding:0 6px 0 4px;border-radius:8px;cursor:pointer;transition:background 150ms" style-hover="background:rgba(255,255,255,0.06)">
+      <div style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#2B2B33,#3A3A45);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:600;color:#EDEDEF">JR</div>
+      <span style="font-size:12.5px">Jordan</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" style="fill:none;stroke:#6B6B75;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="m6 9 6 6 6-6"></path></svg>
+    </div>
+  </div>
+  <div style="padding:24px 28px;display:flex;flex-direction:column;gap:20px;opacity:0.35;filter:saturate(0.6)">
+    <div style="display:flex;align-items:baseline;gap:12px"><div style="font-size:20px;font-weight:600;letter-spacing:-0.02em">Builder</div><div style="font-size:12.5px;color:#9A9AA3">Draft · generated 2 min ago</div></div>
+    <div style="display:grid;grid-template-columns:1fr 300px;gap:16px;height:700px">
+      <div style="display:flex;flex-direction:column;gap:16px"><div style="flex:3;border:1px solid rgba(255,255,255,0.08);border-radius:12px;background:#111115"></div><div style="flex:1;border:1px solid rgba(255,255,255,0.08);border-radius:12px;background:#111115"></div><div style="flex:2;border:1px solid rgba(255,255,255,0.08);border-radius:12px;background:#111115"></div></div>
+      <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;background:#111115"></div>
+    </div>
+  </div>
+  <sc-if value="{{ open }}" hint-placeholder-val="{{ true }}">
+    <div onClick="{{ closePalette }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.45);backdrop-filter:blur(2px)"></div>
+    <div style="position:absolute;left:50%;top:120px;transform:translateX(-50%);width:580px;background:#15151A;border:1px solid rgba(255,255,255,0.10);border-radius:14px;box-shadow:0 30px 90px rgba(0,0,0,0.6),0 0 0 1px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.05);overflow:hidden;animation:fadeUp 160ms ease-out">
+      <div style="display:flex;align-items:center;gap:10px;padding:0 16px;height:48px;border-bottom:1px solid rgba(255,255,255,0.08)">
+        <svg width="16" height="16" viewBox="0 0 24 24" style="fill:none;stroke:#6B6B75;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+        <input ref="{{ inputRef }}" value="{{ q }}" onChange="{{ onQuery }}" placeholder="Type a command or search TAs…" style="flex:1;background:transparent;border:none;outline:none;color:#EDEDEF;font-family:Geist,system-ui,sans-serif;font-size:14px;caret-color:#E21833"></input>
+        <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;color:#8A8A93;border:1px solid rgba(255,255,255,0.10);border-radius:5px;padding:1px 5px;background:rgba(255,255,255,0.04)">esc</span>
+      </div>
+      <div style="max-height:380px;overflow:auto;padding:6px">
+        <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+          <div style="font-size:11px;font-weight:500;color:#6B6B75;padding:8px 10px 4px;letter-spacing:0.02em">{{ g.label }}</div>
+          <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3">
+            <div onClick="{{ it.run }}" onMouseEnter="{{ it.hover }}" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;cursor:pointer;font-size:13px;background:{{ it.bg }};color:{{ it.c }}">
+              <span style="flex:1">{{ it.label }}</span>
+              <span style="font-size:11px;color:#6B6B75">{{ it.meta }}</span>
+              <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;color:#8A8A93">{{ it.kbd }}</span>
+            </div>
+          </sc-for>
+        </sc-for>
+        <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}"><div style="padding:22px 10px;text-align:center;font-size:13px;color:#6B6B75">No matches for “{{ q }}”</div></sc-if>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;height:36px;padding:0 14px;border-top:1px solid rgba(255,255,255,0.08);font-size:11px;color:#6B6B75;font-family:'Geist Mono',ui-monospace,monospace"><span>↑↓ navigate</span><span>↵ select</span><span>esc close</span><span style="flex:1"></span><span>{{ count }} results</span></div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute;right:24px;bottom:24px;display:flex;align-items:center;gap:10px;height:44px;padding:0 8px 0 12px;border-radius:12px;background:#1A1A21;border:1px solid rgba(255,255,255,0.10);box-shadow:0 12px 40px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.05);animation:fadeUp 180ms ease-out;font-size:13px">
+      <svg width="16" height="16" viewBox="0 0 24 24" style="fill:none;stroke:#3DD68C;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>
+      <span>{{ toastText }}</span>
+      <a href="#" style="color:#C9C9CF;text-decoration:none;font-size:12.5px;padding:0 6px;border-left:1px solid rgba(255,255,255,0.08);margin-left:2px">View changelog</a>
+      <div onClick="{{ hideToast }}" style="width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#6B6B75;transition:background 150ms" style-hover="background:rgba(255,255,255,0.06)"><svg width="14" height="14" viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;palette&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;State&quot;},&quot;toast&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;State&quot;}}">
+class Component extends DCLogic {
+  state = { open: null, q: '', idx: 0, toast: null, toastText: 'Schedule published · 15 TAs notified' };
+  inputRef = React.createRef();
+  GROUPS = [
+    { label: 'Navigate', items: [['Roster','Page','G R'],['Duty Types','Page','G D'],['Shifts','Page','G S'],['Builder','Page','G B'],['Hours','Page','G H'],['Changelog','Page','G C']] },
+    { label: 'Actions', items: [['Generate schedule','Builder','⌘ ⇧ G'],['Regenerate (keeps locks)','Builder',''],['Publish schedule','Builder','⌘ ⇧ P'],['Nudge TAs with missing availability','Roster',''],['Add shift','Shifts',''],['Export hours CSV · Sep 1–15','Hours',''],['Switch course or term','','']] },
+    { label: 'TAs', items: [['Priya','priya@terpmail.umd.edu',''],['Marcus','marcus@umd.edu',''],['Elena','elena@terpmail.umd.edu',''],['Jamal','jamal@umd.edu',''],['Sofia','sofia@terpmail.umd.edu',''],['Daniel','daniel@umd.edu',''],['Aisha','aisha@terpmail.umd.edu',''],['Kevin','kevin@umd.edu',''],['Nadia','nadia@terpmail.umd.edu',''],['Tyler','tyler@umd.edu',''],['Mei','mei@terpmail.umd.edu',''],['Omar','omar@umd.edu',''],['Hannah','hannah@terpmail.umd.edu',''],['Lucas','lucas@umd.edu',''],['Zoe','zoe@terpmail.umd.edu','']] },
+  ];
+  componentDidMount() {
+    this._kd = (e) => {
+      const open = this.isOpen();
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.setState({ open: !open, q: '', idx: 0 }); return; }
+      if (!open) return;
+      const flat = this.flat();
+      if (e.key === 'Escape') this.setState({ open: false });
+      else if (e.key === 'ArrowDown') { e.preventDefault(); this.setState(s => ({ idx: Math.min(flat.length - 1, s.idx + 1) })); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); this.setState(s => ({ idx: Math.max(0, s.idx - 1) })); }
+      else if (e.key === 'Enter' && flat[this.state.idx]) this.run(flat[this.state.idx]);
+    };
+    document.addEventListener('keydown', this._kd);
+  }
+  componentWillUnmount() { document.removeEventListener('keydown', this._kd); clearTimeout(this._tt); }
+  componentDidUpdate(_, prev) { if (this.isOpen() && !this.wasOpen && this.inputRef.current) this.inputRef.current.focus(); this.wasOpen = this.isOpen(); }
+  isOpen() { return this.state.open ?? (this.props.palette ?? true); }
+  filtered() {
+    const q = this.state.q.trim().toLowerCase();
+    return this.GROUPS.map(g => ({ label: g.label, items: g.items.filter(it => !q || it[0].toLowerCase().includes(q) || it[1].toLowerCase().includes(q)) })).filter(g => g.items.length);
+  }
+  flat() { return this.filtered().flatMap(g => g.items.map(it => [g.label, ...it])); }
+  run(item) {
+    const [group, label] = item;
+    const text = group === 'Navigate' ? `Opened ${label}` : group === 'TAs' ? `Opened ${label}’s profile` : `${label} — ${group}`;
+    this.setState({ open: false, q: '', idx: 0, toast: true, toastText: text });
+    clearTimeout(this._tt); this._tt = setTimeout(() => this.setState({ toast: false }), 3500);
+  }
+  renderVals() {
+    const open = this.isOpen();
+    let i = 0;
+    const groups = this.filtered().map(g => ({ label: g.label, items: g.items.map(it => {
+      const me = i++;
+      const sel = me === this.state.idx;
+      return { label: it[0], meta: it[1], kbd: it[2], bg: sel ? 'rgba(255,255,255,0.07)' : 'transparent', c: sel ? '#F4F4F5' : '#C9C9CF', hover: () => this.setState({ idx: me }), run: () => this.run([g.label, ...it]) };
+    }) }));
+    return {
+      open, groups, count: i, noResults: i === 0, q: this.state.q,
+      toast: this.state.toast ?? (this.props.toast ?? true), toastText: this.state.toastText,
+      onQuery: (e) => this.setState({ q: e.target.value, idx: 0 }),
+      openPalette: () => this.setState({ open: true, q: '', idx: 0 }),
+      closePalette: () => this.setState({ open: false }),
+      hideToast: () => this.setState({ toast: false }),
+      inputRef: this.inputRef,
+    };
+  }
+}
+</script>
+</body>
+</html>

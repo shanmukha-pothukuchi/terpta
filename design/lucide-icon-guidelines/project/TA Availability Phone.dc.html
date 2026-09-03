@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet"><style>body{margin:0;background:#0B0B0E}*{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.18) transparent}a{color:#EDEDEF}a:hover{color:#fff}@keyframes spin{to{transform:rotate(360deg)}}</style></helmet>
+<div data-screen-label="TA Availability (phone)" style="width:402px;font-family:Geist,system-ui,sans-serif;color:#EDEDEF;user-select:none">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="402px,874px">
+  <div style="min-height:874px;background:#0B0B0E;font-family:Geist,system-ui,sans-serif;color:#EDEDEF;display:flex;flex-direction:column">
+    <div style="padding:64px 18px 12px;display:flex;align-items:flex-end;gap:10px">
+      <div style="display:flex;flex-direction:column;gap:3px"><div style="font-size:24px;font-weight:600;letter-spacing:-0.025em;line-height:1.1">Availability</div><div style="font-size:12.5px;color:#9A9AA3">Due <span style="font-family:'Geist Mono',ui-monospace,monospace;color:#C9C9CF">Sep 13</span> · {{ summary }}</div></div>
+      <div style="flex:1"></div>
+      <sc-if value="{{ isSubmitted }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:7px;background:rgba(61,214,140,0.12);border:1px solid rgba(61,214,140,0.30);color:#7FE3B1;font-size:11.5px;font-weight:500"><div style="width:6px;height:6px;border-radius:50%;background:#3DD68C"></div>Submitted</div></sc-if>
+      <sc-if value="{{ isUnsubmitted }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:7px;background:rgba(245,165,36,0.10);border:1px solid rgba(245,165,36,0.30);color:#F7C566;font-size:11.5px;font-weight:500"><div style="width:6px;height:6px;border-radius:50%;background:#F5A524"></div>Not submitted</div></sc-if>
+    </div>
+    <div style="margin:0 14px 10px;display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:3px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08)">
+      <div onClick="{{ brushAvail }}" style="display:flex;align-items:center;justify-content:center;gap:6px;height:32px;border-radius:8px;font-size:12px;cursor:pointer;background:{{ b1.bg }};color:{{ b1.c }}"><div style="width:9px;height:9px;border-radius:3px;background:rgba(61,214,140,0.35);box-shadow:inset 0 0 0 1px rgba(61,214,140,0.7)"></div>Available</div>
+      <div onClick="{{ brushPrefer }}" style="display:flex;align-items:center;justify-content:center;gap:6px;height:32px;border-radius:8px;font-size:12px;cursor:pointer;background:{{ b2.bg }};color:{{ b2.c }}"><div style="width:9px;height:9px;border-radius:3px;background:rgba(245,165,36,0.35);box-shadow:inset 0 0 0 1px rgba(245,165,36,0.7)"></div>Prefer not</div>
+      <div onClick="{{ brushUnavail }}" style="display:flex;align-items:center;justify-content:center;gap:6px;height:32px;border-radius:8px;font-size:12px;cursor:pointer;background:{{ b3.bg }};color:{{ b3.c }}"><div style="width:9px;height:9px;border-radius:3px;background:repeating-linear-gradient(135deg,rgba(255,255,255,0.35) 0 1px,transparent 1px 3px);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.35)"></div>Unavailable</div>
+      </div>
+    <div style="margin:0 14px;border:1px solid rgba(255,255,255,0.08);border-radius:12px;background:#0F0F13;overflow:hidden">
+      <div style="display:grid;grid-template-columns:38px repeat(5,1fr);height:30px;border-bottom:1px solid rgba(255,255,255,0.08);align-items:center"><div></div>
+        <sc-for list="{{ days }}" as="day" hint-placeholder-count="5"><div style="font-size:12px;font-weight:500;color:#C9C9CF;text-align:center;border-left:1px solid rgba(255,255,255,0.06)">{{ day.name }}</div></sc-for>
+      </div>
+      <div onTouchStart="{{ touch }}" onTouchMove="{{ touch }}" onTouchEnd="{{ touchEnd }}" style="display:grid;grid-template-columns:38px repeat(5,1fr);touch-action:none">
+        <div><sc-for list="{{ hours }}" as="h" hint-placeholder-count="12"><div style="height:44px;font-family:'Geist Mono',ui-monospace,monospace;font-size:9.5px;color:#6B6B75;text-align:right;padding:3px 5px 0 0;box-sizing:border-box">{{ h }}</div></sc-for></div>
+        <sc-for list="{{ days }}" as="day" hint-placeholder-count="5">
+          <div style="position:relative;border-left:1px solid rgba(255,255,255,0.06)">
+            <sc-for list="{{ day.cells }}" as="cell" hint-placeholder-count="24">
+              <div data-d="{{ cell.d }}" data-s="{{ cell.s }}" onMouseDown="{{ cell.down }}" onMouseEnter="{{ cell.enter }}" style="height:22px;box-sizing:border-box;border-bottom:1px solid {{ cell.bb }}"></div>
+            </sc-for>
+            <sc-for list="{{ day.runs }}" as="r" hint-placeholder-count="2"><div style="position:absolute;left:3px;right:3px;top:{{ r.top }};height:{{ r.h }};border-radius:5px;background:{{ r.bg }};box-shadow:inset 0 0 0 1px {{ r.edge }};pointer-events:none"></div></sc-for>
+            <sc-for list="{{ day.blocks }}" as="b" hint-placeholder-count="0">
+              <div style="position:absolute;left:3px;right:3px;top:{{ b.top }};height:{{ b.h }};border-radius:5px;background:rgba(125,147,178,0.16);box-shadow:inset 0 0 0 1px rgba(125,147,178,0.35);display:flex;flex-direction:column;align-items:flex-start;padding:4px 5px;box-sizing:border-box;gap:1px;overflow:hidden"><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:9.5px;font-weight:500;color:#B7C6DC;white-space:nowrap">{{ b.code }}</span><svg width="10" height="10" viewBox="0 0 24 24" style="fill:none;stroke:#7D93B2;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="margin:12px 14px 0;display:flex;align-items:center;gap:8px;font-size:11.5px;color:#9A9AA3"><div style="width:9px;height:9px;border-radius:3px;background:rgba(125,147,178,0.35);box-shadow:inset 0 0 0 1px rgba(125,147,178,0.8)"></div>Imported class · locked<div style="flex:1"></div><span style="color:#6B6B75">Drag to paint</span></div>
+    <div style="margin:14px 14px 0;border:1px solid rgba(255,255,255,0.08);border-radius:12px;background:#0F0F13;padding:12px 12px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px"><div style="font-size:13px;font-weight:500">Date exceptions</div><div style="flex:1"></div><div style="display:flex;align-items:center;gap:5px;font-size:12px;color:#C9C9CF"><svg width="13" height="13" viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Add</div></div>
+      <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:9px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02)"><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12px">Oct 14 – Oct 16</span><span style="font-size:12px;color:#9A9AA3">Out of town</span></div>
+    </div>
+    <div style="flex:1;min-height:20px"></div>
+    <div style="position:sticky;bottom:0;padding:12px 14px 40px;background:linear-gradient(180deg,rgba(11,11,14,0),#0B0B0E 30%);display:flex;align-items:center;gap:10px">
+      <sc-if value="{{ saving }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#9A9AA3"><svg width="13" height="13" viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;animation:spin 800ms linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>Saving…</div></sc-if>
+      <sc-if value="{{ saved }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6B6B75"><svg width="13" height="13" viewBox="0 0 24 24" style="fill:none;stroke:#3DD68C;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="M20 6 9 17l-5-5"></path></svg>Saved</div></sc-if>
+      <div style="flex:1"></div>
+      <div onClick="{{ submit }}" style="display:flex;align-items:center;justify-content:center;height:44px;padding:0 20px;border-radius:12px;background:#E21833;color:#fff;font-size:14px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.10)" style-active="transform:scale(0.98)">{{ submitLabel }}</div>
+    </div>
+  </div>
+</x-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:402,&quot;height&quot;:874},&quot;status&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;unsubmitted&quot;,&quot;submitted&quot;],&quot;default&quot;:&quot;unsubmitted&quot;,&quot;tsType&quot;:&quot;'unsubmitted' | 'submitted'&quot;,&quot;section&quot;:&quot;State&quot;}}">
+class Component extends DCLogic {
+  DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  CLASSES = [
+    { code: 'CMSC330', d: [0, 2, 4], s0: 4, s1: 5 },
+    { code: 'CMSC330', d: [1], s0: 2, s1: 3 },
+    { code: 'MATH240', d: [1, 3], s0: 9, s1: 11 },
+    { code: 'ENGL393', d: [0, 2], s0: 12, s1: 14 },
+  ];
+  constructor(p) { super(p); this.state = { grid: this.seed(), brush: 1, saving: false, status: null }; }
+  locked(d, s) { return this.CLASSES.some(c => c.d.includes(d) && s >= c.s0 && s <= c.s1); }
+  seed() {
+    const g = [];
+    for (let d = 0; d < 5; d++) { const col = []; for (let s = 0; s < 24; s++) {
+      let v = 3; if (s >= 2 && s <= 17) v = 1; if (s >= 18) v = 2; if (d === 4 && s >= 14) v = 3; if (d === 1 && s >= 14 && s <= 17) v = 3; if (d === 3 && s < 2) v = 1; if (this.locked(d, s)) v = 3; col.push(v);
+    } g.push(col); }
+    return g;
+  }
+  componentDidMount() { this._up = () => { this.painting = false; }; document.addEventListener('mouseup', this._up); }
+  componentWillUnmount() { document.removeEventListener('mouseup', this._up); clearTimeout(this._st); }
+  paint(d, s) {
+    if (this.locked(d, s)) return;
+    this.setState(st => { const grid = st.grid.map(c => c.slice()); if (grid[d][s] === st.brush) return null; grid[d][s] = st.brush; return { grid, saving: true, status: st.status === 'submitted' ? 'edited' : st.status }; });
+    clearTimeout(this._st); this._st = setTimeout(() => this.setState({ saving: false }), 900);
+  }
+  renderVals() {
+    const { grid, brush, saving } = this.state;
+    const status = this.state.status ?? this.props.status ?? 'unsubmitted';
+    const FILL = { 1: ['rgba(61,214,140,0.17)', 'rgba(61,214,140,0.42)'], 2: ['rgba(245,165,36,0.15)', 'rgba(245,165,36,0.42)'], 3: ['repeating-linear-gradient(135deg,rgba(255,255,255,0.055) 0 1px,transparent 1px 7px) rgba(255,255,255,0.015)', 'rgba(255,255,255,0.09)'] };
+    let counts = { 1: 0, 2: 0, 3: 0 };
+    const days = this.DAYS.map((name, d) => {
+      const cells = grid[d].map((v, s) => ({ d, s, bb: s % 2 ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.035)',
+        down: (e) => { e.preventDefault(); this.painting = true; this.paint(d, s); }, enter: () => { if (this.painting) this.paint(d, s); } }));
+      const runs = [];
+      for (let s = 0; s < 24; s++) {
+        if (this.locked(d, s)) continue;
+        const v = grid[d][s]; counts[v] = (counts[v] || 0) + 1;
+        const last = runs[runs.length - 1];
+        if (last && last.v === v && last.s1 === s - 1) last.s1 = s; else runs.push({ v, s0: s, s1: s });
+      }
+      const runVals = runs.map(r => ({ top: `${r.s0 * 22 + 1}px`, h: `${(r.s1 - r.s0 + 1) * 22 - 2}px`, bg: FILL[r.v][0], edge: FILL[r.v][1] }));
+      const blocks = this.CLASSES.filter(c => c.d.includes(d)).map(c => ({ code: c.code, top: `${c.s0 * 22 + 1}px`, h: `${(c.s1 - c.s0 + 1) * 22 - 3}px` }));
+      return { name, cells, runs: runVals, blocks };
+    });
+    const bs = (k) => ({ bg: brush === k ? 'rgba(255,255,255,0.10)' : 'transparent', c: brush === k ? '#F4F4F5' : '#9A9AA3' });
+    return {
+      days, hours: ['8a', '9', '10', '11', '12p', '1', '2', '3', '4', '5', '6', '7'],
+      summary: `${counts[1] / 2}h available`,
+      saving, saved: !saving, isSubmitted: status === 'submitted', isUnsubmitted: status !== 'submitted',
+      submitLabel: status === 'edited' ? 'Resubmit' : status === 'submitted' ? 'Submitted' : 'Submit',
+      b1: bs(1), b2: bs(2), b3: bs(3),
+      brushAvail: () => this.setState({ brush: 1 }), brushPrefer: () => this.setState({ brush: 2 }), brushUnavail: () => this.setState({ brush: 3 }),
+      submit: () => { if (status !== 'submitted') this.setState({ status: 'submitted' }); },
+      touch: (e) => { const t = e.touches[0]; if (!t) return; const el = document.elementFromPoint(t.clientX, t.clientY); const c = el && el.closest('[data-d]'); if (c) this.paint(+c.dataset.d, +c.dataset.s); },
+      touchEnd: () => { this.painting = false; },
+    };
+  }
+}
+</script>
+</body>
+</html>

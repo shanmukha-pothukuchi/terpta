@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><meta name="design_doc_mode" content="canvas"><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet"><style>body{margin:0;background:#141418}a{color:#EDEDEF}a:hover{color:#fff}.bd{font-family:Geist,system-ui,sans-serif;color:#EDEDEF;background:#141418;padding:48px 56px 80px;display:flex;flex-direction:column;gap:56px;min-width:1560px;box-sizing:border-box}.bd-sec{display:flex;flex-direction:column;gap:22px;scroll-margin-top:16px}.bd-h{display:flex;align-items:baseline;gap:12px}.bd-h a{font:600 11px 'Geist Mono',ui-monospace,monospace;padding:3px 8px;border-radius:5px;background:#EDEDEF;color:#141418;text-decoration:none}.bd-h span{font:600 15px/1.2 Geist,system-ui,sans-serif}.bd-h small{font:400 12.5px Geist,system-ui,sans-serif;color:#8A8A93}.bd-row{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.bd-scr{display:flex;flex-direction:column;gap:10px;scroll-margin-top:16px}.bd-lab{display:flex;align-items:baseline;gap:8px;font:400 12.5px/1.3 Geist,system-ui,sans-serif;color:#9A9AA3;max-width:1440px}.bd-lab a{font:600 11px 'Geist Mono',ui-monospace,monospace;padding:2px 7px;border-radius:5px;background:rgba(255,255,255,0.10);color:#EDEDEF;text-decoration:none}.bd-lab b{font-weight:500;color:#EDEDEF}.bd-scr:target .bd-lab a{background:#E21833;color:#fff}.bd-frame{border:1px solid rgba(255,255,255,0.12);border-radius:10px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.45)}.bd-note{font:400 12.5px/1.55 Geist,system-ui,sans-serif;color:#9A9AA3;max-width:1440px;text-wrap:pretty}.bd-note b{color:#EDEDEF;font-weight:500}.bd-next{font:12.5px/1.5 Geist,system-ui,sans-serif;color:#6B6B75}.mono{font-family:'Geist Mono',ui-monospace,monospace}</style></helmet>
+<div class="bd">
+  <div style="display:flex;flex-direction:column;gap:18px;max-width:1120px">
+    <div style="display:flex;align-items:center;gap:10px"><div style="width:8px;height:8px;border-radius:50%;background:#E21833;box-shadow:0 0 10px rgba(226,24,51,0.6)"></div><div style="font-size:13px;color:#9A9AA3">TerpTA · design board · pass 1 of 3</div></div>
+    <div style="font-size:34px;font-weight:600;letter-spacing:-0.03em;line-height:1.1">TA scheduling for UMD, built to feel fast and quiet.</div>
+    <div class="bd-note" style="font-size:14px;max-width:760px">Two roles, one shell. TAs paint availability and log hours; coordinators define duties, generate a schedule and publish it. Every screen below is live: drag to paint, drag TA chips into slots, press <span class="mono">⌘K</span> in the shell. Pass 1 covers the hero set; passes 2 and 3 fill in the remaining TA and coordinator screens.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:6px">
+      <div style="display:flex;flex-direction:column;gap:8px"><div style="font-size:12px;font-weight:500;color:#EDEDEF;letter-spacing:0.02em">Assumptions</div>
+        <div class="bd-note">· A discussion section counts <b>2h/week</b> of credit (teaching + prep); an office-hour block is 2h; proctoring is 2h once. Async hours count toward the weekly cap spread over the two weeks before the due date.<br>· Every half-hour is <b>Available</b>, <b>Prefer not</b> or <b>Unavailable</b>. Unpainted time is Unavailable, so the solver never has to guess.<br>· Hard conflicts are red (class overlap, double-booked, date exception); over-cap is amber. Coordinators can still publish with conflicts, but the button says so.<br>· Google sign-in is the primary path; CAS is secondary. Domain restriction is enforced server-side, the UI just explains it.</div></div>
+      <div style="display:flex;flex-direction:column;gap:8px"><div style="font-size:12px;font-weight:500;color:#EDEDEF;letter-spacing:0.02em">Design system in one line</div>
+        <div class="bd-note">Near-black <span class="mono">#0B0B0E</span> page, surfaces step up to <span class="mono">#0F0F13 → #15151A → #1A1A21</span>. Borders are 1px at 8% white; focus adds a 3px 5%-white halo. Geist for UI at 12.5–13px, Geist Mono for times, section numbers and counts. Radii 8–14px. UMD red only on primary actions, the active nav icon, conflicts and the role badge. Green = available/OK, amber = prefer-not/over-cap, blue-gray = imported class blocks. Lucide icons at 1.5px stroke.</div></div>
+    </div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:6px;align-items:flex-start">
+      <div style="display:flex;gap:6px">
+        <div style="width:44px;height:44px;border-radius:8px;background:#0B0B0E;border:1px solid rgba(255,255,255,0.12)" title="Page #0B0B0E"></div><div style="width:44px;height:44px;border-radius:8px;background:#0F0F13;border:1px solid rgba(255,255,255,0.12)" title="Surface #0F0F13"></div><div style="width:44px;height:44px;border-radius:8px;background:#15151A;border:1px solid rgba(255,255,255,0.12)" title="Raised #15151A"></div><div style="width:44px;height:44px;border-radius:8px;background:#1A1A21;border:1px solid rgba(255,255,255,0.12)" title="Popover #1A1A21"></div><div style="width:44px;height:44px;border-radius:8px;background:#E21833" title="UMD red #E21833"></div><div style="width:44px;height:44px;border-radius:8px;background:#3DD68C" title="Green #3DD68C"></div><div style="width:44px;height:44px;border-radius:8px;background:#F5A524" title="Amber #F5A524"></div><div style="width:44px;height:44px;border-radius:8px;background:#7D93B2" title="Class blue-gray #7D93B2"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;height:32px;padding:0 14px;border-radius:9px;background:#E21833;color:#fff;font-size:13px;font-weight:500;border:1px solid rgba(255,255,255,0.10)">Publish</div>
+        <div style="display:flex;align-items:center;height:32px;padding:0 12px;border-radius:9px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);font-size:13px">Regenerate</div>
+        <div style="display:flex;align-items:center;height:32px;width:180px;padding:0 10px;border-radius:9px;border:1px solid rgba(255,255,255,0.28);background:#0B0B0E;font-size:12.5px;color:#6B6B75;box-shadow:0 0 0 3px rgba(255,255,255,0.05)">Focused input</div>
+        <div style="display:flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:7px;background:rgba(61,214,140,0.12);border:1px solid rgba(61,214,140,0.30);color:#7FE3B1;font-size:12px;font-weight:500"><div style="width:6px;height:6px;border-radius:50%;background:#3DD68C"></div>Submitted</div>
+        <div style="display:flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:7px;background:rgba(245,165,36,0.10);border:1px solid rgba(245,165,36,0.30);color:#F7C566;font-size:12px;font-weight:500"><div style="width:6px;height:6px;border-radius:50%;background:#F5A524"></div>Not submitted</div>
+        <div style="display:flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;background:rgba(255,255,255,0.07);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.10);font-size:12px">Priya</div>
+        <div style="display:flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;background:rgba(226,24,51,0.14);box-shadow:inset 0 0 0 1px rgba(226,24,51,0.7),0 0 10px rgba(226,24,51,0.25);font-size:12px">Daniel · conflict</div>
+        <div style="display:flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;background:rgba(245,165,36,0.10);box-shadow:inset 0 0 0 1px rgba(245,165,36,0.6);font-size:12px">Marcus · over cap</div>
+        <div style="display:flex;gap:3px"><div style="width:30px;height:22px;border-radius:4px;background:rgba(61,214,140,0.20);box-shadow:inset 0 0 0 1px rgba(61,214,140,0.38)" title="Available"></div><div style="width:30px;height:22px;border-radius:4px;background:rgba(245,165,36,0.20);box-shadow:inset 0 0 0 1px rgba(245,165,36,0.38)" title="Prefer not"></div><div style="width:30px;height:22px;border-radius:4px;background:repeating-linear-gradient(135deg,rgba(255,255,255,0.07) 0 1px,transparent 1px 5px) rgba(255,255,255,0.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.14)" title="Unavailable"></div><div style="width:30px;height:22px;border-radius:4px;background:rgba(125,147,178,0.16);box-shadow:inset 0 0 0 1px rgba(125,147,178,0.35)" title="Class block"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <section class="bd-sec" id="shared">
+    <div class="bd-h"><a href="#shared">Shared</a><span>Sign in and the app shell</span><small>Screens 01–02</small></div>
+    <div class="bd-row">
+      <div class="bd-scr" id="s01"><div class="bd-lab"><a href="#s01">01</a><b>Sign in</b>· default</div><div class="bd-frame"><dc-import name="Sign In" state="default" hint-size="1440px,900px" style="width:1440px;display:block"></dc-import></div><div class="bd-note">Google is the primary path, CAS the fallback. Role routing is invisible: the same button lands a TA on Availability and a coordinator on Roster. Try the buttons: Google goes to the loading state, then shows the domain error.</div></div>
+      <div class="bd-scr" id="s01b"><div class="bd-lab"><a href="#s01b">01</a><b>Sign in</b>· wrong-domain error</div><div class="bd-frame"><dc-import name="Sign In" state="error" hint-size="1440px,900px" style="width:1440px;display:block"></dc-import></div><div class="bd-note">The rejected address is echoed so the fix is obvious. No modal, no shake.</div></div>
+    </div>
+    <div class="bd-row">
+      <div class="bd-scr" id="s02"><div class="bd-lab"><a href="#s02">02</a><b>App shell</b>· coordinator, ⌘K open, success toast</div><div class="bd-frame"><dc-import name="Shell" palette="{{ true }}" toast="{{ true }}" hint-size="1440px,900px" style="width:1440px;display:block"></dc-import></div><div class="bd-note">208px nav with the active item's icon in red, 52px top bar with the course/term switcher, ⌘K trigger, role badge and user menu. The palette groups Navigate / Actions / TAs and filters as you type; arrow keys and Enter work. Toasts sit bottom-right, one line, optional link, auto-dismiss.</div></div>
+    </div>
+  </section>
+
+  <section class="bd-sec" id="ta">
+    <div class="bd-h"><a href="#ta">TA</a><span>Availability</span><small>Screen 05 · desktop and phone</small></div>
+    <div class="bd-row">
+      <div class="bd-scr" id="s05"><div class="bd-lab"><a href="#s05">05</a><b>Availability</b>· desktop 1440</div><div class="bd-frame"><dc-import name="TA Availability" status="unsubmitted" hint-size="1440px,960px" style="width:1440px;display:block"></dc-import></div><div class="bd-note">Pick a brush, then click-drag across the Mon–Fri, 8am–8pm grid. Each run of the same state is one block, with the half-hour lines showing through it. Imported class blocks are locked and labelled. Autosave shows Saving… → Saved; Submit flips the badge and edits after submit change the button to Resubmit. Date exceptions live under the grid with an inline add form.</div></div>
+      <div class="bd-scr" id="s05m"><div class="bd-lab"><a href="#s05m">05</a><b>Availability</b>· phone</div><div class="bd-frame" style="border-radius:52px"><dc-import name="TA Availability Phone" status="unsubmitted" hint-size="402px,874px" style="width:402px;display:block"></dc-import></div><div class="bd-note" style="max-width:402px">Same grid, finger-sized brushes, touch painting. Submit stays pinned at the bottom.</div></div>
+    </div>
+  </section>
+
+  <section class="bd-sec" id="coord">
+    <div class="bd-h"><a href="#coord">Coordinator</a><span>Builder</span><small>Screens 13–15</small></div>
+    <div class="bd-row">
+      <div class="bd-scr" id="s13"><div class="bd-lab"><a href="#s13">13</a><b>Builder</b>· generated draft with issues to resolve</div><div class="bd-frame"><dc-import name="Builder" view="default" hint-size="1440px,1300px" style="width:1440px;display:block"></dc-import></div><div class="bd-note">Three panes: recurring grid with TA chips, one-off events, async allocation table. The rail lists diagnostics (click one to highlight the cells it refers to) and a draggable roster with load bars. Drag any name into a slot; conflicts flag instantly. The seeded draft has section 0107 and Friday office hours unfilled, Daniel in class during Tuesday OH, Priya on the Oct 14 exam she marked as away, and Marcus at 11/10h. Tiny lock icon on each chip; Regenerate refills everything else; Undo steps back.</div></div>
+    </div>
+    <div class="bd-row">
+      <div class="bd-scr" id="s14"><div class="bd-lab"><a href="#s14">14</a><b>TA detail drawer</b>· from Builder or Roster</div><div class="bd-frame"><dc-import name="Builder" view="drawer" hint-size="1440px,1300px" style="width:1440px;display:block"></dc-import></div><div class="bd-note">Priya's availability with her assignments outlined, weekly load against cap, preferences, and “Assign to…” listing open slots first.</div></div>
+    </div>
+    <div class="bd-row">
+      <div class="bd-scr" id="s15"><div class="bd-lab"><a href="#s15">15</a><b>Publish confirmation</b></div><div class="bd-frame"><dc-import name="Builder" view="publish" hint-size="1440px,1300px" style="width:1440px;display:block"></dc-import></div><div class="bd-note">Summary is computed from the live draft. With open conflicts the button reads “Publish anyway”. Email notification is on by default and says who gets what.</div></div>
+    </div>
+  </section>
+
+  <section class="bd-sec" id="next">
+    <div class="bd-h"><a href="#next">Next</a><span>Passes 2 and 3</span></div>
+    <div class="bd-note">Pass 2 (TA): 03 Onboarding — courses · 04 Onboarding — preferences · 06 My Schedule (desktop + phone, empty state) · 07 Hours · 08 Swap request.<br>Pass 3 (Coordinator): 09 Period setup · 10 Duty Types · 11 Shifts · 12 Roster · 16 Hours approval · 17 Changelog.</div>
+    <div class="bd-next">Say which to pull forward, or comment on any screen by its number.</div>
+  </section>
+</div>
+</x-dc>
+</body>
+</html>

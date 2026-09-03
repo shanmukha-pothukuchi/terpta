@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet"><style>body{margin:0;background:#0B0B0E}a{color:#EDEDEF}a:hover{color:#fff}@keyframes spin{to{transform:rotate(360deg)}}</style></helmet>
+<div data-screen-label="Sign in" style="position:relative;width:1440px;height:900px;background:#0B0B0E;overflow:hidden;font-family:Geist,system-ui,sans-serif;color:#EDEDEF;display:flex;align-items:center;justify-content:center">
+  <div style="position:absolute;inset:0;background:radial-gradient(600px 300px at 50% 0%,rgba(255,255,255,0.05),transparent 70%),radial-gradient(700px 320px at 50% 110%,rgba(226,24,51,0.09),transparent 70%)"></div>
+  <div style="position:absolute;top:28px;left:32px;display:flex;align-items:center;gap:8px">
+    <div style="width:8px;height:8px;border-radius:50%;background:#E21833;box-shadow:0 0 10px rgba(226,24,51,0.6)"></div>
+    <div style="font-size:14px;font-weight:600;letter-spacing:-0.02em">TerpTA</div>
+  </div>
+  <div style="position:relative;width:400px;background:#111115;border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:32px;box-sizing:border-box;box-shadow:0 30px 80px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.04);display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:22px;font-weight:600;letter-spacing:-0.025em;line-height:1.2">Sign in to TerpTA</div>
+      <div style="font-size:13.5px;line-height:1.5;color:#9A9AA3;text-wrap:pretty">Weekly availability, duty assignment and hour logging for UMD teaching assistants.</div>
+    </div>
+    <sc-if value="{{ showError }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;background:rgba(226,24,51,0.10);border:1px solid rgba(226,24,51,0.30);font-size:12.5px;line-height:1.45;color:#F4A3AE">
+        <svg width="16" height="16" viewBox="0 0 24 24" style="fill:none;stroke:#E21833;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none;margin-top:1px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>
+        <div><span style="color:#EDEDEF;font-weight:500">alex.chen@gmail.com</span> isn't a UMD account. Sign in with an @umd.edu or @terpmail.umd.edu account.</div>
+      </div>
+    </sc-if>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <sc-if value="{{ showLoading }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;height:40px;border-radius:10px;background:#EDEDEF;color:#0B0B0E;font-size:13.5px;font-weight:500;opacity:0.85;cursor:default">
+          <svg width="16" height="16" viewBox="0 0 24 24" style="fill:none;stroke:#0B0B0E;stroke-width:1.5;stroke-linecap:round;animation:spin 800ms linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>Checking your account…
+        </div>
+      </sc-if>
+      <sc-if value="{{ showIdle }}" hint-placeholder-val="{{ true }}">
+        <div onClick="{{ onGoogle }}" style="display:flex;align-items:center;justify-content:center;gap:10px;height:40px;border-radius:10px;background:#EDEDEF;color:#0B0B0E;font-size:13.5px;font-weight:500;cursor:pointer;transition:background 150ms,transform 150ms" style-hover="background:#FFFFFF" style-active="transform:scale(0.99)">Continue with Google</div>
+      </sc-if>
+      <div onClick="{{ onCAS }}" style="display:flex;align-items:center;justify-content:center;gap:10px;height:40px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#EDEDEF;font-size:13.5px;font-weight:500;cursor:pointer;transition:background 150ms,border-color 150ms" style-hover="background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.14)">Sign in with UMD CAS</div>
+    </div>
+    <div style="font-size:12px;line-height:1.5;color:#6B6B75;text-align:center;text-wrap:pretty">Restricted to <span style="font-family:'Geist Mono',ui-monospace,monospace;color:#9A9AA3">@umd.edu</span> and <span style="font-family:'Geist Mono',ui-monospace,monospace;color:#9A9AA3">@terpmail.umd.edu</span>. You'll land on your TA or coordinator home automatically.</div>
+  </div>
+  <div style="position:absolute;bottom:24px;left:0;right:0;display:flex;justify-content:center;gap:16px;font-size:12px;color:#5B5B64">
+    <a href="#" style="color:#6B6B75;text-decoration:none">Privacy</a><a href="#" style="color:#6B6B75;text-decoration:none">Help</a><span style="font-family:'Geist Mono',ui-monospace,monospace">v0.4</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;default&quot;,&quot;loading&quot;,&quot;error&quot;],&quot;default&quot;:&quot;default&quot;,&quot;tsType&quot;:&quot;'default' | 'loading' | 'error'&quot;,&quot;section&quot;:&quot;State&quot;}}">
+class Component extends DCLogic {
+  state = { local: null };
+  renderVals() {
+    const st = this.state.local ?? this.props.state ?? 'default';
+    return {
+      showError: st === 'error', showLoading: st === 'loading', showIdle: st !== 'loading',
+      onGoogle: () => { this.setState({ local: 'loading' }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ local: 'error' }), 1400); },
+      onCAS: () => { this.setState({ local: 'loading' }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ local: 'default' }), 1400); },
+    };
+  }
+  componentWillUnmount() { clearTimeout(this._t); }
+}
+</script>
+</body>
+</html>

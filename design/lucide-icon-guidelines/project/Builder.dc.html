@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet"><style>body{margin:0;background:#0B0B0E}*{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.18) transparent}a{color:#EDEDEF}a:hover{color:#fff}@keyframes spin{to{transform:rotate(360deg)}}@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@keyframes slideIn{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}</style></helmet>
+<div data-screen-label="Builder" style="position:relative;width:1440px;min-height:900px;background:#0B0B0E;font-family:Geist,system-ui,sans-serif;color:#EDEDEF;display:grid;grid-template-columns:208px 1fr;grid-template-rows:52px 1fr;overflow:hidden">
+  <div style="grid-row:1 / span 2"><dc-import name="Nav" role="coordinator" active="Builder" hint-size="208px,900px" style="height:100%"></dc-import></div>
+  <div style="height:52px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;padding:0 20px;gap:12px;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:8px;height:30px;padding:0 10px 0 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);cursor:pointer;transition:background 150ms" style-hover="background:rgba(255,255,255,0.07)"><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;font-weight:500">CMSC132</span><span style="color:#5B5B64">·</span><span style="font-size:12.5px;color:#C9C9CF">Fall 2026</span><svg width="14" height="14" viewBox="0 0 24 24" style="fill:none;stroke:#6B6B75;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="m7 15 5 5 5-5"></path><path d="m7 9 5-5 5 5"></path></svg></div>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:8px;width:260px;height:30px;padding:0 8px 0 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#6B6B75;font-size:12.5px;cursor:pointer;transition:background 150ms" style-hover="background:rgba(255,255,255,0.06)"><svg width="14" height="14" viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><span style="flex:1">Search or jump to…</span><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;color:#8A8A93;border:1px solid rgba(255,255,255,0.10);border-radius:5px;padding:1px 5px;background:rgba(255,255,255,0.04)">⌘K</span></div>
+    <div style="display:flex;align-items:center;height:24px;padding:0 8px;border-radius:6px;background:rgba(226,24,51,0.12);border:1px solid rgba(226,24,51,0.28);color:#F4A3AE;font-size:11.5px;font-weight:500">Coordinator</div>
+    <div style="display:flex;align-items:center;gap:8px;height:30px;padding:0 6px 0 4px;border-radius:8px;cursor:pointer;transition:background 150ms" style-hover="background:rgba(255,255,255,0.06)"><div style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#2B2B33,#3A3A45);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:600">JR</div><span style="font-size:12.5px">Jordan</span><svg width="14" height="14" viewBox="0 0 24 24" style="fill:none;stroke:#6B6B75;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="m6 9 6 6 6-6"></path></svg></div>
+  </div>
+  <div style="padding:20px 24px 28px;display:flex;flex-direction:column;gap:16px;min-width:0">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="font-size:20px;font-weight:600;letter-spacing:-0.02em">Builder</div>
+      <sc-if value="{{ isDraft }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:7px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);color:#C9C9CF;font-size:12px">Draft · generated 2 min ago</div></sc-if>
+      <sc-if value="{{ isPublished }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:7px;background:rgba(61,214,140,0.12);border:1px solid rgba(61,214,140,0.30);color:#7FE3B1;font-size:12px"><div style="width:6px;height:6px;border-radius:50%;background:#3DD68C"></div>Published · Sep 14</div></sc-if>
+      <div style="font-size:12.5px;color:#6B6B75">{{ headline }}</div>
+      <div style="flex:1"></div>
+      <div onClick="{{ undo }}" style="display:flex;align-items:center;gap:7px;height:32px;padding:0 11px;border-radius:9px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);font-size:12.5px;cursor:pointer;transition:background 150ms;opacity:{{ undoOpacity }}" style-hover="background:rgba(255,255,255,0.08)"><svg width="14" height="14" viewBox="0 0 24 24" style="fill:none;stroke:#9A9AA3;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg>Undo</div>
+      <div onClick="{{ regenerate }}" style="display:flex;align-items:center;gap:7px;height:32px;padding:0 11px;border-radius:9px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);font-size:12.5px;cursor:pointer;transition:background 150ms" style-hover="background:rgba(255,255,255,0.08)"><svg width="14" height="14" viewBox="0 0 24 24" style="fill:none;stroke:#9A9AA3;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg>Regenerate<span style="color:#6B6B75">· keeps {{ lockCount }} locks</span></div>
+      <div onClick="{{ openPublish }}" style="display:flex;align-items:center;gap:8px;height:32px;padding:0 14px;border-radius:9px;background:#E21833;color:#fff;font-size:13px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.10);transition:background 150ms,transform 150ms" style-hover="background:#F02A44" style-active="transform:scale(0.98)"><svg width="14" height="14" viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path><path d="m21.854 2.147-10.94 10.939"></path></svg>Publish</div>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) 312px;gap:16px;align-items:start">
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;background:#0F0F13;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 14px;border-bottom:1px solid rgba(255,255,255,0.08)"><div style="font-size:13px;font-weight:500">Recurring</div><div style="font-size:12px;color:#6B6B75">8 discussion sections · 5 office-hour blocks · {{ recurringFilled }}</div><div style="flex:1"></div><div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#9A9AA3"><div style="width:8px;height:8px;border-radius:2px;background:rgba(226,24,51,0.5)"></div>Conflict</div><div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#9A9AA3"><div style="width:8px;height:8px;border-radius:2px;background:rgba(245,165,36,0.6)"></div>Over cap</div><div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#9A9AA3"><div style="width:8px;height:8px;border-radius:2px;border:1px dashed rgba(226,24,51,0.7);box-sizing:border-box"></div>Unfilled</div></div>
+          <div style="display:grid;grid-template-columns:44px repeat(5,1fr);height:30px;align-items:center;border-bottom:1px solid rgba(255,255,255,0.06)"><div></div><sc-for list="{{ dayNames }}" as="dn" hint-placeholder-count="5"><div style="font-size:12px;font-weight:500;color:#C9C9CF;padding-left:8px;border-left:1px solid rgba(255,255,255,0.06)">{{ dn }}</div></sc-for></div>
+          <div style="display:grid;grid-template-columns:44px repeat(5,1fr)">
+            <div><sc-for list="{{ hours }}" as="h" hint-placeholder-count="10"><div style="height:52px;font-family:'Geist Mono',ui-monospace,monospace;font-size:10px;color:#6B6B75;text-align:right;padding:3px 6px 0 0;box-sizing:border-box;border-bottom:1px solid rgba(255,255,255,0.04)">{{ h }}</div></sc-for></div>
+            <sc-for list="{{ cols }}" as="col" hint-placeholder-count="5">
+              <div style="position:relative;height:520px;border-left:1px solid rgba(255,255,255,0.06);background:repeating-linear-gradient(180deg,transparent 0 51px,rgba(255,255,255,0.04) 51px 52px)">
+                <sc-for list="{{ col.slots }}" as="sl" hint-placeholder-count="3">
+                  <div onDragOver="{{ sl.over }}" onDrop="{{ sl.drop }}" style="position:absolute;left:4px;right:4px;top:{{ sl.top }};height:{{ sl.h }};border-radius:8px;background:{{ sl.bg }};box-shadow:{{ sl.ring }};border:{{ sl.border }};padding:5px 7px;box-sizing:border-box;display:flex;flex-direction:column;gap:4px;overflow:hidden;transition:box-shadow 150ms,background 150ms">
+                    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px 6px;font-size:10.5px;line-height:12px;white-space:nowrap"><span style="font-family:'Geist Mono',ui-monospace,monospace;font-weight:500;color:{{ sl.labelColor }}">{{ sl.label }}</span><span style="color:#6B6B75">{{ sl.time }}</span><span style="margin-left:auto;color:{{ sl.hintColor }};overflow:hidden;text-overflow:ellipsis">{{ sl.hint }}</span></div>
+                    <div style="display:flex;flex-wrap:wrap;gap:4px">
+                      <sc-for list="{{ sl.chips }}" as="ch" hint-placeholder-count="1">
+                        <div draggable="true" onDragStart="{{ ch.drag }}" onClick="{{ ch.open }}" title="{{ ch.tip }}" style="display:flex;align-items:center;gap:5px;height:20px;padding:0 3px 0 7px;border-radius:6px;background:{{ ch.bg }};box-shadow:{{ ch.ring }};font-size:11.5px;color:#EDEDEF;cursor:grab;white-space:nowrap;transition:box-shadow 150ms"><span>{{ ch.name }}</span>
+                          <sc-if value="{{ ch.bad }}" hint-placeholder-val="{{ false }}"><svg width="11" height="11" viewBox="0 0 24 24" style="fill:none;stroke:#F4A3AE;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg></sc-if>
+                          <div onClick="{{ ch.lock }}" title="Lock assignment" style="width:16px;height:16px;border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:{{ ch.lockOpacity }};transition:opacity 150ms,background 150ms" style-hover="opacity:1;background:rgba(255,255,255,0.10)"><svg width="10" height="10" viewBox="0 0 24 24" style="fill:none;stroke:{{ ch.lockColor }};stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="{{ ch.lockPath }}"></path></svg></div>
+                        </div>
+                      </sc-for>
+                      <sc-for list="{{ sl.empties }}" as="em" hint-placeholder-count="0"><div style="display:flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:6px;border:1px dashed rgba(226,24,51,0.55);color:#F4A3AE;font-size:10.5px;white-space:nowrap">{{ em }}</div></sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;background:#0F0F13;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 14px;border-bottom:1px solid rgba(255,255,255,0.08)"><div style="font-size:13px;font-weight:500">One-off events</div><div style="font-size:12px;color:#6B6B75">{{ eventsFilled }}</div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 14px">
+            <sc-for list="{{ events }}" as="ev" hint-placeholder-count="2">
+              <div onDragOver="{{ ev.over }}" onDrop="{{ ev.drop }}" style="border-radius:10px;border:{{ ev.border }};background:{{ ev.bg }};box-shadow:{{ ev.ring }};padding:10px 12px;display:flex;flex-direction:column;gap:8px;transition:box-shadow 150ms">
+                <div style="display:flex;align-items:center;gap:8px"><div style="font-size:13px;font-weight:500">{{ ev.label }}</div><div style="flex:1"></div><div style="font-size:11.5px;color:{{ ev.hintColor }}">{{ ev.hint }}</div></div>
+                <div style="display:flex;align-items:center;gap:10px;font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px;color:#9A9AA3"><span style="color:#C9C9CF">{{ ev.day }} {{ ev.date }}</span><span>{{ ev.time }}</span><span>{{ ev.room }}</span><span>{{ ev.need }} TAs · 2h each</span></div>
+                <div style="display:flex;flex-wrap:wrap;gap:5px">
+                  <sc-for list="{{ ev.chips }}" as="ch" hint-placeholder-count="4">
+                    <div draggable="true" onDragStart="{{ ch.drag }}" onClick="{{ ch.open }}" title="{{ ch.tip }}" style="display:flex;align-items:center;gap:5px;height:22px;padding:0 3px 0 8px;border-radius:6px;background:{{ ch.bg }};box-shadow:{{ ch.ring }};font-size:12px;cursor:grab;white-space:nowrap;transition:box-shadow 150ms"><span>{{ ch.name }}</span>
+                      <sc-if value="{{ ch.bad }}" hint-placeholder-val="{{ false }}"><svg width="11" height="11" viewBox="0 0 24 24" style="fill:none;stroke:#F4A3AE;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg></sc-if>
+                      <div onClick="{{ ch.lock }}" title="Lock assignment" style="width:16px;height:16px;border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:{{ ch.lockOpacity }};transition:opacity 150ms,background 150ms" style-hover="opacity:1;background:rgba(255,255,255,0.10)"><svg width="10" height="10" viewBox="0 0 24 24" style="fill:none;stroke:{{ ch.lockColor }};stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="{{ ch.lockPath }}"></path></svg></div>
+                    </div>
+                  </sc-for>
+                  <sc-for list="{{ ev.empties }}" as="em" hint-placeholder-count="0"><div style="display:flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;border:1px dashed rgba(226,24,51,0.55);color:#F4A3AE;font-size:11px">{{ em }}</div></sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;background:#0F0F13;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 14px;border-bottom:1px solid rgba(255,255,255,0.08)"><div style="font-size:13px;font-weight:500">Async allocation</div><div style="font-size:12px;color:#6B6B75">Hours per TA · async hours count toward the weekly cap spread over 2 weeks</div></div>
+          <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 0.7fr;align-items:center;height:40px;padding:0 14px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:11.5px;color:#9A9AA3">
+            <div>TA</div>
+            <sc-for list="{{ asyncCols }}" as="ac" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;gap:1px"><span style="color:#C9C9CF;font-weight:500">{{ ac.label }}</span><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px">{{ ac.meta }}</span></div></sc-for>
+            <div style="text-align:right">Weekly load</div>
+          </div>
+          <sc-for list="{{ asyncRows }}" as="row" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 0.7fr;align-items:center;height:38px;padding:0 14px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12.5px;transition:background 150ms" style-hover="background:rgba(255,255,255,0.02)">
+              <div onClick="{{ row.open }}" style="display:flex;align-items:center;gap:8px;cursor:pointer"><div style="width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:600;color:#C9C9CF">{{ row.initials }}</div><span>{{ row.name }}</span></div>
+              <sc-for list="{{ row.cells }}" as="cell" hint-placeholder-count="2"><div><input type="number" min="0" max="20" step="1" value="{{ cell.v }}" onChange="{{ cell.on }}" style="width:58px;height:26px;padding:0 8px;border-radius:7px;border:1px solid rgba(255,255,255,0.08);background:{{ cell.bg }};color:#EDEDEF;font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;outline:none;box-sizing:border-box;transition:border-color 150ms,box-shadow 150ms" style-focus="border-color:rgba(255,255,255,0.28);box-shadow:0 0 0 3px rgba(255,255,255,0.05)"></input></div></sc-for>
+              <div style="text-align:right;font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;color:{{ row.loadColor }}">{{ row.load }}</div>
+            </div>
+          </sc-for>
+          <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 0.7fr;align-items:center;height:40px;padding:0 14px;font-size:12px;color:#9A9AA3">
+            <div style="display:flex;align-items:center;gap:8px"><select value="{{ addTa }}" onChange="{{ onAddTa }}" style="height:26px;padding:0 8px;border-radius:7px;border:1px solid rgba(255,255,255,0.08);background:#15151A;color:#C9C9CF;font-family:Geist,system-ui,sans-serif;font-size:12px;outline:none"><option value="">Add TA to async…</option><sc-for list="{{ addOptions }}" as="o" hint-placeholder-count="3"><option value="{{ o.id }}">{{ o.name }}</option></sc-for></select></div>
+            <sc-for list="{{ asyncTotals }}" as="tt" hint-placeholder-count="2"><div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;color:{{ tt.color }}">{{ tt.text }}</div></sc-for>
+            <div></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px;position:sticky;top:16px">
+        <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;background:#0F0F13;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 14px;border-bottom:1px solid rgba(255,255,255,0.08)"><div style="font-size:13px;font-weight:500">Diagnostics</div><div style="flex:1"></div><div onClick="{{ clearHl }}" style="font-size:11.5px;color:#6B6B75;cursor:pointer" style-hover="color:#EDEDEF">Clear highlight</div></div>
+          <div style="padding:6px;display:flex;flex-direction:column;gap:2px">
+            <sc-for list="{{ diags }}" as="dg" hint-placeholder-count="5">
+              <div onClick="{{ dg.click }}" style="display:flex;flex-direction:column;gap:6px;padding:8px 8px;border-radius:9px;cursor:pointer;background:{{ dg.bg }};transition:background 150ms" style-hover="background:rgba(255,255,255,0.05)">
+                <div style="display:flex;align-items:center;gap:9px;font-size:12.5px"><div style="width:8px;height:8px;border-radius:50%;background:{{ dg.dot }};box-shadow:0 0 8px {{ dg.dot }}"></div><span style="flex:1;color:{{ dg.c }}">{{ dg.label }}</span><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;color:{{ dg.c }}">{{ dg.count }}</span></div>
+                <sc-for list="{{ dg.items }}" as="it" hint-placeholder-count="0"><div style="font-size:11.5px;color:#9A9AA3;padding-left:17px;line-height:1.35">{{ it }}</div></sc-for>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;background:#0F0F13;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 14px;border-bottom:1px solid rgba(255,255,255,0.08)"><div style="font-size:13px;font-weight:500">Roster</div><div style="font-size:12px;color:#6B6B75">Drag a name into any slot</div></div>
+          <div style="padding:6px;display:flex;flex-direction:column;gap:1px">
+            <sc-for list="{{ roster }}" as="r" hint-placeholder-count="15">
+              <div style="display:flex;align-items:center;gap:10px;height:32px;padding:0 6px 0 4px;border-radius:8px;background:{{ r.bg }};transition:background 150ms" style-hover="background:rgba(255,255,255,0.04)">
+                <div draggable="true" onDragStart="{{ r.drag }}" style="display:flex;align-items:center;gap:6px;height:22px;padding:0 8px 0 5px;border-radius:6px;background:rgba(255,255,255,0.07);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.10);font-size:12px;cursor:grab;white-space:nowrap;min-width:82px;box-sizing:border-box" style-hover="background:rgba(255,255,255,0.11)"><svg width="10" height="10" viewBox="0 0 24 24" style="fill:#6B6B75;stroke:none"><circle cx="9" cy="12" r="1.6"></circle><circle cx="9" cy="5" r="1.6"></circle><circle cx="9" cy="19" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="15" cy="5" r="1.6"></circle><circle cx="15" cy="19" r="1.6"></circle></svg><span onClick="{{ r.open }}" style="cursor:pointer">{{ r.name }}</span></div>
+                <div style="flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,0.06);overflow:hidden;position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:{{ r.pct }};background:{{ r.bar }};border-radius:2px;transition:width 200ms"></div></div>
+                <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:{{ r.c }};min-width:48px;text-align:right">{{ r.hours }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeDrawer }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.35)"></div>
+    <div style="position:absolute;top:0;right:0;bottom:0;width:420px;background:#111115;border-left:1px solid rgba(255,255,255,0.10);box-shadow:-30px 0 80px rgba(0,0,0,0.5);display:flex;flex-direction:column;animation:slideIn 200ms ease-out;overflow:auto">
+      <div style="display:flex;align-items:center;gap:12px;padding:18px 20px 14px;border-bottom:1px solid rgba(255,255,255,0.08)">
+        <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#2B2B33,#3A3A45);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">{{ dr.initials }}</div>
+        <div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:15px;font-weight:600;letter-spacing:-0.01em">{{ dr.name }}</div><div style="font-size:12px;color:#9A9AA3;font-family:'Geist Mono',ui-monospace,monospace">{{ dr.email }}</div></div>
+        <div style="flex:1"></div>
+        <div onClick="{{ closeDrawer }}" style="width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#6B6B75;transition:background 150ms" style-hover="background:rgba(255,255,255,0.06)"><svg width="15" height="15" viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
+      </div>
+      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:18px">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:12px;color:#9A9AA3">Weekly load</span><span style="flex:1"></span><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:13px;color:{{ dr.loadColor }}">{{ dr.load }}</span></div>
+          <div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.06);overflow:hidden;position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:{{ dr.pct }};background:{{ dr.bar }};border-radius:3px"></div></div>
+          <sc-for list="{{ dr.items }}" as="it" hint-placeholder-count="2"><div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="font-family:'Geist Mono',ui-monospace,monospace;color:#C9C9CF;min-width:118px">{{ it.a }}</span><span style="color:#9A9AA3;flex:1">{{ it.b }}</span><span style="font-family:'Geist Mono',ui-monospace,monospace;color:#9A9AA3">{{ it.c }}</span></div></sc-for>
+          <sc-if value="{{ dr.none }}" hint-placeholder-val="{{ false }}"><div style="font-size:12.5px;color:#6B6B75">No assignments yet.</div></sc-if>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:#9A9AA3">Availability</span><span style="font-size:11.5px;color:#6B6B75">· assignments outlined</span><span style="flex:1"></span><span style="font-size:11.5px;color:{{ dr.availColor }}">{{ dr.availNote }}</span></div>
+          <div style="border:1px solid rgba(255,255,255,0.08);border-radius:10px;background:#0B0B0E;padding:8px;display:grid;grid-template-columns:repeat(5,1fr);gap:4px">
+            <sc-for list="{{ dr.mini }}" as="col" hint-placeholder-count="5">
+              <div style="position:relative;display:flex;flex-direction:column;gap:1px"><div style="font-size:10px;color:#6B6B75;text-align:center;height:14px">{{ col.name }}</div>
+                <sc-for list="{{ col.cells }}" as="c" hint-placeholder-count="20"><div style="height:8px;border-radius:2px;background:{{ c }}"></div></sc-for>
+                <sc-for list="{{ col.blocks }}" as="b" hint-placeholder-count="0"><div title="{{ b.tip }}" style="position:absolute;left:-1px;right:-1px;top:{{ b.top }};height:{{ b.h }};border-radius:3px;box-shadow:inset 0 0 0 1.5px {{ b.c }}"></div></sc-for>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="font-size:12px;color:#9A9AA3">Preferences</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div style="border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#6B6B75">Max hours / week</span><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:14px">{{ dr.cap }}</span></div>
+            <div style="border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:7px"><span style="font-size:11px;color:#6B6B75">Sync ↔ Async</span><div style="position:relative;height:4px;border-radius:2px;background:rgba(255,255,255,0.08);margin:4px 0"><div style="position:absolute;top:-4px;left:{{ dr.prefPct }};width:12px;height:12px;border-radius:50%;background:#EDEDEF;transform:translateX(-6px);box-shadow:0 0 0 3px rgba(255,255,255,0.10)"></div></div><span style="font-size:11px;color:#9A9AA3">{{ dr.prefLabel }}</span></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#6B6B75">Duty ranking</span><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ dr.ranking }}" as="rk" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:6px;height:24px;padding:0 9px 0 7px;border-radius:7px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);font-size:12px"><span style="font-family:'Geist Mono',ui-monospace,monospace;color:#6B6B75;font-size:11px">{{ rk.n }}</span>{{ rk.label }}</div></sc-for></div></div>
+          <div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#6B6B75">Preferred sections</span><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:#C9C9CF">{{ dr.sections }}</span></div>
+          <div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#6B6B75">Enrolled this semester</span><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:#C9C9CF">{{ dr.courses }}</span></div>
+        </div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="padding:14px 20px 18px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:8px">
+        <select value="{{ target }}" onChange="{{ onTarget }}" style="flex:1;height:32px;padding:0 10px;border-radius:9px;border:1px solid rgba(255,255,255,0.10);background:#0B0B0E;color:#EDEDEF;font-family:Geist,system-ui,sans-serif;font-size:12.5px;outline:none"><sc-for list="{{ targets }}" as="o" hint-placeholder-count="2"><option value="{{ o.id }}">{{ o.label }}</option></sc-for></select>
+        <div onClick="{{ assignTo }}" style="display:flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:9px;background:#EDEDEF;color:#0B0B0E;font-size:12.5px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="background:#fff">Assign to…</div>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ modalOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeModal }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);backdrop-filter:blur(2px)"></div>
+    <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:480px;background:#15151A;border:1px solid rgba(255,255,255,0.10);border-radius:14px;box-shadow:0 30px 90px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.05);animation:fadeUp 160ms ease-out;padding:22px 24px;display:flex;flex-direction:column;gap:18px;box-sizing:border-box">
+      <div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:17px;font-weight:600;letter-spacing:-0.02em">Publish schedule</div><div style="font-size:12.5px;color:#9A9AA3;line-height:1.5">CMSC132 · Fall 2026. TAs see their assignments immediately; later edits go to the changelog.</div></div>
+      <div style="border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden">
+        <sc-for list="{{ summary }}" as="s" hint-placeholder-count="5"><div style="display:flex;align-items:center;gap:10px;height:38px;padding:0 14px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12.5px"><span style="color:#C9C9CF;flex:1">{{ s.label }}</span><span style="font-family:'Geist Mono',ui-monospace,monospace;color:{{ s.color }}">{{ s.value }}</span></div></sc-for>
+      </div>
+      <div onClick="{{ toggleNotify }}" style="display:flex;align-items:center;gap:12px;cursor:pointer"><div style="width:34px;height:20px;border-radius:10px;background:{{ notifyBg }};position:relative;transition:background 150ms;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.10)"><div style="position:absolute;top:2px;left:{{ notifyKnob }};width:16px;height:16px;border-radius:50%;background:#fff;transition:left 150ms"></div></div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px">Notify TAs by email</span><span style="font-size:11.5px;color:#6B6B75">{{ notifyNote }}</span></div></div>
+      <div style="display:flex;align-items:center;gap:8px;justify-content:flex-end">
+        <div onClick="{{ closeModal }}" style="display:flex;align-items:center;height:32px;padding:0 12px;border-radius:9px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);font-size:13px;cursor:pointer" style-hover="background:rgba(255,255,255,0.08)">Cancel</div>
+        <div onClick="{{ publish }}" style="display:flex;align-items:center;gap:8px;height:32px;padding:0 14px;border-radius:9px;background:#E21833;color:#fff;font-size:13px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.10)" style-hover="background:#F02A44">{{ publishLabel }}</div>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;right:24px;bottom:24px;display:flex;align-items:center;gap:10px;height:44px;padding:0 14px 0 12px;border-radius:12px;background:#1A1A21;border:1px solid rgba(255,255,255,0.10);box-shadow:0 12px 40px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.05);animation:fadeUp 180ms ease-out;font-size:13px;z-index:5"><svg width="16" height="16" viewBox="0 0 24 24" style="fill:none;stroke:#3DD68C;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg><span>{{ toastText }}</span></div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;default&quot;,&quot;drawer&quot;,&quot;publish&quot;],&quot;default&quot;:&quot;default&quot;,&quot;tsType&quot;:&quot;'default' | 'drawer' | 'publish'&quot;,&quot;section&quot;:&quot;State&quot;}}">
+class Component extends DCLogic {
+  DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']; RH = 26; NS = 20;
+  TAS = [
+    { id: 'priya', name: 'Priya', cap: 10, pref: 0.3, cls: [[[0, 2, 4], 4, 5], [[1], 2, 3], [[1, 3], 9, 11], [[0, 2], 12, 14]], ex: ['Oct 14', 'Oct 15', 'Oct 16'], courses: 'CMSC330 · MATH240 · ENGL393' },
+    { id: 'marcus', name: 'Marcus', cap: 10, pref: 0.2, cls: [[[1, 3], 6, 8], [[0, 2], 15, 17]], ex: [], courses: 'CMSC351 · STAT400' },
+    { id: 'elena', name: 'Elena', cap: 8, pref: 0.6, cls: [[[0, 2, 4], 2, 3], [[1], 12, 14]], ex: [], courses: 'CMSC320 · COMM107' },
+    { id: 'jamal', name: 'Jamal', cap: 10, pref: 0.4, cls: [[[0, 2], 6, 8], [[3], 18, 19]], ex: [], courses: 'CMSC351 · MATH241' },
+    { id: 'sofia', name: 'Sofia', cap: 12, pref: 0.3, cls: [[[1, 3], 3, 5]], ex: [], courses: 'CMSC421' },
+    { id: 'daniel', name: 'Daniel', cap: 10, pref: 0.5, cls: [[[1], 15, 17], [[0, 2, 4], 10, 11]], ex: [], courses: 'CMSC414 · PHYS161' },
+    { id: 'aisha', name: 'Aisha', cap: 8, pref: 0.7, cls: [[[0, 2], 8, 9], [[3], 4, 6]], ex: [], courses: 'CMSC330 · ENES100' },
+    { id: 'kevin', name: 'Kevin', cap: 10, pref: 0.5, cls: [[[1, 3], 12, 14], [[0, 2], 2, 3]], ex: [], courses: 'CMSC351 · MATH240' },
+    { id: 'nadia', name: 'Nadia', cap: 10, pref: 0.2, cls: [[[0, 2, 4], 6, 7]], ex: [], courses: 'CMSC426' },
+    { id: 'tyler', name: 'Tyler', cap: 6, pref: 0.9, cls: [[[1, 3], 9, 11], [[2], 16, 19]], ex: [], courses: 'CMSC412 · ARTT100' },
+    { id: 'mei', name: 'Mei', cap: 10, pref: 0.4, cls: [[[0, 2], 4, 6]], ex: [], courses: 'CMSC320 · MATH246' },
+    { id: 'omar', name: 'Omar', cap: 10, pref: 0.3, cls: [[[1, 3], 15, 17]], ex: [], courses: 'CMSC430' },
+    { id: 'hannah', name: 'Hannah', cap: 8, pref: 0.6, cls: [[[0, 2, 4], 0, 1], [[1], 6, 8]], ex: [], courses: 'CMSC351 · HIST200' },
+    { id: 'lucas', name: 'Lucas', cap: 10, pref: 0.4, cls: [[[0, 2], 10, 12]], ex: [], courses: 'CMSC417 · MATH410' },
+    { id: 'zoe', name: 'Zoe', cap: 10, pref: 0.5, cls: [[[1, 3], 4, 6]], ex: [], courses: 'CMSC330', missing: true },
+  ];
+  SLOTS = [
+    { id: '0101', type: 'disc', label: '0101', days: [0, 2], s0: 2, s1: 3, time: '9:00', room: 'IRB 0318', need: 1, credit: 2 },
+    { id: '0102', type: 'disc', label: '0102', days: [0, 2], s0: 4, s1: 5, time: '10:00', room: 'IRB 0318', need: 1, credit: 2 },
+    { id: '0103', type: 'disc', label: '0103', days: [0, 2], s0: 6, s1: 7, time: '11:00', room: 'CSI 2107', need: 1, credit: 2 },
+    { id: '0104', type: 'disc', label: '0104', days: [0, 2], s0: 8, s1: 9, time: '12:00', room: 'CSI 2107', need: 1, credit: 2 },
+    { id: '0105', type: 'disc', label: '0105', days: [1, 3], s0: 3, s1: 4, time: '9:30', room: 'IRB 1207', need: 1, credit: 2 },
+    { id: '0106', type: 'disc', label: '0106', days: [1, 3], s0: 6, s1: 7, time: '11:00', room: 'IRB 1207', need: 1, credit: 2 },
+    { id: '0107', type: 'disc', label: '0107', days: [1, 3], s0: 9, s1: 10, time: '12:30', room: 'CSI 2120', need: 1, credit: 2 },
+    { id: '0108', type: 'disc', label: '0108', days: [1, 3], s0: 12, s1: 13, time: '2:00', room: 'CSI 2120', need: 1, credit: 2 },
+    { id: 'ohm', type: 'oh', label: 'OH', days: [0], s0: 12, s1: 15, time: '2:00–4:00', room: 'IRB 1108', need: 2, credit: 2 },
+    { id: 'oht', type: 'oh', label: 'OH', days: [1], s0: 14, s1: 17, time: '3:00–5:00', room: 'IRB 1108', need: 2, credit: 2 },
+    { id: 'ohw', type: 'oh', label: 'OH', days: [2], s0: 10, s1: 13, time: '1:00–3:00', room: 'IRB 1108', need: 2, credit: 2 },
+    { id: 'ohr', type: 'oh', label: 'OH', days: [3], s0: 16, s1: 19, time: '4:00–6:00', room: 'IRB 1108', need: 2, credit: 2 },
+    { id: 'ohf', type: 'oh', label: 'OH', days: [4], s0: 4, s1: 7, time: '10:00–12:00', room: 'IRB 1108', need: 2, credit: 2 },
+  ];
+  EVENTS = [
+    { id: 'e1', label: 'Exam 1 Proctoring', date: 'Oct 14', day: 'Wed', time: '7:00–9:00 PM', room: 'ESJ 0202', need: 4, credit: 2 },
+    { id: 'e2', label: 'Exam 2 Proctoring', date: 'Nov 18', day: 'Wed', time: '7:00–9:00 PM', room: 'ESJ 0202', need: 4, credit: 2 },
+  ];
+  ASYNC = [
+    { id: 'a1', label: 'Grading · Exam 1', per: 6, split: 4, due: 'Oct 20' },
+    { id: 'a2', label: 'Project 1 grading', per: 4, split: 7, due: 'Oct 6' },
+  ];
+  constructor(p) {
+    super(p);
+    const A = (...ids) => ids.map(ta => ({ ta, locked: false }));
+    this.state = {
+      assign: { '0101': A('nadia'), '0102': A('jamal'), '0103': A('priya'), '0104': A('kevin'), '0105': A('marcus'), '0106': A('elena'), '0107': [], '0108': A('omar'),
+        ohm: A('sofia', 'mei'), oht: A('daniel', 'hannah'), ohw: A('aisha', 'marcus'), ohr: A('lucas', 'marcus'), ohf: A('marcus') },
+      ev: { e1: A('priya', 'jamal', 'sofia', 'kevin'), e2: A('elena', 'omar', 'mei', 'lucas') },
+      alloc: { a1: { marcus: 6, kevin: 6, elena: 6, mei: 6 }, a2: { priya: 4, jamal: 4, sofia: 4, omar: 4, hannah: 4, lucas: 4, tyler: 4 } },
+      hist: [], hl: null, drawer: undefined, modal: undefined, notify: true, published: false, toast: false, toastText: '', target: '0107',
+    };
+    this.state.assign['0103'][0].locked = true; this.state.assign.ohm[1].locked = true;
+  }
+  ta(id) { return this.TAS.find(t => t.id === id); }
+  inClass(t, d, s) { return t.cls.some(([days, a, b]) => days.includes(d) && s >= a && s <= b); }
+  avail(t, d, s) { if (t.missing || this.inClass(t, d, s)) return false; const i = this.TAS.indexOf(t); return ((i + 1) * 7919 + d * 104729 + s * 1299709 + i * d * 31) % 100 < 66; }
+  slotFree(t, sl) { return sl.days.every(d => { for (let s = sl.s0; s <= sl.s1; s++) if (!this.avail(t, d, s)) return false; return true; }); }
+  classClash(t, sl) { return sl.days.some(d => { for (let s = sl.s0; s <= sl.s1; s++) if (this.inClass(t, d, s)) return true; return false; }); }
+  overlap(a, b) { return a.days.some(d => b.days.includes(d)) && a.s0 <= b.s1 && b.s0 <= a.s1; }
+  load(id, st = this.state) {
+    let h = 0;
+    for (const sl of this.SLOTS) if (st.assign[sl.id].some(x => x.ta === id)) h += sl.credit;
+    for (const a of this.ASYNC) h += (st.alloc[a.id][id] || 0) / 2;
+    return h;
+  }
+  conflicts(st = this.state) {
+    const out = [];
+    for (const sl of this.SLOTS) for (const x of st.assign[sl.id]) {
+      const t = this.ta(x.ta);
+      if (this.classClash(t, sl)) out.push({ ta: x.ta, where: sl.id, kind: 'class', text: `${t.name} has class during ${sl.label} ${this.DAYS[sl.days[0]]} ${sl.time}` });
+      if (this.SLOTS.some(o => o.id !== sl.id && o.id > sl.id && this.overlap(o, sl) && st.assign[o.id].some(y => y.ta === x.ta))) out.push({ ta: x.ta, where: sl.id, kind: 'double', text: `${t.name} is double-booked at ${sl.time}` });
+    }
+    for (const e of this.EVENTS) for (const x of st.ev[e.id]) { const t = this.ta(x.ta); if (t.ex.includes(e.date)) out.push({ ta: x.ta, where: e.id, kind: 'exception', text: `${t.name} marked ${e.date} as unavailable` }); }
+    return out;
+  }
+  snap() { const s = this.state; return { assign: JSON.parse(JSON.stringify(s.assign)), ev: JSON.parse(JSON.stringify(s.ev)), alloc: JSON.parse(JSON.stringify(s.alloc)) }; }
+  commit(next) { this.setState(st => ({ hist: [...st.hist, this.snap()].slice(-30), ...next })); }
+  toastMsg(t) { this.setState({ toast: true, toastText: t }); clearTimeout(this._tt); this._tt = setTimeout(() => this.setState({ toast: false }), 3200); }
+  componentWillUnmount() { clearTimeout(this._tt); }
+  dropTo(kind, id, data) {
+    const [ta, from] = String(data).split('|');
+    if (!this.ta(ta)) return;
+    const st = this.snap();
+    if (from && from !== id) { if (st.assign[from]) st.assign[from] = st.assign[from].filter(x => x.ta !== ta); if (st.ev[from]) st.ev[from] = st.ev[from].filter(x => x.ta !== ta); }
+    const bucket = kind === 'slot' ? st.assign : st.ev, def = kind === 'slot' ? this.SLOTS : this.EVENTS;
+    const need = def.find(x => x.id === id).need;
+    if (bucket[id].some(x => x.ta === ta)) return;
+    if (bucket[id].length >= need) { const i = bucket[id].findIndex(x => !x.locked); if (i < 0) { this.toastMsg('All assignments in that slot are locked'); return; } bucket[id].splice(i, 1); }
+    bucket[id].push({ ta, locked: false });
+    this.commit(st);
+  }
+  regenerate() {
+    const st = this.snap();
+    for (const sl of this.SLOTS) st.assign[sl.id] = st.assign[sl.id].filter(x => x.locked);
+    for (const e of this.EVENTS) st.ev[e.id] = st.ev[e.id].filter(x => x.locked);
+    const ld = {}; this.TAS.forEach(t => { ld[t.id] = this.ASYNC.reduce((h, a) => h + (st.alloc[a.id][t.id] || 0) / 2, 0); });
+    for (const sl of this.SLOTS) for (const x of st.assign[sl.id]) ld[x.ta] += sl.credit;
+    const order = [...this.SLOTS].sort((a, b) => a.s0 - b.s0);
+    for (const sl of order) while (st.assign[sl.id].length < sl.need) {
+      const cands = this.TAS.filter(t => !t.missing && !st.assign[sl.id].some(x => x.ta === t.id) && this.slotFree(t, sl) && ld[t.id] + sl.credit <= t.cap && !this.SLOTS.some(o => o.id !== sl.id && this.overlap(o, sl) && st.assign[o.id].some(y => y.ta === t.id)))
+        .sort((a, b) => (ld[a.id] / a.cap) - (ld[b.id] / b.cap) || a.pref - b.pref);
+      if (!cands.length) break;
+      st.assign[sl.id].push({ ta: cands[0].id, locked: false }); ld[cands[0].id] += sl.credit;
+    }
+    for (const e of this.EVENTS) { const cands = this.TAS.filter(t => !t.missing && !t.ex.includes(e.date) && !st.ev[e.id].some(x => x.ta === t.id)).sort((a, b) => ld[a.id] / a.cap - ld[b.id] / b.cap); while (st.ev[e.id].length < e.need && cands.length) st.ev[e.id].push({ ta: cands.shift().id, locked: false }); }
+    this.commit(st); this.toastMsg('Regenerated · locks kept');
+  }
+  renderVals() { return Object.assign(this.valsGrid(), this.valsPanes(), this.valsRail(), this.valsOverlays()); }
+  valsGrid() {
+    const st = this.state, conf = this.conflicts(), hl = st.hl;
+    const loads = {}; this.TAS.forEach(t => loads[t.id] = this.load(t.id));
+    const overIds = this.TAS.filter(t => loads[t.id] > t.cap).map(t => t.id);
+    const underIds = this.TAS.filter(t => loads[t.id] > 0 && loads[t.id] < 0.3 * t.cap).map(t => t.id);
+    const hlTa = (id) => (hl === 'over' && overIds.includes(id)) || (hl === 'under' && underIds.includes(id)) || (hl && hl.startsWith('ta:') && hl.slice(3) === id);
+    const chip = (x, whereId, kind) => {
+      const t = this.ta(x.ta); const bad = conf.filter(c => c.ta === x.ta && c.where === whereId); const over = overIds.includes(x.ta);
+      let ring = 'inset 0 0 0 1px rgba(255,255,255,0.10)', bg = 'rgba(255,255,255,0.07)';
+      if (over) { ring = 'inset 0 0 0 1px rgba(245,165,36,0.6)'; bg = 'rgba(245,165,36,0.10)'; }
+      if (bad.length) { ring = 'inset 0 0 0 1px rgba(226,24,51,0.7),0 0 10px rgba(226,24,51,0.25)'; bg = 'rgba(226,24,51,0.14)'; }
+      if (hlTa(x.ta) || (hl === 'conflict' && bad.length)) ring += ',0 0 0 2px rgba(255,255,255,0.55)';
+      return { name: t.name, bg, ring, bad: bad.length > 0, tip: bad.map(b => b.text).join(' · ') || (over ? `${t.name} is over cap (${loads[x.ta]}/${t.cap}h)` : `${t.name} · ${loads[x.ta]}/${t.cap}h · drag to move`),
+        locked: x.locked, lockOpacity: x.locked ? 1 : 0.3, lockColor: x.locked ? '#EDEDEF' : '#9A9AA3', lockPath: x.locked ? 'M7 11V7a5 5 0 0 1 10 0v4' : 'M7 11V7a5 5 0 0 1 9.9-1',
+        drag: (e) => { e.dataTransfer.setData('text/plain', `${x.ta}|${whereId}`); e.dataTransfer.effectAllowed = 'move'; },
+        open: (e) => { if (e.target.closest && e.target.closest('[title="Lock assignment"]')) return; this.setState({ drawer: x.ta }); },
+        lock: (e) => { e.stopPropagation(); const s = this.snap(); const b = kind === 'slot' ? s.assign : s.ev; const y = b[whereId].find(z => z.ta === x.ta); y.locked = !y.locked; this.commit(s); } };
+    };
+    this._chip = chip; this._loads = loads; this._over = overIds; this._under = underIds; this._conf = conf;
+    const cols = this.DAYS.map((_, d) => ({ slots: this.SLOTS.filter(sl => sl.days.includes(d)).map(sl => {
+      const as = st.assign[sl.id]; const missing = sl.need - as.length;
+      const free = this.TAS.filter(t => !t.missing && !as.some(x => x.ta === t.id) && this.slotFree(t, sl) && !this.classClash(t, sl) && loads[t.id] + sl.credit <= t.cap).length;
+      const unfilled = missing > 0;
+      let hint = '', hintColor = '#6B6B75';
+      if (unfilled) { const wide = sl.type === 'oh'; hint = free === 0 ? (wide ? 'no TA free' : 'none free') : free === 1 ? 'only 1 TA free' : (wide ? `${free} TAs available` : `${free} available`); hintColor = free === 0 ? '#F4A3AE' : free === 1 ? '#F7C566' : '#7FE3B1'; } else hint = sl.room;
+      let ring = 'none';
+      if (hl === 'unfilled' && unfilled) ring = '0 0 0 2px rgba(255,255,255,0.55)';
+      return { top: `${sl.s0 * this.RH + 2}px`, h: `${(sl.s1 - sl.s0 + 1) * this.RH - 4}px`, label: sl.type === 'disc' ? sl.label : 'Office hours', time: sl.time, labelColor: sl.type === 'disc' ? '#C9C9CF' : '#B7C6DC',
+        bg: unfilled ? 'rgba(226,24,51,0.05)' : sl.type === 'disc' ? 'rgba(255,255,255,0.035)' : 'rgba(125,147,178,0.10)',
+        border: unfilled ? '1px dashed rgba(226,24,51,0.5)' : sl.type === 'disc' ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(125,147,178,0.25)', ring, hint, hintColor,
+        chips: as.map(x => chip(x, sl.id, 'slot')), empties: Array.from({ length: missing }, (_, i) => missing > 1 ? `Drop TA ${as.length + i + 1}` : 'Drop a TA'),
+        over: (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }, drop: (e) => { e.preventDefault(); this.dropTo('slot', sl.id, e.dataTransfer.getData('text/plain')); } };
+    }) }));
+    const filledSlots = this.SLOTS.filter(sl => st.assign[sl.id].length >= sl.need).length;
+    return { dayNames: this.DAYS, hours: ['8 AM', '9', '10', '11', '12 PM', '1', '2', '3', '4', '5'], cols,
+      recurringFilled: `${filledSlots} of ${this.SLOTS.length} filled`, isDraft: !st.published, isPublished: st.published,
+      headline: `${conf.length} conflict${conf.length === 1 ? '' : 's'} · ${overIds.length} over cap`,
+      undoOpacity: st.hist.length ? 1 : 0.45, undo: () => { if (!st.hist.length) return; const prev = st.hist[st.hist.length - 1]; this.setState({ ...prev, hist: st.hist.slice(0, -1) }); },
+      lockCount: this.SLOTS.reduce((n, sl) => n + st.assign[sl.id].filter(x => x.locked).length, 0) + this.EVENTS.reduce((n, e) => n + st.ev[e.id].filter(x => x.locked).length, 0),
+      regenerate: () => this.regenerate(), openPublish: () => this.setState({ modal: true }) };
+  }
+  valsPanes() {
+    const st = this.state, chip = this._chip, loads = this._loads, hl = st.hl;
+    const events = this.EVENTS.map(e => {
+      const as = st.ev[e.id]; const missing = e.need - as.length; const unfilled = missing > 0;
+      const free = this.TAS.filter(t => !t.missing && !t.ex.includes(e.date) && !as.some(x => x.ta === t.id)).length;
+      return { label: e.label, day: e.day, date: e.date, time: e.time, room: e.room, need: e.need,
+        hint: unfilled ? `${free} TAs free that evening` : 'Staffed', hintColor: unfilled ? '#7FE3B1' : '#6B6B75',
+        border: unfilled ? '1px dashed rgba(226,24,51,0.5)' : '1px solid rgba(255,255,255,0.08)', bg: unfilled ? 'rgba(226,24,51,0.05)' : 'rgba(255,255,255,0.03)',
+        ring: hl === 'unfilled' && unfilled ? '0 0 0 2px rgba(255,255,255,0.55)' : 'none',
+        chips: as.map(x => chip(x, e.id, 'ev')), empties: Array.from({ length: missing }, () => 'Drop a TA'),
+        over: (ev) => { ev.preventDefault(); }, drop: (ev) => { ev.preventDefault(); this.dropTo('ev', e.id, ev.dataTransfer.getData('text/plain')); } };
+    });
+    const staffed = this.EVENTS.reduce((n, e) => n + st.ev[e.id].length, 0), needed = this.EVENTS.reduce((n, e) => n + e.need, 0);
+    const ids = this.TAS.filter(t => this.ASYNC.some(a => (st.alloc[a.id][t.id] || 0) > 0 || (st.addedTa || []).includes(t.id))).map(t => t.id);
+    const asyncRows = ids.map(id => { const t = this.ta(id); const over = loads[id] > t.cap;
+      return { name: t.name, initials: t.name.slice(0, 2).toUpperCase(), open: () => this.setState({ drawer: id }),
+        cells: this.ASYNC.map(a => { const v = st.alloc[a.id][id] || 0; return { v, bg: v ? 'rgba(255,255,255,0.05)' : 'transparent',
+          on: (e) => { const s = this.snap(); s.alloc[a.id][id] = Math.max(0, Number(e.target.value) || 0); this.commit(s); } }; }),
+        load: `${loads[id]} / ${t.cap}h`, loadColor: over ? '#F7C566' : loads[id] < 0.3 * t.cap ? '#9A9AA3' : '#EDEDEF' }; });
+    const asyncTotals = this.ASYNC.map(a => { const got = Object.values(st.alloc[a.id]).reduce((n, v) => n + v, 0), req = a.per * a.split; return { text: `${got} / ${req}h allocated`, color: got === req ? '#7FE3B1' : got > req ? '#F7C566' : '#F4A3AE' }; });
+    return { events, eventsFilled: `${staffed} of ${needed} TA seats filled`, asyncRows,
+      asyncCols: this.ASYNC.map(a => ({ label: a.label, meta: `${a.per}h per TA · ${a.split} TAs · due ${a.due}` })), asyncTotals,
+      addTa: '', addOptions: this.TAS.filter(t => !ids.includes(t.id)).map(t => ({ id: t.id, name: t.name })),
+      onAddTa: (e) => { const id = e.target.value; if (id) this.setState(s => ({ addedTa: [...(s.addedTa || []), id] })); } };
+  }
+  valsRail() {
+    const st = this.state, loads = this._loads, conf = this._conf, hl = st.hl;
+    const unfilled = [...this.SLOTS.filter(sl => st.assign[sl.id].length < sl.need).map(sl => `${sl.type === 'disc' ? 'Section ' + sl.label : 'Office hours'} · ${sl.days.map(d => this.DAYS[d]).join('/')} ${sl.time} · ${sl.need - st.assign[sl.id].length} open`),
+      ...this.EVENTS.filter(e => st.ev[e.id].length < e.need).map(e => `${e.label} · ${e.date} · ${e.need - st.ev[e.id].length} open`)];
+    const over = this.TAS.filter(t => loads[t.id] > t.cap), under = this.TAS.filter(t => loads[t.id] > 0 && loads[t.id] < 0.3 * t.cap);
+    const zero = this.TAS.filter(t => loads[t.id] === 0 && !this.EVENTS.some(e => st.ev[e.id].some(x => x.ta === t.id)));
+    const row = (key, label, count, items, dot) => ({ label, count, items: hl === key ? items : [], dot: count ? dot : 'rgba(255,255,255,0.18)', c: count ? '#EDEDEF' : '#6B6B75',
+      bg: hl === key ? 'rgba(255,255,255,0.06)' : 'transparent', click: () => this.setState({ hl: hl === key ? null : key }) });
+    const diags = [
+      row('unfilled', 'Unfilled shifts', unfilled.length, unfilled, '#E21833'),
+      row('conflict', 'Conflicts', conf.length, conf.map(c => c.text), '#E21833'),
+      row('over', 'Over hours cap', over.length, over.map(t => `${t.name} · ${loads[t.id]} / ${t.cap}h`), '#F5A524'),
+      row('under', 'Under 30% of cap', under.length, under.map(t => `${t.name} · ${loads[t.id]} / ${t.cap}h`), '#F5A524'),
+      row('zero', 'No assignments', zero.length, zero.map(t => t.missing ? `${t.name} · availability not submitted` : t.name), '#9A9AA3'),
+    ];
+    const roster = [...this.TAS].sort((a, b) => a.name.localeCompare(b.name)).map(t => {
+      const l = loads[t.id], pct = Math.min(100, Math.round(l / t.cap * 100)), isOver = l > t.cap;
+      const lit = (hl === 'over' && isOver) || (hl === 'under' && under.includes(t)) || (hl === 'zero' && zero.includes(t)) || hl === `ta:${t.id}`;
+      return { name: t.name, pct: `${pct}%`, bar: isOver ? '#F5A524' : l === 0 ? 'transparent' : '#3DD68C', c: isOver ? '#F7C566' : '#9A9AA3',
+        hours: t.missing ? 'no avail.' : `${l} / ${t.cap}h`, bg: lit ? 'rgba(255,255,255,0.06)' : 'transparent',
+        drag: (e) => { e.dataTransfer.setData('text/plain', `${t.id}|`); e.dataTransfer.effectAllowed = 'copy'; }, open: () => this.setState({ drawer: t.id }) };
+    });
+    return { diags, roster, clearHl: () => this.setState({ hl: null }) };
+  }
+  valsOverlays() {
+    const st = this.state, loads = this._loads, view = this.props.view ?? 'default';
+    const drawerId = st.drawer === undefined ? (view === 'drawer' ? 'priya' : null) : st.drawer;
+    const modalOpen = st.modal === undefined ? view === 'publish' : st.modal;
+    const targets = [...this.SLOTS.filter(sl => st.assign[sl.id].length < sl.need).map(sl => ({ id: sl.id, label: `${sl.type === 'disc' ? 'Section ' + sl.label : 'Office hours'} · ${sl.days.map(d => this.DAYS[d]).join('/')} ${sl.time}` })),
+      ...this.EVENTS.filter(e => st.ev[e.id].length < e.need).map(e => ({ id: e.id, label: `${e.label} · ${e.date}` })),
+      ...this.SLOTS.filter(sl => st.assign[sl.id].length >= sl.need).map(sl => ({ id: sl.id, label: `${sl.type === 'disc' ? 'Section ' + sl.label : 'Office hours'} · ${sl.days.map(d => this.DAYS[d]).join('/')} ${sl.time} (replace)` }))];
+    let dr = {};
+    if (drawerId) {
+      const t = this.ta(drawerId), l = loads[t.id], over = l > t.cap;
+      const items = [...this.SLOTS.filter(sl => st.assign[sl.id].some(x => x.ta === t.id)).map(sl => ({ a: sl.type === 'disc' ? `Section ${sl.label}` : 'Office hours', b: `${sl.days.map(d => this.DAYS[d]).join('/')} ${sl.time} · ${sl.room}`, c: `${sl.credit}h/wk` })),
+        ...this.EVENTS.filter(e => st.ev[e.id].some(x => x.ta === t.id)).map(e => ({ a: e.label, b: `${e.day} ${e.date} · ${e.time}`, c: `${e.credit}h once` })),
+        ...this.ASYNC.filter(a => st.alloc[a.id][t.id] > 0).map(a => ({ a: a.label, b: `due ${a.due}`, c: `${st.alloc[a.id][t.id]}h` }))];
+      const mini = this.DAYS.map((name, d) => ({ name, cells: Array.from({ length: this.NS }, (_, s) => this.inClass(t, d, s) ? 'rgba(125,147,178,0.35)' : this.avail(t, d, s) ? 'rgba(61,214,140,0.28)' : 'rgba(255,255,255,0.04)'),
+        blocks: this.SLOTS.filter(sl => sl.days.includes(d) && st.assign[sl.id].some(x => x.ta === t.id)).map(sl => ({ top: `${15 + sl.s0 * 9}px`, h: `${(sl.s1 - sl.s0 + 1) * 9 - 1}px`, c: this.classClash(t, sl) ? '#E21833' : '#EDEDEF', tip: `${sl.label} ${sl.time}` })) }));
+      const rk = t.pref > 0.5 ? ['Grading', 'Office hours', 'Discussion', 'Exam proctoring'] : ['Discussion', 'Office hours', 'Grading', 'Exam proctoring'];
+      dr = { initials: t.name.slice(0, 2).toUpperCase(), name: t.name, email: `${t.id}@${this.TAS.indexOf(t) % 2 ? 'umd.edu' : 'terpmail.umd.edu'}`, load: `${l} / ${t.cap}h`, pct: `${Math.min(100, l / t.cap * 100)}%`,
+        bar: over ? '#F5A524' : '#3DD68C', loadColor: over ? '#F7C566' : '#EDEDEF', items, none: items.length === 0, mini,
+        availNote: t.missing ? 'Not submitted' : `${this.DAYS.reduce((n, _, d) => n + Array.from({ length: this.NS }, (_, s) => this.avail(t, d, s)).filter(Boolean).length, 0) / 2}h available`, availColor: t.missing ? '#F7C566' : '#7FE3B1',
+        cap: `${t.cap}h`, prefPct: `${t.pref * 100}%`, prefLabel: t.pref < 0.4 ? 'Mostly synchronous' : t.pref > 0.6 ? 'Mostly asynchronous' : 'No strong preference',
+        ranking: rk.map((label, i) => ({ n: i + 1, label })), sections: t.pref > 0.5 ? '0106 · 0108' : '0103 · 0104 · 0102', courses: t.courses };
+    }
+    const conf = this._conf, filled = this.SLOTS.filter(sl => st.assign[sl.id].length >= sl.need).length;
+    const staffed = this.EVENTS.reduce((n, e) => n + st.ev[e.id].length, 0), needed = this.EVENTS.reduce((n, e) => n + e.need, 0);
+    const got = this.ASYNC.reduce((n, a) => n + Object.values(st.alloc[a.id]).reduce((x, v) => x + v, 0), 0), req = this.ASYNC.reduce((n, a) => n + a.per * a.split, 0);
+    const active = this.TAS.filter(t => loads[t.id] > 0 || this.EVENTS.some(e => st.ev[e.id].some(x => x.ta === t.id))).length;
+    const summary = [
+      { label: 'Discussion sections filled', value: `${this.SLOTS.filter(sl => sl.type === 'disc' && st.assign[sl.id].length >= sl.need).length} / 8`, color: '#EDEDEF' },
+      { label: 'Office-hour seats filled', value: `${this.SLOTS.filter(sl => sl.type === 'oh').reduce((n, sl) => n + st.assign[sl.id].length, 0)} / 10`, color: '#EDEDEF' },
+      { label: 'Event seats staffed', value: `${staffed} / ${needed}`, color: staffed === needed ? '#EDEDEF' : '#F7C566' },
+      { label: 'Async hours allocated', value: `${got} / ${req}h`, color: got === req ? '#EDEDEF' : '#F7C566' },
+      { label: 'TAs with assignments', value: `${active} / ${this.TAS.length}`, color: '#EDEDEF' },
+      { label: 'Conflicts', value: conf.length ? `${conf.length} · review first` : '0', color: conf.length ? '#F4A3AE' : '#7FE3B1' },
+    ];
+    return { drawerOpen: !!drawerId, dr, closeDrawer: () => this.setState({ drawer: null }), targets, target: st.target,
+      onTarget: (e) => this.setState({ target: e.target.value }),
+      assignTo: () => { if (!drawerId) return; const id = targets.some(o => o.id === st.target) ? st.target : (targets[0] && targets[0].id); if (!id) return; this.dropTo(this.EVENTS.some(e => e.id === id) ? 'ev' : 'slot', id, `${drawerId}|`); this.toastMsg(`${this.ta(drawerId).name} assigned`); },
+      modalOpen, summary, closeModal: () => this.setState({ modal: false }), notifyBg: st.notify ? '#3DD68C' : 'rgba(255,255,255,0.10)', notifyKnob: st.notify ? '16px' : '2px',
+      notifyNote: st.notify ? `${active} TAs get an email with their assignments and an .ics file` : 'TAs will only see the schedule when they open TerpTA',
+      toggleNotify: () => this.setState({ notify: !st.notify }), publishLabel: conf.length ? 'Publish anyway' : 'Publish',
+      publish: () => { this.setState({ modal: false, published: true }); this.toastMsg(st.notify ? `Schedule published · ${active} TAs notified` : 'Schedule published'); },
+      toast: st.toast, toastText: st.toastText };
+  }
+}
+</script>
+</body>
+</html>
