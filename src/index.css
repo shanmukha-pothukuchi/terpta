@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+/* Base styles must live inside @layer base — unlayered CSS outranks
+   Tailwind v4 utilities and silently wins every specificity fight. */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-white text-neutral-900 antialiased;
+  }
+}
