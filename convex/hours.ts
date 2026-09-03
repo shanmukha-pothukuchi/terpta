@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internalQuery, mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { requireCoordinator, requireUser } from "./lib/auth";
@@ -52,7 +52,7 @@ export const list = query({
     if (args.taProfileRef) {
       const profile = await ctx.db.get(args.taProfileRef);
       if (!profile || profile.periodRef !== args.periodRef) {
-        throw new Error("TA profile does not belong to this period");
+        throw new ConvexError("TA profile does not belong to this period");
       }
       profiles = [profile];
     } else {
@@ -156,9 +156,9 @@ export const flag = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const log = await ctx.db.get(args.hourLogId);
-    if (!log) throw new Error("Hour log not found");
+    if (!log) throw new ConvexError("Hour log not found");
     const profile = await ctx.db.get(log.taProfileRef);
-    if (!profile) throw new Error("TA profile not found");
+    if (!profile) throw new ConvexError("TA profile not found");
     await requireCoordinator(ctx, profile.periodRef);
     if (args.note !== undefined && args.note !== "") {
       const combined = log.note
@@ -193,7 +193,7 @@ export const totalsByTa = query({
   handler: async (ctx, args) => {
     const { user } = await requireUser(ctx);
     const period = await ctx.db.get(args.periodRef);
-    if (!period) throw new Error("Staffing period not found");
+    if (!period) throw new ConvexError("Staffing period not found");
 
     let profiles: Doc<"taProfiles">[];
     if (user.role === "coordinator" && period.coordinatorRef === user._id) {
@@ -208,7 +208,7 @@ export const totalsByTa = query({
           q.eq("userRef", user._id).eq("periodRef", args.periodRef),
         )
         .unique();
-      if (!own) throw new Error("You have no TA profile in this period");
+      if (!own) throw new ConvexError("You have no TA profile in this period");
       profiles = [own];
     }
 

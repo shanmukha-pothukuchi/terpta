@@ -27,6 +27,7 @@ import {
   formatTimeRange,
   type DayCode,
 } from "../../lib/format";
+import { errorMessage } from "../../lib/errorMessage";
 
 export type ShiftRow = FunctionReturnType<typeof api.shifts.list>[number];
 export type DutyTypeRow = FunctionReturnType<typeof api.dutyTypes.list>[number];
@@ -34,12 +35,6 @@ export type DutyTypeRow = FunctionReturnType<typeof api.dutyTypes.list>[number];
 /** Mirrors the backend's Fall 2026 defaults for new weekly shifts. */
 const DEFAULT_START_DATE = "2026-08-31";
 const DEFAULT_END_DATE = "2026-12-11";
-
-function errorMessage(e: unknown): string {
-  const raw = e instanceof Error ? e.message : String(e);
-  const m = raw.match(/Uncaught Error:\s*([^\n]*)/);
-  return (m ? m[1] : raw).trim() || "Something went wrong";
-}
 
 const toTimeInput = (min?: number) =>
   min === undefined

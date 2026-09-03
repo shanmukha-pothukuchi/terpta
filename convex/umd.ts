@@ -5,7 +5,7 @@
  * The network adapter sits behind `UmdScheduleSource` so a Testudo scraper can
  * replace umd.io later without touching the import pipeline.
  */
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import {
   action,
   internalMutation,
@@ -86,7 +86,7 @@ export const assertCoordinator = internalQuery({
   handler: async (ctx) => {
     const { user } = await requireUser(ctx);
     if (user.role !== "coordinator") {
-      throw new Error("Coordinator role required to import courses");
+      throw new ConvexError("Coordinator role required to import courses");
     }
     return null;
   },
@@ -274,7 +274,7 @@ export const importCourse = action({
             };
             resultSource = "fixture";
           } else {
-            throw new Error(
+            throw new ConvexError(
               `umd.io unavailable — enter sections manually (${err instanceof Error ? err.message : String(err)})`,
             );
           }
@@ -318,7 +318,7 @@ export const regenerateImportedBlocks = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const profile = await ctx.db.get(args.taProfileRef);
-    if (!profile) throw new Error("TA profile not found");
+    if (!profile) throw new ConvexError("TA profile not found");
 
     const blocks = await ctx.db
       .query("availabilityBlocks")

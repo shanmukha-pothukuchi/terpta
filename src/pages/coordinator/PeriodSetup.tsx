@@ -17,6 +17,7 @@ import {
   type BadgeTone,
 } from "../../components/ui";
 import { formatDate, formatMeeting } from "../../lib/format";
+import { errorMessage } from "../../lib/errorMessage";
 
 type PeriodListItem = FunctionReturnType<typeof api.periods.listMine>[number];
 type SectionRow = FunctionReturnType<typeof api.periods.listSections>[number];
@@ -50,12 +51,6 @@ function termLabel(term: string): string {
   const season =
     { "01": "Spring", "05": "Summer", "08": "Fall", "12": "Winter" }[term.slice(4)] ?? term.slice(4);
   return `${season} ${year}`;
-}
-
-function errorMessage(e: unknown): string {
-  const raw = e instanceof Error ? e.message : String(e);
-  const m = raw.match(/Uncaught Error:\s*([^\n]*)/);
-  return (m ? m[1] : raw).trim() || "Something went wrong";
 }
 
 const SOURCE_NOTE: Record<ImportResult["source"], string> = {

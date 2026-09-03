@@ -23,6 +23,7 @@ import {
 } from "../../components/ui";
 import { usePeriod } from "../../lib/period";
 import { formatDate, formatHourCount, formatHours } from "../../lib/format";
+import { errorMessage } from "../../lib/errorMessage";
 
 export type HourLogRow = FunctionReturnType<typeof api.hours.list>[number];
 export type TaTotalsRow = FunctionReturnType<typeof api.hours.totalsByTa>[number];
@@ -43,12 +44,6 @@ const STATUS_LABEL: Record<HourLogStatus, string> = {
   approved: "Approved",
   flagged: "Flagged",
 };
-
-function errorMessage(e: unknown): string {
-  const raw = e instanceof Error ? e.message : String(e);
-  const m = raw.match(/Uncaught Error:\s*([^\n]*)/);
-  return (m ? m[1] : raw).trim() || "Something went wrong";
-}
 
 export interface HoursFilters {
   taProfileRef: Id<"taProfiles"> | "";

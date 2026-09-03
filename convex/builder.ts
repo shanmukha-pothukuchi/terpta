@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import {
   action,
   internalMutation,
@@ -969,13 +969,13 @@ export const overrideAssignment = mutation({
   }),
   handler: async (ctx, args) => {
     const shift = await ctx.db.get(args.shiftRef);
-    if (shift === null) throw new Error("Shift not found");
+    if (shift === null) throw new ConvexError("Shift not found");
     const { user } = await requireCoordinator(ctx, shift.periodRef);
 
     const profile = await ctx.db.get(args.taProfileRef);
-    if (profile === null) throw new Error("TA profile not found");
+    if (profile === null) throw new ConvexError("TA profile not found");
     if (profile.periodRef !== shift.periodRef) {
-      throw new Error("TA profile belongs to a different staffing period");
+      throw new ConvexError("TA profile belongs to a different staffing period");
     }
 
     // Upsert (unique per shift+TA). Omitting hoursAllocated clears it.
@@ -1050,9 +1050,9 @@ export const toggleLock = mutation({
   returns: v.boolean(),
   handler: async (ctx, args) => {
     const assignment = await ctx.db.get(args.assignmentRef);
-    if (assignment === null) throw new Error("Assignment not found");
+    if (assignment === null) throw new ConvexError("Assignment not found");
     const shift = await ctx.db.get(assignment.shiftRef);
-    if (shift === null) throw new Error("Shift not found for assignment");
+    if (shift === null) throw new ConvexError("Shift not found for assignment");
     const { user, period } = await requireCoordinator(ctx, shift.periodRef);
 
     const locked = !assignment.locked;
@@ -1079,7 +1079,7 @@ export const removeAssignment = mutation({
     const assignment = await ctx.db.get(args.assignmentRef);
     if (assignment === null) return null; // already gone — idempotent
     const shift = await ctx.db.get(assignment.shiftRef);
-    if (shift === null) throw new Error("Shift not found for assignment");
+    if (shift === null) throw new ConvexError("Shift not found for assignment");
     const { user, period } = await requireCoordinator(ctx, shift.periodRef);
 
     await ctx.db.delete(args.assignmentRef);

@@ -13,8 +13,10 @@ import {
   Spinner,
   Surface,
   toast,
+  Tooltip,
 } from "../../components/ui";
 import { usePeriod } from "../../lib/period";
+import { errorMessage } from "../../lib/errorMessage";
 
 export type DutyTypeRow = FunctionReturnType<typeof api.dutyTypes.list>[number];
 
@@ -37,12 +39,6 @@ export const DUTY_COLORS = [
   "#D946EF",
 ];
 
-function errorMessage(e: unknown): string {
-  const raw = e instanceof Error ? e.message : String(e);
-  const m = raw.match(/Uncaught Error:\s*([^\n]*)/);
-  return (m ? m[1] : raw).trim() || "Something went wrong";
-}
-
 const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_140px_72px_110px_40px] items-center gap-3 px-3.5";
 
 /* ------------------------------------------------------------------ */
@@ -52,29 +48,46 @@ const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_140px_72px_110px_40px] items-cen
 function ModeToggle({
   value,
   onChange,
+  lockedReason,
 }: {
   value: "sync" | "async";
   onChange: (v: "sync" | "async") => void;
+  /** When set, the toggle is read-only and explains why on hover. */
+  lockedReason?: string;
 }) {
-  return (
-    <div className="inline-flex h-6 items-center gap-0.5 rounded-[7px] border border-line bg-[rgba(255,255,255,0.03)] p-0.5">
+  const toggle = (
+    <div
+      className={
+        "inline-flex h-6 items-center gap-0.5 rounded-[7px] border border-line bg-[rgba(255,255,255,0.03)] p-0.5 " +
+        (lockedReason ? "opacity-60" : "")
+      }
+    >
       {(["sync", "async"] as const).map((m) => (
         <button
           key={m}
           type="button"
           onClick={() => onChange(m)}
           aria-pressed={value === m}
+          disabled={lockedReason !== undefined && value !== m}
           className={
-            "h-full cursor-pointer rounded-[5px] px-2 text-[11.5px] transition-colors duration-100 " +
+            "h-full rounded-[5px] px-2 text-[11.5px] transition-colors duration-100 " +
+            (lockedReason ? "cursor-not-allowed " : "cursor-pointer ") +
             (value === m
               ? "bg-[rgba(255,255,255,0.09)] font-medium text-ink shadow-[inset_0_0_0_1px_rgba(255,255,255,0.10)]"
-              : "text-muted hover:text-ink")
+              : lockedReason
+                ? "text-faint"
+                : "text-muted hover:text-ink")
           }
         >
           {m === "sync" ? "Sync" : "Async"}
         </button>
       ))}
     </div>
+  );
+  return lockedReason ? (
+    <Tooltip label={lockedReason}>{toggle}</Tooltip>
+  ) : (
+    toggle
   );
 }
 
@@ -168,7 +181,15 @@ function EditableRow({
         aria-label="Duty type name"
         className="h-7 max-w-64 px-2"
       />
-      <ModeToggle value={dt.mode} onChange={(mode) => mode !== dt.mode && onUpdate({ mode })} />
+      <ModeToggle
+        value={dt.mode}
+        onChange={(mode) => mode !== dt.mode && onUpdate({ mode })}
+        lockedReason={
+          dt.shiftCount > 0
+            ? `Locked: ${dt.shiftCount} shift${dt.shiftCount === 1 ? "" : "s"} already use this duty type. Delete them to switch between sync and async.`
+            : undefined
+        }
+      />
       <ColorSwatchPicker value={dt.color} onChange={(color) => onUpdate({ color })} />
       <div className="flex items-center gap-1.5">
         <Input

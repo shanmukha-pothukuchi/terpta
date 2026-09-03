@@ -1,3 +1,4 @@
+import { ConvexError } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx, MutationCtx } from "../_generated/server";
 
@@ -15,17 +16,17 @@ export function isAllowedEmail(email: string): boolean {
  */
 export async function requireUser(ctx: QueryCtx | MutationCtx) {
   const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Not signed in");
+  if (!identity) throw new ConvexError("Not signed in");
   const user = await ctx.db
     .query("users")
     .withIndex("by_workos_id", (q) => q.eq("workosId", identity.subject))
     .unique();
-  if (!user) throw new Error("User record not synced yet — try again in a moment");
+  if (!user) throw new ConvexError("User record not synced yet — try again in a moment");
   // WorkOS AuthKit access tokens carry no `email` claim, so the domain check
   // runs against the address on the users row, which only ever comes from the
   // WorkOS Management API (webhook or users.syncSelf) — never from the client.
   if (!isAllowedEmail(user.email)) {
-    throw new Error("TerpTA is restricted to umd.edu and terpmail.umd.edu accounts");
+    throw new ConvexError("TerpTA is restricted to umd.edu and terpmail.umd.edu accounts");
   }
   return { user, identity };
 }
@@ -36,11 +37,11 @@ export async function requireCoordinator(
   periodRef: Id<"staffingPeriods">,
 ) {
   const { user } = await requireUser(ctx);
-  if (user.role !== "coordinator") throw new Error("Coordinator role required");
+  if (user.role !== "coordinator") throw new ConvexError("Coordinator role required");
   const period = await ctx.db.get(periodRef);
-  if (!period) throw new Error("Staffing period not found");
+  if (!period) throw new ConvexError("Staffing period not found");
   if (period.coordinatorRef !== user._id) {
-    throw new Error("You do not own this staffing period");
+    throw new ConvexError("You do not own this staffing period");
   }
   return { user, period };
 }
@@ -52,7 +53,7 @@ export async function requireOwnProfile(
 ) {
   const { user } = await requireUser(ctx);
   const profile = await ctx.db.get(taProfileRef);
-  if (!profile) throw new Error("TA profile not found");
-  if (profile.userRef !== user._id) throw new Error("Not your profile");
+  if (!profile) throw new ConvexError("TA profile not found");
+  if (profile.userRef !== user._id) throw new ConvexError("Not your profile");
   return { user, profile };
 }

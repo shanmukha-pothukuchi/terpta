@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internalQuery, mutation } from "./_generated/server";
 import { dayValidator } from "./schema";
 import { requireCoordinator, requireOwnProfile } from "./lib/auth";
@@ -123,7 +123,7 @@ export const mint = mutation({
   handler: async (ctx, args) => {
     if (args.kind === "schedule") {
       if (!args.taProfileRef) {
-        throw new Error("taProfileRef is required for schedule tokens");
+        throw new ConvexError("taProfileRef is required for schedule tokens");
       }
       await requireOwnProfile(ctx, args.taProfileRef);
       return await signPayload({
@@ -133,7 +133,7 @@ export const mint = mutation({
       });
     }
     if (!args.periodRef) {
-      throw new Error("periodRef is required for hourlogs tokens");
+      throw new ConvexError("periodRef is required for hourlogs tokens");
     }
     await requireCoordinator(ctx, args.periodRef);
     return await signPayload({

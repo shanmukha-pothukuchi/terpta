@@ -16,15 +16,10 @@ import {
 } from "../../components/ui";
 import { usePeriod } from "../../lib/period";
 import { formatDate, formatTimeRange } from "../../lib/format";
+import { errorMessage } from "../../lib/errorMessage";
 
 export type ChangeEntry = FunctionReturnType<typeof api.periods.getChangelog>[number];
 export type SwapRow = FunctionReturnType<typeof api.periods.listSwaps>[number];
-
-function errorMessage(e: unknown): string {
-  const raw = e instanceof Error ? e.message : String(e);
-  const m = raw.match(/Uncaught Error:\s*([^\n]*)/);
-  return (m ? m[1] : raw).trim() || "Something went wrong";
-}
 
 const ACTION_LABEL: Record<string, string> = {
   "period.publish": "Published the schedule",

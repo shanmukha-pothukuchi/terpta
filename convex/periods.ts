@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { dayValidator, meetingValidator } from "./schema";
@@ -76,12 +76,12 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const { user } = await requireUser(ctx);
     if (user.role !== "coordinator") {
-      throw new Error("Coordinator role required");
+      throw new ConvexError("Coordinator role required");
     }
     const course = await ctx.db.get(args.courseRef);
-    if (!course) throw new Error("Course not found");
+    if (!course) throw new ConvexError("Course not found");
     if (!ISO_DATE.test(args.collectionDeadline)) {
-      throw new Error("collectionDeadline must be ISO YYYY-MM-DD");
+      throw new ConvexError("collectionDeadline must be ISO YYYY-MM-DD");
     }
 
     const periodRef = await ctx.db.insert("staffingPeriods", {
@@ -100,9 +100,9 @@ export const create = mutation({
 
     for (const sectionRef of args.sectionRefs) {
       const section = await ctx.db.get(sectionRef);
-      if (!section) throw new Error("Section not found");
+      if (!section) throw new ConvexError("Section not found");
       if (section.courseRef !== args.courseRef) {
-        throw new Error("Section belongs to a different course");
+        throw new ConvexError("Section belongs to a different course");
       }
       if (section.type !== "discussion" || discussionDutyTypeRef === null) {
         continue;
@@ -289,7 +289,7 @@ export const listSections = query({
   handler: async (ctx, args) => {
     const { user } = await requireUser(ctx);
     if (user.role !== "coordinator") {
-      throw new Error("Coordinator role required");
+      throw new ConvexError("Coordinator role required");
     }
     const sections = await ctx.db
       .query("sections")
@@ -401,7 +401,7 @@ export const resolveSwap = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const swap = await ctx.db.get(args.swapRef);
-    if (!swap) throw new Error("Swap request not found");
+    if (!swap) throw new ConvexError("Swap request not found");
     const { user } = await requireCoordinator(ctx, swap.periodRef);
     if (swap.status !== "pending") return null;
 

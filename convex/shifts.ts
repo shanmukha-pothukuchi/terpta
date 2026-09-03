@@ -1,4 +1,4 @@
-import { v, type Infer } from "convex/values";
+import { ConvexError, v, type Infer } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { dayValidator } from "./schema";
@@ -67,10 +67,10 @@ type TimingArgs = {
 function validateTiming(mode: "sync" | "async", f: TimingArgs) {
   if (mode === "sync") {
     if (f.recurrence === undefined) {
-      throw new Error('Sync shifts require recurrence ("weekly" or "once")');
+      throw new ConvexError('Sync shifts require recurrence ("weekly" or "once")');
     }
     if (f.startMin === undefined || f.endMin === undefined) {
-      throw new Error("Sync shifts require startMin and endMin");
+      throw new ConvexError("Sync shifts require startMin and endMin");
     }
     if (
       !Number.isInteger(f.startMin) ||
@@ -79,18 +79,18 @@ function validateTiming(mode: "sync" | "async", f: TimingArgs) {
       f.endMin > 24 * 60 ||
       f.startMin >= f.endMin
     ) {
-      throw new Error("Invalid shift times (minutes from midnight, start < end)");
+      throw new ConvexError("Invalid shift times (minutes from midnight, start < end)");
     }
     if (f.recurrence === "weekly") {
-      if (f.day === undefined) throw new Error("Weekly shifts require day");
+      if (f.day === undefined) throw new ConvexError("Weekly shifts require day");
       if (!f.startDate || !f.endDate) {
-        throw new Error("Weekly shifts require startDate and endDate");
+        throw new ConvexError("Weekly shifts require startDate and endDate");
       }
       if (!ISO_DATE.test(f.startDate) || !ISO_DATE.test(f.endDate)) {
-        throw new Error("Dates must be ISO YYYY-MM-DD");
+        throw new ConvexError("Dates must be ISO YYYY-MM-DD");
       }
       if (f.startDate > f.endDate) {
-        throw new Error("startDate must be on or before endDate");
+        throw new ConvexError("startDate must be on or before endDate");
       }
       return {
         recurrence: "weekly" as const,
@@ -102,13 +102,13 @@ function validateTiming(mode: "sync" | "async", f: TimingArgs) {
       };
     }
     // once
-    if (!f.date) throw new Error("One-time shifts require date");
+    if (!f.date) throw new ConvexError("One-time shifts require date");
     const day = weekdayOf(f.date);
     if (day === null) {
-      throw new Error("One-time shifts must fall on a weekday (ISO YYYY-MM-DD, M-F)");
+      throw new ConvexError("One-time shifts must fall on a weekday (ISO YYYY-MM-DD, M-F)");
     }
     if (f.day !== undefined && f.day !== day) {
-      throw new Error(`day (${f.day}) does not match the weekday of date (${day})`);
+      throw new ConvexError(`day (${f.day}) does not match the weekday of date (${day})`);
     }
     return {
       recurrence: "once" as const,
@@ -120,10 +120,10 @@ function validateTiming(mode: "sync" | "async", f: TimingArgs) {
   }
   // async
   if (f.hoursRequired === undefined || f.hoursRequired <= 0) {
-    throw new Error("Async duties require hoursRequired > 0");
+    throw new ConvexError("Async duties require hoursRequired > 0");
   }
   if (!f.dueDate || !ISO_DATE.test(f.dueDate)) {
-    throw new Error("Async duties require dueDate (ISO YYYY-MM-DD)");
+    throw new ConvexError("Async duties require dueDate (ISO YYYY-MM-DD)");
   }
   return { hoursRequired: f.hoursRequired, dueDate: f.dueDate };
 }
@@ -220,7 +220,7 @@ export const list = query({
   handler: async (ctx, args) => {
     const { user } = await requireUser(ctx);
     const period = await ctx.db.get(args.periodRef);
-    if (!period) throw new Error("Staffing period not found");
+    if (!period) throw new ConvexError("Staffing period not found");
     const isOwner =
       user.role === "coordinator" && period.coordinatorRef === user._id;
     if (!isOwner) {
@@ -230,7 +230,7 @@ export const list = query({
           q.eq("userRef", user._id).eq("periodRef", args.periodRef),
         )
         .unique();
-      if (!profile) throw new Error("Not authorized for this period");
+      if (!profile) throw new ConvexError("Not authorized for this period");
     }
 
     const shifts = await ctx.db
@@ -327,15 +327,15 @@ export const create = mutation({
     const { user, period } = await requireCoordinator(ctx, args.periodRef);
     const dutyType = await ctx.db.get(args.dutyTypeRef);
     if (!dutyType || dutyType.periodRef !== args.periodRef) {
-      throw new Error("Duty type does not belong to this period");
+      throw new ConvexError("Duty type does not belong to this period");
     }
     if (!Number.isInteger(args.requiredCount) || args.requiredCount < 1) {
-      throw new Error("requiredCount must be an integer >= 1");
+      throw new ConvexError("requiredCount must be an integer >= 1");
     }
     if (args.sectionRef !== undefined) {
       const section = await ctx.db.get(args.sectionRef);
       if (!section || section.courseRef !== period.courseRef) {
-        throw new Error("Section does not belong to this period's course");
+        throw new ConvexError("Section does not belong to this period's course");
       }
     }
     const timing = validateTiming(dutyType.mode, args);
@@ -367,23 +367,23 @@ export const update = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const shift = await ctx.db.get(args.shiftRef);
-    if (!shift) throw new Error("Shift not found");
+    if (!shift) throw new ConvexError("Shift not found");
     const { user, period } = await requireCoordinator(ctx, shift.periodRef);
 
     const dutyTypeRef = args.dutyTypeRef ?? shift.dutyTypeRef;
     const dutyType = await ctx.db.get(dutyTypeRef);
     if (!dutyType || dutyType.periodRef !== shift.periodRef) {
-      throw new Error("Duty type does not belong to this period");
+      throw new ConvexError("Duty type does not belong to this period");
     }
     const requiredCount = args.requiredCount ?? shift.requiredCount;
     if (!Number.isInteger(requiredCount) || requiredCount < 1) {
-      throw new Error("requiredCount must be an integer >= 1");
+      throw new ConvexError("requiredCount must be an integer >= 1");
     }
     const sectionRef = args.sectionRef ?? shift.sectionRef;
     if (sectionRef !== undefined) {
       const section = await ctx.db.get(sectionRef);
       if (!section || section.courseRef !== period.courseRef) {
-        throw new Error("Section does not belong to this period's course");
+        throw new ConvexError("Section does not belong to this period's course");
       }
     }
 
@@ -424,7 +424,7 @@ export const remove = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const shift = await ctx.db.get(args.shiftRef);
-    if (!shift) throw new Error("Shift not found");
+    if (!shift) throw new ConvexError("Shift not found");
     const { user, period } = await requireCoordinator(ctx, shift.periodRef);
 
     const assignments = await ctx.db

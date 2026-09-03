@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { FunctionReference } from "convex/server";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -197,25 +197,25 @@ export const saveProfile = mutation({
   handler: async (ctx, args) => {
     const { user } = await requireUser(ctx);
     if (user.role === "coordinator") {
-      throw new Error("Coordinators cannot create TA profiles");
+      throw new ConvexError("Coordinators cannot create TA profiles");
     }
     const period = await ctx.db.get(args.periodRef);
-    if (!period) throw new Error("Staffing period not found");
+    if (!period) throw new ConvexError("Staffing period not found");
     if (args.maxHoursPerWeek < 0) {
-      throw new Error("maxHoursPerWeek must be >= 0");
+      throw new ConvexError("maxHoursPerWeek must be >= 0");
     }
     if (args.syncAsyncPreference < 0 || args.syncAsyncPreference > 1) {
-      throw new Error("syncAsyncPreference must be between 0 and 1");
+      throw new ConvexError("syncAsyncPreference must be between 0 and 1");
     }
     for (const dutyTypeRef of args.dutyTypePrefs) {
       const dt = await ctx.db.get(dutyTypeRef);
       if (!dt || dt.periodRef !== args.periodRef) {
-        throw new Error("dutyTypePrefs contains a duty type outside this period");
+        throw new ConvexError("dutyTypePrefs contains a duty type outside this period");
       }
     }
     for (const sectionRef of [...args.enrolledSectionRefs, ...args.sectionPrefs]) {
       const section = await ctx.db.get(sectionRef);
-      if (!section) throw new Error("Unknown section reference");
+      if (!section) throw new ConvexError("Unknown section reference");
     }
 
     const fields = {
@@ -288,7 +288,7 @@ export const saveAvailability = mutation({
         b.endMin > 24 * 60 ||
         b.startMin >= b.endMin
       ) {
-        throw new Error("Invalid block times (minutes from midnight, start < end)");
+        throw new ConvexError("Invalid block times (minutes from midnight, start < end)");
       }
     }
     const existing = await ctx.db
@@ -326,10 +326,10 @@ export const addDateException = mutation({
   handler: async (ctx, args) => {
     const { profile } = await requireOwnProfile(ctx, args.taProfileRef);
     if (!ISO_DATE.test(args.startDate) || !ISO_DATE.test(args.endDate)) {
-      throw new Error("Dates must be ISO YYYY-MM-DD");
+      throw new ConvexError("Dates must be ISO YYYY-MM-DD");
     }
     if (args.startDate > args.endDate) {
-      throw new Error("startDate must be on or before endDate");
+      throw new ConvexError("startDate must be on or before endDate");
     }
     return await ctx.db.insert("dateExceptions", {
       taProfileRef: profile._id,
@@ -345,7 +345,7 @@ export const removeDateException = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const exception = await ctx.db.get(args.dateExceptionRef);
-    if (!exception) throw new Error("Date exception not found");
+    if (!exception) throw new ConvexError("Date exception not found");
     await requireOwnProfile(ctx, exception.taProfileRef); // ownership check
     await ctx.db.delete(exception._id);
     return null;
@@ -363,11 +363,11 @@ export const logHours = mutation({
   returns: v.id("hourLogs"),
   handler: async (ctx, args) => {
     const assignment = await ctx.db.get(args.assignmentRef);
-    if (!assignment) throw new Error("Assignment not found");
+    if (!assignment) throw new ConvexError("Assignment not found");
     const { profile } = await requireOwnProfile(ctx, assignment.taProfileRef);
-    if (!ISO_DATE.test(args.date)) throw new Error("date must be ISO YYYY-MM-DD");
+    if (!ISO_DATE.test(args.date)) throw new ConvexError("date must be ISO YYYY-MM-DD");
     if (!(args.hours > 0) || args.hours > 24) {
-      throw new Error("hours must be > 0 and <= 24");
+      throw new ConvexError("hours must be > 0 and <= 24");
     }
     return await ctx.db.insert("hourLogs", {
       assignmentRef: assignment._id,
@@ -393,7 +393,7 @@ export const submitWeek = mutation({
   handler: async (ctx, args) => {
     const { profile } = await requireOwnProfile(ctx, args.taProfileRef);
     if (!ISO_DATE.test(args.weekStart)) {
-      throw new Error("weekStart must be ISO YYYY-MM-DD");
+      throw new ConvexError("weekStart must be ISO YYYY-MM-DD");
     }
     const weekEnd = addDaysIso(args.weekStart, 6);
     const logs = await ctx.db
@@ -425,20 +425,20 @@ export const requestSwap = mutation({
   returns: v.id("swapRequests"),
   handler: async (ctx, args) => {
     const assignment = await ctx.db.get(args.assignmentRef);
-    if (!assignment) throw new Error("Assignment not found");
+    if (!assignment) throw new ConvexError("Assignment not found");
     const { profile } = await requireOwnProfile(ctx, assignment.taProfileRef);
     const shift = await ctx.db.get(assignment.shiftRef);
-    if (!shift) throw new Error("Shift not found for this assignment");
+    if (!shift) throw new ConvexError("Shift not found for this assignment");
     if (args.reason.trim().length === 0) {
-      throw new Error("A reason is required");
+      throw new ConvexError("A reason is required");
     }
     if (args.suggestedTaRef !== undefined) {
       const suggested = await ctx.db.get(args.suggestedTaRef);
       if (!suggested || suggested.periodRef !== shift.periodRef) {
-        throw new Error("Suggested TA is not in this staffing period");
+        throw new ConvexError("Suggested TA is not in this staffing period");
       }
       if (suggested._id === profile._id) {
-        throw new Error("You cannot suggest yourself");
+        throw new ConvexError("You cannot suggest yourself");
       }
     }
     return await ctx.db.insert("swapRequests", {

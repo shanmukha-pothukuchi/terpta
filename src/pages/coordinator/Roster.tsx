@@ -19,14 +19,9 @@ import {
 import { usePeriod } from "../../lib/period";
 import { formatHourCount, formatHours } from "../../lib/format";
 import type { RosterRow } from "../../lib/api";
+import { errorMessage } from "../../lib/errorMessage";
 
 export type { RosterRow };
-
-function errorMessage(e: unknown): string {
-  const raw = e instanceof Error ? e.message : String(e);
-  const m = raw.match(/Uncaught Error:\s*([^\n]*)/);
-  return (m ? m[1] : raw).trim() || "Something went wrong";
-}
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);

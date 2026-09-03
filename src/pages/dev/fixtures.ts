@@ -51,6 +51,7 @@ function dutyType(
   mode: "sync" | "async",
   color: string,
   defaultHoursCredit: number,
+  shiftCount = 0,
 ): DutyType {
   return {
     _id: fid<"dutyTypes">(id),
@@ -60,6 +61,7 @@ function dutyType(
     mode,
     color,
     defaultHoursCredit,
+    shiftCount,
   };
 }
 

@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { action, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -131,7 +131,7 @@ export const invite = mutation({
     await requireCoordinator(ctx, args.periodRef);
     const email = args.email.trim().toLowerCase();
     if (!isAllowedEmail(email)) {
-      throw new Error("Only umd.edu and terpmail.umd.edu emails can be invited");
+      throw new ConvexError("Only umd.edu and terpmail.umd.edu emails can be invited");
     }
 
     const existingUser = await ctx.db

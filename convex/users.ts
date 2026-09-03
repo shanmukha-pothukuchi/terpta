@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { action, internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { roleValidator } from "./schema";
@@ -72,7 +72,7 @@ export const chooseRole = mutation({
   handler: async (ctx, args) => {
     const { user } = await requireUser(ctx);
     if (user.role !== undefined) {
-      throw new Error("Role already chosen — it cannot be changed");
+      throw new ConvexError("Role already chosen — it cannot be changed");
     }
     await ctx.db.patch(user._id, { role: args.role });
     return null;
@@ -88,7 +88,7 @@ export const devSetRole = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     if (process.env.ALLOW_DEV_ROLE_SWITCH !== "true") {
-      throw new Error("devSetRole is disabled on this deployment");
+      throw new ConvexError("devSetRole is disabled on this deployment");
     }
     const { user } = await requireUser(ctx);
     await ctx.db.patch(user._id, { role: args.role });
@@ -113,17 +113,17 @@ export const syncSelf = action({
   returns: v.null(),
   handler: async (ctx): Promise<null> => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not signed in");
+    if (!identity) throw new ConvexError("Not signed in");
 
     const apiKey = process.env.WORKOS_API_KEY;
-    if (!apiKey) throw new Error("WORKOS_API_KEY is not set on this deployment");
+    if (!apiKey) throw new ConvexError("WORKOS_API_KEY is not set on this deployment");
 
     const res = await fetch(
       `https://api.workos.com/user_management/users/${identity.subject}`,
       { headers: { Authorization: `Bearer ${apiKey}` } },
     );
     if (!res.ok) {
-      throw new Error(`WorkOS user lookup failed (${res.status})`);
+      throw new ConvexError(`WorkOS user lookup failed (${res.status})`);
     }
     const workosUser = (await res.json()) as {
       id: string;
@@ -153,7 +153,7 @@ export const upsertFromWorkos = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     if (!isAllowedEmail(args.email)) {
-      throw new Error(
+      throw new ConvexError(
         "TerpTA is restricted to umd.edu and terpmail.umd.edu accounts",
       );
     }
