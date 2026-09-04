@@ -369,6 +369,25 @@ describe("office-hour windows", () => {
     expect(minutes(out.windowBlocks)).toBe(60);
   });
 
+  it("shares a floor between the TAs instead of loading one of them", () => {
+    const out = solve(
+      base({
+        // Five hours that must never be empty, one seat, two TAs who owe an
+        // hour each: three hours have to come from somewhere.
+        shifts: [window("w-mon", "M", 600, 900, 1, 1)],
+        taProfiles: [ta("a"), ta("b")],
+        windowHoursPerTa: { oh: 1 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    expect(minutes(out.windowBlocks)).toBe(300);
+    const byTa = new Map<string, number>();
+    for (const b of out.windowBlocks) {
+      byTa.set(b.taProfileId, (byTa.get(b.taProfileId) ?? 0) + (b.endMin - b.startMin));
+    }
+    expect([...byTa.values()].sort()).toEqual([120, 180]);
+  });
+
   it("keeps a pinned block and builds the rest around it", () => {
     const out = solve(
       base({

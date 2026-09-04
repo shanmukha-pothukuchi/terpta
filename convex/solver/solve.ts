@@ -1025,9 +1025,13 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
               const load = state.loads.get(ta.id)!;
               const hours = weeklyHoursOf(ctx, load);
               if (hours + minBlock / 60 > ta.maxHoursPerWeek + 1e-9) continue;
-              // Whoever has the most room left goes first, so a floor is paid
-              // for by the TAs with the lightest weeks.
+              // Anyone still owing office hours is served before anyone who
+              // has finished theirs: a floor should not hand a TA a fourth
+              // hour while another is short of their third. After that,
+              // whoever has the most room left in their week pays for it.
+              const owing = (need.get(ta.id) ?? 0) > 0 ? 0 : 1;
               const score =
+                owing * 1_000_000 +
                 hours * 1000 +
                 ctx.preferNotMinutes(ta.id, w.day, start, end) * OH.PREFER_NOT +
                 spreadPenalty(w.day, start, end);
