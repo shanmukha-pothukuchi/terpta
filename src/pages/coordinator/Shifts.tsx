@@ -76,6 +76,8 @@ export function AvailabilityHint({ available, required }: { available: number; r
 
 export interface ShiftFormFields {
   requiredCount: number;
+  /** Window only: the fewest TAs on duty at once. 0 clears it. */
+  minCount?: number;
   description?: string;
   recurrence?: "weekly" | "once";
   day?: DayCode;
@@ -113,6 +115,7 @@ function ShiftFormModal({
   const [hoursRequired, setHoursRequired] = useState("4");
   const [dueDate, setDueDate] = useState("");
   const [requiredCount, setRequiredCount] = useState("1");
+  const [minCount, setMinCount] = useState("0");
   const [description, setDescription] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
@@ -129,13 +132,18 @@ function ShiftFormModal({
     setHoursRequired(initial?.hoursRequired !== undefined ? String(initial.hoursRequired) : "4");
     setDueDate(initial?.dueDate ?? "");
     setRequiredCount(initial ? String(initial.requiredCount) : "1");
+    setMinCount(initial?.minCount !== undefined ? String(initial.minCount) : "0");
     setDescription(initial?.description ?? "");
   }, [open, initial]);
 
   const submit = () => {
     const count = Math.max(1, Math.round(Number(requiredCount) || 1));
+    // A floor above the ceiling is not a range; clamp rather than refuse, so
+    // typing "2" into an at-most-1 window does something sensible.
+    const floor = Math.min(count, Math.max(0, Math.round(Number(minCount) || 0)));
     const common = {
       requiredCount: count,
+      ...(dutyType.mode === "window" ? { minCount: floor } : {}),
       description: description.trim() === "" ? undefined : description.trim(),
     };
     if (dutyType.mode === "async") {
@@ -315,18 +323,51 @@ function ShiftFormModal({
         ) : null}
 
         <div className="flex items-end gap-2.5">
-          <div className="w-32">
-            <Label htmlFor="sf-count">{dutyType.mode === "window" ? "TAs at once" : "TAs needed"}</Label>
-            <Input
-              id="sf-count"
-              type="number"
-              min={1}
-              step={1}
-              value={requiredCount}
-              onChange={(e) => setRequiredCount(e.target.value)}
-              className="text-right font-mono"
-            />
-          </div>
+          {/* A window is a range of time and now a range of people too: how
+              many should always be on duty, and how many may be. The floor is
+              what spreads hours across the day — without one the generator
+              only cuts what each TA owes and stops. */}
+          {dutyType.mode === "window" ? (
+            <div className="w-[186px]">
+              <Label htmlFor="sf-min">TAs at once</Label>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  id="sf-min"
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={minCount}
+                  onChange={(e) => setMinCount(e.target.value)}
+                  aria-label="Fewest TAs on duty at once"
+                  className="w-16 text-right font-mono"
+                />
+                <span className="shrink-0 text-[12px] text-faint">to</span>
+                <Input
+                  id="sf-count"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={requiredCount}
+                  onChange={(e) => setRequiredCount(e.target.value)}
+                  aria-label="Most TAs on duty at once"
+                  className="w-16 text-right font-mono"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="w-32">
+              <Label htmlFor="sf-count">TAs needed</Label>
+              <Input
+                id="sf-count"
+                type="number"
+                min={1}
+                step={1}
+                value={requiredCount}
+                onChange={(e) => setRequiredCount(e.target.value)}
+                className="text-right font-mono"
+              />
+            </div>
+          )}
           <div className="flex-1">
             <Label htmlFor="sf-desc">Description</Label>
             <Input
@@ -375,7 +416,11 @@ function WeeklyBlock({
         </span>
       </span>
       <span className="flex w-full min-w-0 items-center gap-1.5 whitespace-nowrap text-[10.5px] text-muted">
-        <span className="shrink-0 font-mono">needs {shift.requiredCount}</span>
+        <span className="shrink-0 font-mono">
+          {shift.minCount !== undefined && shift.minCount > 0
+            ? `${shift.minCount}–${shift.requiredCount} at once`
+            : `needs ${shift.requiredCount}`}
+        </span>
         <AvailabilityHint available={shift.availableTaCount} required={shift.requiredCount} />
       </span>
     </button>

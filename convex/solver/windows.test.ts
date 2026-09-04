@@ -2,11 +2,20 @@ import { describe, expect, it } from "vitest";
 import { solve } from "./solve";
 import type { Day, SolveInput, SolverShift, SolverTaProfile } from "./types";
 
-const window = (id: string, day: Day, startMin: number, endMin: number, cap = 1): SolverShift => ({
+const window = (
+  id: string,
+  day: Day,
+  startMin: number,
+  endMin: number,
+  cap = 1,
+  /** The fewest TAs that should be on duty at any moment inside it. */
+  minCount?: number,
+): Extract<SolverShift, { kind: "window" }> => ({
   id,
   kind: "window",
   dutyTypeId: "oh",
   requiredCount: cap,
+  ...(minCount !== undefined ? { minCount } : {}),
   day,
   startMin,
   endMin,
@@ -295,6 +304,69 @@ describe("office-hour windows", () => {
     // the lighter TA takes the first one.
     const byStart = Object.fromEntries(out.windowBlocks.map((b) => [b.startMin, b.taProfileId]));
     expect(byStart).toEqual({ 540: "b", 660: "a" });
+  });
+
+  it("spreads two TAs across the week instead of stacking them", () => {
+    const out = solve(
+      base({
+        // Room for both at once all week, so nothing but the spread cost
+        // keeps them apart.
+        shifts: [window("w-mon", "M", 600, 1020, 2), window("w-tue", "Tu", 600, 1020, 2)],
+        taProfiles: [ta("a"), ta("b")],
+      }),
+    );
+    expect(out.windowBlocks).toHaveLength(2);
+    const days = out.windowBlocks.map((b) => b.day);
+    expect(new Set(days).size).toBe(2);
+  });
+
+  it("walks a second block across the day when there is only one day", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 600, 1020, 2)], // 10a-5p, two seats
+        taProfiles: [ta("a"), ta("b")],
+      }),
+    );
+    const spans = out.windowBlocks
+      .map((b) => [b.startMin, b.endMin])
+      .sort((x, y) => x[0] - y[0]);
+    expect(spans).toHaveLength(2);
+    // Not stacked, and not butted up against each other either.
+    expect(spans[1][0] - spans[0][1]).toBeGreaterThanOrEqual(120);
+  });
+
+  it("staffs a window to its floor even past what the TAs owe", () => {
+    const out = solve(
+      base({
+        // 3h window, one seat, and it must never be empty.
+        shifts: [window("w-mon", "M", 600, 780, 1, 1)],
+        taProfiles: [ta("a"), ta("b")],
+        windowHoursPerTa: { oh: 1 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    expect(minutes(out.windowBlocks)).toBe(180);
+    // Every half hour of the window is covered by somebody.
+    const covered = new Set<number>();
+    for (const b of out.windowBlocks) {
+      for (let m = b.startMin; m < b.endMin; m += 30) covered.add(m);
+    }
+    expect(covered.size).toBe(6);
+    // The extra hour went to whoever had room, not to a TA twice over.
+    expect(new Set(out.windowBlocks.map((b) => b.taProfileId)).size).toBe(2);
+  });
+
+  it("leaves the floor unmet rather than breaking a hard rule", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 600, 780, 1, 1)],
+        taProfiles: [ta("a", { maxHoursPerWeek: 1 })],
+        windowHoursPerTa: { oh: 1 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    // One hour is all the cap allows; the rest of the window stays empty.
+    expect(minutes(out.windowBlocks)).toBe(60);
   });
 
   it("keeps a pinned block and builds the rest around it", () => {

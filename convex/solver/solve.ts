@@ -63,6 +63,21 @@ type WindowShift = Extract<SolverShift, { kind: "window" }>;
 const SLOT = 30;
 /** Shortest office-hour block when the duty type does not say otherwise. */
 const DEFAULT_MIN_BLOCK = 60;
+
+/**
+ * Spreading office hours out, in the same currency as the prefer-not cost.
+ *
+ * A TA saying "not then" outranks all of it — their weight is scaled up so a
+ * single prefer-not minute costs more than any amount of clumping.
+ */
+const OH = {
+  PREFER_NOT: 10, // per minute the block crosses prefer_not time
+  STACK: 40, // per half hour already staffed on that day at that hour
+  SAME_TIME: 12, // per half hour staffed at that hour on some other day
+  SAME_DAY: 25, // per block already sitting on that day
+  NEAR: 10, // per half hour of closeness to another block on that day
+  NEAR_REACH: 120, // how far apart two blocks stop crowding each other
+};
 const DAY_ORDER: Record<Day, number> = { M: 0, Tu: 1, W: 2, Th: 3, F: 4 };
 
 interface Load {
@@ -832,8 +847,9 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
   const dutyIds = [...new Set(ctx.windowShifts.map((w) => w.dutyTypeId))].sort();
   for (const dutyId of dutyIds) {
     const targetMin = Math.round((hoursPerTa[dutyId] ?? 0) * 60);
-    if (targetMin <= 0) continue;
     const windows = ctx.windowShifts.filter((w) => w.dutyTypeId === dutyId);
+    // Nobody owes hours and no window asks to be covered: nothing to cut.
+    if (targetMin <= 0 && !windows.some((w) => (w.minCount ?? 0) > 0)) continue;
     const minBlock = minBlockOf(dutyId);
     const tas = [...ctx.tas].sort((a, b) => a.id.localeCompare(b.id));
 
@@ -859,6 +875,36 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
     }
 
     type Placement = { w: WindowShift; s: number; e: number; score: number };
+
+    /**
+     * How much this candidate piles onto hours that are already staffed.
+     *
+     * Without it the generator takes the first legal slot every time, so a
+     * week of office hours ends up stacked at the top of each window with
+     * whole afternoons empty. Same hour on the same day costs most, the same
+     * hour on another day next, and merely being on a day that already has
+     * blocks costs a little — enough to walk hours across the day and week.
+     */
+    const spreadPenalty = (day: Day, start: number, end: number): number => {
+      let penalty = 0;
+      for (const b of state.windowBlocks) {
+        if (b.dutyTypeId !== dutyId) continue;
+        const overlap = Math.min(b.endMin, end) - Math.max(b.startMin, start);
+        if (b.day === day) {
+          penalty += OH.SAME_DAY;
+          if (overlap > 0) penalty += (overlap / SLOT) * OH.STACK;
+          else {
+            // Butting one block against another leaves the rest of the day
+            // empty just as surely as stacking them does.
+            const gap = -overlap;
+            if (gap < OH.NEAR_REACH) penalty += ((OH.NEAR_REACH - gap) / SLOT) * OH.NEAR;
+          }
+        } else if (overlap > 0) {
+          penalty += (overlap / SLOT) * OH.SAME_TIME;
+        }
+      }
+      return penalty;
+    };
     /**
      * Where this TA could go right now, at the largest size that fits
      * anywhere, with how many such slots exist. The count is what makes the
@@ -891,12 +937,14 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
             if (weeklyHoursOf(ctx, load) + size / 60 > ta.maxHoursPerWeek + 1e-9) continue;
 
             count += 1;
-            let score = ctx.preferNotMinutes(ta.id, w.day, start, end);
+            let score =
+              ctx.preferNotMinutes(ta.id, w.day, start, end) * OH.PREFER_NOT +
+              spreadPenalty(w.day, start, end);
             if (
               style === "many_short" &&
               (blocksOf.get(ta.id) ?? []).some((b) => b.day === w.day && b.dutyTypeId === dutyId)
             ) {
-              score += 1000; // spread the short blocks across the week
+              score += 10000; // one TA's short blocks go on different days
             }
             if (best === null || score < best.score) best = { w, s: start, e: end, score };
           }
@@ -940,6 +988,57 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
       const { best } = pick.opt;
       place(best.w, pick.ta.id, best.s, best.e, false);
       need.set(pick.ta.id, (need.get(pick.ta.id) ?? 0) - (best.e - best.s));
+    }
+
+    /**
+     * Keep the window staffed to its floor.
+     *
+     * The only thing that hands a TA hours beyond their own weekly
+     * requirement: the coordinator asked for at least this many people on
+     * duty at any moment, so somebody has to be there, and the least-loaded
+     * TA who legally can be, is. Windows without a floor are untouched.
+     */
+    for (const w of windows) {
+      const floor = Math.min(w.minCount ?? 0, w.requiredCount);
+      if (floor <= 0) continue;
+      const occ = occupancy.get(w.id)!;
+      for (let i = 0; i < occ.length; i++) {
+        const slotStart = w.startMin + i * SLOT;
+        while (occ[i] < floor) {
+          let chosen: { ta: SolverTaProfile; s: number; e: number; score: number } | null = null;
+          for (const ta of tas) {
+            const first = Math.max(w.startMin, slotStart - minBlock + SLOT);
+            for (let start = first; start <= slotStart && start + minBlock <= w.endMin; start += SLOT) {
+              const end = start + minBlock;
+              let room = true;
+              for (let j = slotIndex(w, start); j < slotIndex(w, end); j++) {
+                if (occ[j] >= w.requiredCount) {
+                  room = false;
+                  break;
+                }
+              }
+              if (!room) continue;
+              if (blockedByDuty(dutyId, w.day, start, end)) continue;
+              if (!ctx.coversWindow(ta.id, w.day, start, end)) continue;
+              if (ctx.overlapsUnavail(ta.id, w.day, start, end)) continue;
+              if (busy(ta.id, w.day, start, end)) continue;
+              const load = state.loads.get(ta.id)!;
+              const hours = weeklyHoursOf(ctx, load);
+              if (hours + minBlock / 60 > ta.maxHoursPerWeek + 1e-9) continue;
+              // Whoever has the most room left goes first, so a floor is paid
+              // for by the TAs with the lightest weeks.
+              const score =
+                hours * 1000 +
+                ctx.preferNotMinutes(ta.id, w.day, start, end) * OH.PREFER_NOT +
+                spreadPenalty(w.day, start, end);
+              if (chosen === null || score < chosen.score) chosen = { ta, s: start, e: end, score };
+            }
+          }
+          if (chosen === null) break; // nobody can stand here; leave the hole
+          place(w, chosen.ta.id, chosen.s, chosen.e, false);
+          need.set(chosen.ta.id, (need.get(chosen.ta.id) ?? 0) - (chosen.e - chosen.s));
+        }
+      }
     }
 
     for (const ta of tas) {

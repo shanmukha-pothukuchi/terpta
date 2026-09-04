@@ -107,6 +107,9 @@ function toSolverShift(
       kind: "window",
       dutyTypeId: shift.dutyTypeRef,
       requiredCount: Math.max(1, shift.requiredCount),
+      ...(shift.minCount !== undefined && shift.minCount > 0
+        ? { minCount: Math.min(shift.minCount, Math.max(1, shift.requiredCount)) }
+        : {}),
       day: shift.day,
       startMin: shift.startMin,
       endMin: shift.endMin,
@@ -266,6 +269,7 @@ const solverShiftValidator = v.union(
     kind: v.literal("window"),
     dutyTypeId: v.string(),
     requiredCount: v.number(),
+    minCount: v.optional(v.number()),
     day: dayValidator,
     startMin: v.number(),
     endMin: v.number(),

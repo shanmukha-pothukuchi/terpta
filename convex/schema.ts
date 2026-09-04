@@ -125,7 +125,18 @@ export default defineSchema({
   shifts: defineTable({
     periodRef: v.id("staffingPeriods"),
     dutyTypeRef: v.id("dutyTypes"),
+    /**
+     * Sync: TAs the shift needs. Window: the most TAs on duty at once.
+     * The ceiling, in other words, in both readings.
+     */
     requiredCount: v.number(),
+    /**
+     * Window only: the fewest TAs that should be on duty at any moment
+     * inside it. Absent means none — office hours are cut only to meet each
+     * TA's own weekly requirement. Setting it asks the generator to keep the
+     * window covered, which is what spreads hours across the day.
+     */
+    minCount: v.optional(v.number()),
     sectionRef: v.optional(v.id("sections")),
     description: v.optional(v.string()),
     // sync shifts

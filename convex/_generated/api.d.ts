@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as admin from "../admin.js";
 import type * as authkit from "../authkit.js";
 import type * as builder from "../builder.js";
 import type * as coverage from "../coverage.js";
@@ -17,9 +18,12 @@ import type * as exportTokens from "../exportTokens.js";
 import type * as hours from "../hours.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_availability from "../lib/availability.js";
+import type * as lib_cascade from "../lib/cascade.js";
+import type * as lib_jupiterp from "../lib/jupiterp.js";
 import type * as lib_syncUser from "../lib/syncUser.js";
 import type * as lib_umdFixtures from "../lib/umdFixtures.js";
-import type * as lib_jupiterp from "../lib/jupiterp.js";
+import type * as lib_week from "../lib/week.js";
 import type * as periods from "../periods.js";
 import type * as roster from "../roster.js";
 import type * as seed from "../seed.js";
@@ -39,6 +43,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
   authkit: typeof authkit;
   builder: typeof builder;
   coverage: typeof coverage;
@@ -48,9 +53,12 @@ declare const fullApi: ApiFromModules<{
   hours: typeof hours;
   http: typeof http;
   "lib/auth": typeof lib_auth;
+  "lib/availability": typeof lib_availability;
+  "lib/cascade": typeof lib_cascade;
+  "lib/jupiterp": typeof lib_jupiterp;
   "lib/syncUser": typeof lib_syncUser;
   "lib/umdFixtures": typeof lib_umdFixtures;
-  "lib/jupiterp": typeof lib_jupiterp;
+  "lib/week": typeof lib_week;
   periods: typeof periods;
   roster: typeof roster;
   seed: typeof seed;

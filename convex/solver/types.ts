@@ -47,7 +47,15 @@ export type SolverShift =
       id: string;
       kind: "window";
       dutyTypeId: string;
+      /** The most TAs on duty at once. */
       requiredCount: number;
+      /**
+       * The fewest TAs the window should have on duty at any moment. The
+       * generator hands out office hours beyond a TA's own weekly
+       * requirement to meet it, which is what keeps the day covered rather
+       * than stacking everybody into the first free slot.
+       */
+      minCount?: number;
       day: Day;
       startMin: number;
       endMin: number;

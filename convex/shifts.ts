@@ -20,6 +20,7 @@ export const shiftFields = {
   periodRef: v.id("staffingPeriods"),
   dutyTypeRef: v.id("dutyTypes"),
   requiredCount: v.number(),
+  minCount: v.optional(v.number()),
   sectionRef: v.optional(v.id("sections")),
   description: v.optional(v.string()),
   recurrence: v.optional(v.union(v.literal("weekly"), v.literal("once"))),
@@ -48,6 +49,19 @@ export const assignmentDoc = v.object({
 });
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A range is only a range if the low end is one and is not above the high. */
+function assertMinCount(minCount: number | undefined, requiredCount: number) {
+  if (minCount === undefined) return;
+  if (!Number.isInteger(minCount) || minCount < 0) {
+    throw new ConvexError("The smallest number of TAs must be a whole number");
+  }
+  if (minCount > requiredCount) {
+    throw new ConvexError(
+      `At least ${minCount} TAs cannot be asked of a window that holds at most ${requiredCount}`,
+    );
+  }
+}
 
 /** Weekday (M–F) of an ISO date, or null for weekends/invalid dates. */
 function weekdayOf(date: string): Day | null {
@@ -285,6 +299,7 @@ export const create = mutation({
     periodRef: v.id("staffingPeriods"),
     dutyTypeRef: v.id("dutyTypes"),
     requiredCount: v.number(),
+    minCount: v.optional(v.number()),
     sectionRef: v.optional(v.id("sections")),
     description: v.optional(v.string()),
     ...timingArgs,
@@ -299,6 +314,7 @@ export const create = mutation({
     if (!Number.isInteger(args.requiredCount) || args.requiredCount < 1) {
       throw new ConvexError("requiredCount must be an integer >= 1");
     }
+    assertMinCount(args.minCount, args.requiredCount);
     if (args.sectionRef !== undefined) {
       const section = await ctx.db.get(args.sectionRef);
       if (!section || section.courseRef !== period.courseRef) {
@@ -310,6 +326,9 @@ export const create = mutation({
       periodRef: args.periodRef,
       dutyTypeRef: args.dutyTypeRef,
       requiredCount: args.requiredCount,
+      ...(args.minCount !== undefined && args.minCount > 0
+        ? { minCount: Math.round(args.minCount) }
+        : {}),
       sectionRef: args.sectionRef,
       description: args.description,
       ...timing,
@@ -327,6 +346,8 @@ export const update = mutation({
     shiftRef: v.id("shifts"),
     dutyTypeRef: v.optional(v.id("dutyTypes")),
     requiredCount: v.optional(v.number()),
+    /** Window only. Zero clears it. */
+    minCount: v.optional(v.number()),
     sectionRef: v.optional(v.id("sections")),
     description: v.optional(v.string()),
     ...timingArgs,
@@ -346,6 +367,8 @@ export const update = mutation({
     if (!Number.isInteger(requiredCount) || requiredCount < 1) {
       throw new ConvexError("requiredCount must be an integer >= 1");
     }
+    const minCount = args.minCount ?? shift.minCount;
+    assertMinCount(minCount, requiredCount);
     const sectionRef = args.sectionRef ?? shift.sectionRef;
     if (sectionRef !== undefined) {
       const section = await ctx.db.get(sectionRef);
@@ -372,6 +395,7 @@ export const update = mutation({
       periodRef: shift.periodRef,
       dutyTypeRef,
       requiredCount,
+      minCount: minCount !== undefined && minCount > 0 ? Math.round(minCount) : undefined,
       sectionRef,
       description: args.description ?? shift.description,
       ...timing,
