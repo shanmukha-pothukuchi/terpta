@@ -250,6 +250,53 @@ describe("office-hour windows", () => {
     ]);
   });
 
+  it("serves the TA with one legal slot before the one with thirty", () => {
+    const out = solve(
+      base({
+        shifts: [
+          window("w-mon", "M", 600, 720, 1), // exactly one 2h slot
+          window("w-tue", "Tu", 600, 960, 1), // room to spare
+        ],
+        // "a-flex" sorts first and is no busier, so going in order of who is
+        // least loaded hands them the Monday slot and leaves "b-tight" — who
+        // can be nowhere else — with nothing.
+        taProfiles: [ta("a-flex"), ta("b-tight")],
+        availability: [
+          { taProfileId: "b-tight", day: "M", startMin: 600, endMin: 720, status: "available" },
+        ],
+      }),
+    );
+    const byTa = Object.fromEntries(out.windowBlocks.map((b) => [b.taProfileId, b]));
+    expect(byTa["b-tight"]).toMatchObject({ day: "M", startMin: 600, endMin: 720 });
+    expect(byTa["a-flex"]).toMatchObject({ day: "Tu" });
+    expect(out.diagnostics.unfilledWindowHours).toEqual([]);
+  });
+
+  it("still favours the lighter TA when both have the same room", () => {
+    const disc: SolverShift = {
+      id: "disc",
+      kind: "weekly_sync",
+      dutyTypeId: "d",
+      requiredCount: 1,
+      day: "Tu",
+      startMin: 540,
+      endMin: 660,
+      startDate: "2026-08-31",
+      endDate: "2026-12-11",
+    };
+    const out = solve(
+      base({
+        shifts: [disc, window("w-mon", "M", 540, 780, 1)], // one seat, two 2h slots
+        taProfiles: [ta("a"), ta("b")],
+        lockedAssignments: [{ shiftId: "disc", taProfileId: "a" }],
+      }),
+    );
+    // Both can stand in either slot, so the count does not separate them and
+    // the lighter TA takes the first one.
+    const byStart = Object.fromEntries(out.windowBlocks.map((b) => [b.startMin, b.taProfileId]));
+    expect(byStart).toEqual({ 540: "b", 660: "a" });
+  });
+
   it("keeps a pinned block and builds the rest around it", () => {
     const out = solve(
       base({

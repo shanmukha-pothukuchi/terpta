@@ -795,6 +795,8 @@ export const applyResult = internalMutation({
     // coordinator pinned one; a locked block stays exactly where it is.
     let removedBlocks = 0;
     const survivingBlocks = new Set<string>();
+    /** Pinned seats on a surviving block, so a rejoin counts them. */
+    const lockedSeats = new Map<string, number>();
     for (const shift of allShiftDocs) {
       if (shift.windowRef === undefined) continue;
       const rows = await ctx.db
@@ -803,6 +805,7 @@ export const applyResult = internalMutation({
         .collect();
       if (rows.some((r) => r.locked)) {
         survivingBlocks.add(shift._id as string);
+        lockedSeats.set(shift._id as string, rows.filter((r) => r.locked).length);
         continue;
       }
       for (const row of rows) await ctx.db.delete(row._id);
@@ -854,32 +857,75 @@ export const applyResult = internalMutation({
 
     // Each cut block becomes a real weekly shift plus its assignment, so
     // schedules, hour logs, covers and exports need no special case.
+    //
+    // Two TAs holding the same hours are one block with two seats, not two
+    // blocks side by side: the board drew them as separate half-width cards,
+    // which reads as two different office hours rather than one staffed by a
+    // pair. Different start or end times stay separate, because they are.
     let insertedBlocks = 0;
+    const grouped = new Map<
+      string,
+      { windowShiftId: string; day: Day; startMin: number; endMin: number; taIds: string[] }
+    >();
     for (const b of args.windowBlocks ?? []) {
       if (b.locked) continue; // still there from before
-      const window = shiftById.get(b.windowShiftId);
+      const key = `${b.windowShiftId}|${b.day}|${b.startMin}|${b.endMin}`;
+      const group = grouped.get(key);
+      if (group) group.taIds.push(b.taProfileId);
+      else {
+        grouped.set(key, {
+          windowShiftId: b.windowShiftId,
+          day: b.day,
+          startMin: b.startMin,
+          endMin: b.endMin,
+          taIds: [b.taProfileId],
+        });
+      }
+    }
+
+    for (const group of grouped.values()) {
+      const window = shiftById.get(group.windowShiftId);
       if (!window) continue;
-      const blockRef = await ctx.db.insert("shifts", {
-        periodRef: args.periodRef,
-        dutyTypeRef: window.dutyTypeRef,
-        requiredCount: 1,
-        description: window.description,
-        recurrence: "weekly",
-        day: b.day,
-        startMin: b.startMin,
-        endMin: b.endMin,
-        ...(window.startDate !== undefined ? { startDate: window.startDate } : {}),
-        ...(window.endDate !== undefined ? { endDate: window.endDate } : {}),
-        windowRef: window._id,
-        createdBy: "solver",
-      });
-      await ctx.db.insert("assignments", {
-        shiftRef: blockRef,
-        taProfileRef: b.taProfileId as Id<"taProfiles">,
-        locked: false,
-        createdBy: "solver",
-      });
-      insertedBlocks++;
+      // A pinned block at exactly these hours is joined rather than doubled.
+      const existing = shiftDocs.find(
+        (s) =>
+          s.windowRef !== undefined &&
+          String(s.windowRef) === String(window._id) &&
+          s.day === group.day &&
+          s.startMin === group.startMin &&
+          s.endMin === group.endMin,
+      );
+      let blockRef: Id<"shifts">;
+      if (existing) {
+        blockRef = existing._id;
+        await ctx.db.patch(existing._id, {
+          requiredCount: (lockedSeats.get(existing._id as string) ?? 0) + group.taIds.length,
+        });
+      } else {
+        blockRef = await ctx.db.insert("shifts", {
+          periodRef: args.periodRef,
+          dutyTypeRef: window.dutyTypeRef,
+          requiredCount: group.taIds.length,
+          description: window.description,
+          recurrence: "weekly",
+          day: group.day,
+          startMin: group.startMin,
+          endMin: group.endMin,
+          ...(window.startDate !== undefined ? { startDate: window.startDate } : {}),
+          ...(window.endDate !== undefined ? { endDate: window.endDate } : {}),
+          windowRef: window._id,
+          createdBy: "solver",
+        });
+      }
+      for (const taId of group.taIds) {
+        await ctx.db.insert("assignments", {
+          shiftRef: blockRef,
+          taProfileRef: taId as Id<"taProfiles">,
+          locked: false,
+          createdBy: "solver",
+        });
+        insertedBlocks++;
+      }
     }
 
     await ctx.db.patch(args.periodRef, { status: "generated" });

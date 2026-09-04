@@ -834,84 +834,133 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
     const targetMin = Math.round((hoursPerTa[dutyId] ?? 0) * 60);
     if (targetMin <= 0) continue;
     const windows = ctx.windowShifts.filter((w) => w.dutyTypeId === dutyId);
-    const order = [...ctx.tas].sort(
-      (a, b) =>
-        weeklyHoursOf(ctx, state.loads.get(a.id)!) - weeklyHoursOf(ctx, state.loads.get(b.id)!) ||
-        a.id.localeCompare(b.id),
-    );
+    const minBlock = minBlockOf(dutyId);
+    const tas = [...ctx.tas].sort((a, b) => a.id.localeCompare(b.id));
 
-    for (const ta of order) {
+    // "few_long" reaches for two-hour blocks and settles for less;
+    // "many_short" never holds more than an hour at a stretch. Neither goes
+    // below the minimum the coordinator set, even if that means the last
+    // sliver of a TA's requirement goes unplaced and gets reported.
+    const styleOf = (ta: SolverTaProfile) => ta.officeHoursStyle ?? "few_long";
+    const maxSizeOf = (ta: SolverTaProfile) =>
+      Math.max(styleOf(ta) === "few_long" ? 120 : 60, minBlock);
+    const sizesOf = (ta: SolverTaProfile) => {
+      const out: number[] = [];
+      for (let s = maxSizeOf(ta); s >= minBlock; s -= SLOT) out.push(s);
+      return out;
+    };
+
+    const need = new Map<string, number>();
+    for (const ta of tas) {
       const held = (blocksOf.get(ta.id) ?? [])
         .filter((b) => b.dutyTypeId === dutyId)
         .reduce((n, b) => n + (b.endMin - b.startMin), 0);
-      let need = targetMin - held;
-      const style = ta.officeHoursStyle ?? "few_long";
-      const minBlock = minBlockOf(dutyId);
-      // "few_long" reaches for two-hour blocks and settles for less;
-      // "many_short" never holds more than an hour at a stretch. Neither goes
-      // below the minimum the coordinator set, even if that means the last
-      // sliver of a TA's requirement goes unplaced and gets reported.
-      const maxSize = Math.max(style === "few_long" ? 120 : 60, minBlock);
-      const sizes: number[] = [];
-      for (let s = maxSize; s >= minBlock; s -= SLOT) sizes.push(s);
+      need.set(ta.id, targetMin - held);
+    }
 
-      while (need >= minBlock) {
-        let best: { w: WindowShift; s: number; e: number; score: number } | null = null;
-        for (const size of sizes) {
-          if (size > need) continue;
-          for (const w of windows) {
-            const occ = occupancy.get(w.id)!;
-            for (let start = w.startMin; start + size <= w.endMin; start += SLOT) {
-              const end = start + size;
-              let room = true;
-              for (let i = slotIndex(w, start); i < slotIndex(w, end); i++) {
-                if (occ[i] >= w.requiredCount) {
-                  room = false;
-                  break;
-                }
+    type Placement = { w: WindowShift; s: number; e: number; score: number };
+    /**
+     * Where this TA could go right now, at the largest size that fits
+     * anywhere, with how many such slots exist. The count is what makes the
+     * ordering below possible.
+     */
+    const optionsFor = (ta: SolverTaProfile): { best: Placement; count: number } | null => {
+      const want = need.get(ta.id) ?? 0;
+      const style = styleOf(ta);
+      for (const size of sizesOf(ta)) {
+        if (size > want) continue;
+        let best: Placement | null = null;
+        let count = 0;
+        for (const w of windows) {
+          const occ = occupancy.get(w.id)!;
+          for (let start = w.startMin; start + size <= w.endMin; start += SLOT) {
+            const end = start + size;
+            let room = true;
+            for (let i = slotIndex(w, start); i < slotIndex(w, end); i++) {
+              if (occ[i] >= w.requiredCount) {
+                room = false;
+                break;
               }
-              if (!room) continue;
-              if (blockedByDuty(dutyId, w.day, start, end)) continue;
-              if (!ctx.coversWindow(ta.id, w.day, start, end)) continue;
-              if (ctx.overlapsUnavail(ta.id, w.day, start, end)) continue;
-              if (busy(ta.id, w.day, start, end)) continue;
-              const load = state.loads.get(ta.id)!;
-              if (weeklyHoursOf(ctx, load) + size / 60 > ta.maxHoursPerWeek + 1e-9) continue;
-
-              let score = ctx.preferNotMinutes(ta.id, w.day, start, end);
-              if (
-                style === "many_short" &&
-                (blocksOf.get(ta.id) ?? []).some((b) => b.day === w.day && b.dutyTypeId === dutyId)
-              ) {
-                score += 1000; // spread the short blocks across the week
-              }
-              if (best === null || score < best.score) best = { w, s: start, e: end, score };
             }
+            if (!room) continue;
+            if (blockedByDuty(dutyId, w.day, start, end)) continue;
+            if (!ctx.coversWindow(ta.id, w.day, start, end)) continue;
+            if (ctx.overlapsUnavail(ta.id, w.day, start, end)) continue;
+            if (busy(ta.id, w.day, start, end)) continue;
+            const load = state.loads.get(ta.id)!;
+            if (weeklyHoursOf(ctx, load) + size / 60 > ta.maxHoursPerWeek + 1e-9) continue;
+
+            count += 1;
+            let score = ctx.preferNotMinutes(ta.id, w.day, start, end);
+            if (
+              style === "many_short" &&
+              (blocksOf.get(ta.id) ?? []).some((b) => b.day === w.day && b.dutyTypeId === dutyId)
+            ) {
+              score += 1000; // spread the short blocks across the week
+            }
+            if (best === null || score < best.score) best = { w, s: start, e: end, score };
           }
-          if (best) break; // the largest size that fits anywhere wins
         }
-        // Assignments to `best` happen three loops deep; control-flow
-        // narrowing gives up and calls it never here, so say what it is.
-        const chosen = best as { w: WindowShift; s: number; e: number; score: number } | null;
-        if (chosen === null) break;
-        place(chosen.w, ta.id, chosen.s, chosen.e, false);
-        need -= chosen.e - chosen.s;
+        if (best !== null) return { best, count };
       }
+      return null;
+    };
+
+    /**
+     * Most constrained first.
+     *
+     * Going in order of who is least loaded reads as fair and is not: a TA
+     * with one legal hour in the whole week loses it to a TA with thirty who
+     * happened to be lighter, and ends up with nothing while the other could
+     * have gone anywhere. Whoever has the fewest places to stand is served
+     * first; load only breaks ties.
+     */
+    for (;;) {
+      let pick: { ta: SolverTaProfile; opt: { best: Placement; count: number } } | null = null;
+      for (const ta of tas) {
+        if ((need.get(ta.id) ?? 0) < minBlock) continue;
+        const opt = optionsFor(ta);
+        if (opt === null) continue;
+        if (pick === null) {
+          pick = { ta, opt };
+          continue;
+        }
+        const load = weeklyHoursOf(ctx, state.loads.get(ta.id)!);
+        const bestLoad = weeklyHoursOf(ctx, state.loads.get(pick.ta.id)!);
+        if (
+          opt.count < pick.opt.count ||
+          (opt.count === pick.opt.count &&
+            (load < bestLoad - 1e-9 ||
+              (Math.abs(load - bestLoad) <= 1e-9 && ta.id.localeCompare(pick.ta.id) < 0)))
+        ) {
+          pick = { ta, opt };
+        }
+      }
+      if (pick === null) break;
+      const { best } = pick.opt;
+      place(best.w, pick.ta.id, best.s, best.e, false);
+      need.set(pick.ta.id, (need.get(pick.ta.id) ?? 0) - (best.e - best.s));
+    }
+
+    for (const ta of tas) {
+      let left = need.get(ta.id) ?? 0;
+      const style = styleOf(ta);
+      const maxSize = maxSizeOf(ta);
 
       // A requirement that is not a whole number of blocks strands its last
       // sliver: two and a half hours with an hour minimum places two and
       // drops the rest, week after week. Grow a block by the remainder
       // instead, so long as it stays under the ceiling the TA asked for.
-      if (need > 0 && need < minBlock && need % SLOT === 0) {
+      if (left > 0 && left < minBlock && left % SLOT === 0) {
         for (const b of blocksOf.get(ta.id) ?? []) {
           if (b.dutyTypeId !== dutyId || b.locked) continue;
           // A TA who asked for fewer, longer blocks will not mind one being
           // longer still. One who asked for short ones would, so they keep
           // the ceiling and the remainder is reported instead.
-          if (style === "many_short" && b.endMin - b.startMin + need > maxSize) continue;
+          if (style === "many_short" && b.endMin - b.startMin + left > maxSize) continue;
           const w = ctx.shiftById.get(b.windowShiftId);
           if (!w || w.kind !== "window") continue;
-          const end = b.endMin + need;
+          const end = b.endMin + left;
           if (end > w.endMin) continue;
           const occ = occupancy.get(w.id)!;
           let room = true;
@@ -927,17 +976,17 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
           if (ctx.overlapsUnavail(ta.id, w.day, b.endMin, end)) continue;
           if (busy(ta.id, w.day, b.endMin, end)) continue;
           const load = state.loads.get(ta.id)!;
-          if (weeklyHoursOf(ctx, load) + need / 60 > ta.maxHoursPerWeek + 1e-9) continue;
+          if (weeklyHoursOf(ctx, load) + left / 60 > ta.maxHoursPerWeek + 1e-9) continue;
           for (let i = slotIndex(w, b.endMin); i < slotIndex(w, end); i++) occ[i] += 1;
           b.endMin = end;
-          load.weeklyMin += need;
-          need = 0;
+          load.weeklyMin += left;
+          left = 0;
           break;
         }
       }
 
-      if (need >= SLOT) {
-        unfilled.push({ taProfileId: ta.id, dutyTypeId: dutyId, missingHours: round4(need / 60) });
+      if (left >= SLOT) {
+        unfilled.push({ taProfileId: ta.id, dutyTypeId: dutyId, missingHours: round4(left / 60) });
       }
     }
   }
