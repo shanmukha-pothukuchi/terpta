@@ -783,6 +783,7 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
   const unfilled: SolveDiagnostics["unfilledWindowHours"] = [];
   if (ctx.windowShifts.length === 0) return unfilled;
   const hoursPerTa = ctx.input.windowHoursPerTa ?? {};
+  const hoursPerTaMin = ctx.input.windowHoursPerTaMin ?? {};
   const minBlockByDuty = ctx.input.windowMinBlockMin ?? {};
   const blackoutByDuty = ctx.input.windowBlackouts ?? {};
 
@@ -848,6 +849,12 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
   const dutyIds = [...new Set(ctx.windowShifts.map((w) => w.dutyTypeId))].sort();
   for (const dutyId of dutyIds) {
     const targetMin = Math.round((hoursPerTa[dutyId] ?? 0) * 60);
+    // The fewest a TA must end up with. Everything between this and the
+    // target is optional, and only taken in the shape they asked for.
+    const requiredHoursMin = Math.min(
+      Math.round((hoursPerTaMin[dutyId] ?? hoursPerTa[dutyId] ?? 0) * 60),
+      targetMin,
+    );
     const windows = ctx.windowShifts.filter((w) => w.dutyTypeId === dutyId);
     // Nobody owes hours and no window asks to be covered: nothing to cut.
     if (targetMin <= 0 && !windows.some((w) => (w.minCount ?? 0) > 0)) continue;
@@ -914,7 +921,15 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
     const optionsFor = (ta: SolverTaProfile): { best: Placement; count: number } | null => {
       const want = need.get(ta.id) ?? 0;
       const style = styleOf(ta);
-      for (const size of sizesOf(ta)) {
+      // Past the fewest hours they must have, a "few long blocks" TA takes
+      // only a full-length block: an hour tacked on the end is the shape
+      // they said they did not want, and the range says they may go without
+      // it. A "many short" TA wants every block they can get, so nothing is
+      // withheld from them.
+      const optional = targetMin - want >= requiredHoursMin;
+      const sizes =
+        optional && style === "few_long" ? [maxSizeOf(ta)] : sizesOf(ta);
+      for (const size of sizes) {
         if (size > want) continue;
         let best: Placement | null = null;
         let count = 0;
@@ -1065,7 +1080,8 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
       // sliver: two and a half hours with an hour minimum places two and
       // drops the rest, week after week. Grow a block by the remainder
       // instead, so long as it stays under the ceiling the TA asked for.
-      if (left > 0 && left < minBlock && left % SLOT === 0) {
+      const placed = targetMin - left;
+      if (placed < requiredHoursMin && left > 0 && left < minBlock && left % SLOT === 0) {
         for (const b of blocksOf.get(ta.id) ?? []) {
           if (b.dutyTypeId !== dutyId || b.locked) continue;
           // A TA who asked for fewer, longer blocks will not mind one being
@@ -1099,8 +1115,15 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
         }
       }
 
-      if (left >= SLOT) {
-        unfilled.push({ taProfileId: ta.id, dutyTypeId: dutyId, missingHours: round4(left / 60) });
+      // Short of the fewest they must have — stopping between the two is a
+      // choice the range allows, not a gap worth reporting.
+      const missing = requiredHoursMin - (targetMin - left);
+      if (missing >= SLOT) {
+        unfilled.push({
+          taProfileId: ta.id,
+          dutyTypeId: dutyId,
+          missingHours: round4(missing / 60),
+        });
       }
     }
   }

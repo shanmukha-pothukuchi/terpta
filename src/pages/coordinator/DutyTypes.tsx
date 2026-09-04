@@ -34,8 +34,10 @@ export interface DutyTypeFields {
   color: string;
   /** Only a fallback for async pools; nothing on this screen asks for it. */
   defaultHoursCredit?: number;
-  /** "window" only: office hours each TA must hold per week. */
+  /** "window" only: the most office hours a TA is given per week. */
   hoursPerTa?: number;
+  /** "window" only: the fewest they must end up with. */
+  hoursPerTaMin?: number;
   /** Sync only: most shifts of this kind the solver gives one TA. 0 = no cap. */
   maxPerTa?: number;
   /** "window" only: shortest office-hour block the solver may cut, in minutes. */
@@ -344,11 +346,16 @@ function EditableRow({
 }) {
   const [name, setName] = useState(dt.name);
   const [perTa, setPerTa] = useState(String(dt.hoursPerTa ?? 2));
+  const [perTaMin, setPerTaMin] = useState(String(dt.hoursPerTaMin ?? dt.hoursPerTa ?? 2));
   const [cap, setCap] = useState(dt.maxPerTa === undefined ? "" : String(dt.maxPerTa));
   const minBlock = dt.minBlockMinutes ?? DEFAULT_MIN_BLOCK;
   const [minText, setMinText] = useState(String(minBlock / 60));
   useEffect(() => setName(dt.name), [dt.name]);
   useEffect(() => setPerTa(String(dt.hoursPerTa ?? 2)), [dt.hoursPerTa]);
+  useEffect(
+    () => setPerTaMin(String(dt.hoursPerTaMin ?? dt.hoursPerTa ?? 2)),
+    [dt.hoursPerTaMin, dt.hoursPerTa],
+  );
   useEffect(() => setCap(dt.maxPerTa === undefined ? "" : String(dt.maxPerTa)), [dt.maxPerTa]);
   useEffect(
     () => setMinText(String((dt.minBlockMinutes ?? DEFAULT_MIN_BLOCK) / 60)),
@@ -370,7 +377,21 @@ function EditableRow({
       setPerTa(String(dt.hoursPerTa ?? 2));
       return;
     }
-    if (n !== (dt.hoursPerTa ?? 2)) onUpdate({ hoursPerTa: n });
+    if (n === (dt.hoursPerTa ?? 2)) return;
+    // Raising the ceiling below the floor is not a range; carry the floor.
+    const floor = Math.min(Number(perTaMin) || 0, n);
+    onUpdate({ hoursPerTa: n, hoursPerTaMin: floor });
+  };
+  const commitPerTaMin = () => {
+    const n = Number(perTaMin);
+    const most = dt.hoursPerTa ?? 2;
+    if (!Number.isFinite(n) || n < 0) {
+      setPerTaMin(String(dt.hoursPerTaMin ?? most));
+      return;
+    }
+    const floor = Math.min(n, most);
+    setPerTaMin(String(floor));
+    if (floor !== (dt.hoursPerTaMin ?? most)) onUpdate({ hoursPerTaMin: floor });
   };
   const commitCap = () => {
     const n = cap.trim() === "" ? 0 : Math.round(Number(cap));
@@ -402,8 +423,10 @@ function EditableRow({
     });
   };
 
+  const most = dt.hoursPerTa ?? 2;
+  const fewest = Math.min(dt.hoursPerTaMin ?? most, most);
   const summary = isWindow
-    ? `${dt.hoursPerTa ?? 2}h/TA · ${minBlock % 60 === 0 ? `${minBlock / 60}h` : `${minBlock}m`} min${
+    ? `${fewest === most ? most : `${fewest}–${most}`}h/TA · ${minBlock % 60 === 0 ? `${minBlock / 60}h` : `${minBlock}m`} min${
         avoidCount > 0 ? ` · ${avoidCount}` : ""
       }`
     : dt.maxPerTa !== undefined && dt.maxPerTa > 0
@@ -443,15 +466,46 @@ function EditableRow({
       >
         {isWindow ? (
           <>
-            {/* A window has no credit to award: the hours are real. */}
-            <NumberSetting
-              label="Hours per TA"
-              value={perTa}
-              onChange={setPerTa}
-              onCommit={commitPerTa}
-              unit="h/wk"
-              hint="What each TA owes every week, and the most the generator will give them. A window asking for more cover than everyone owes is left part-covered rather than pushing somebody over this."
-            />
+            {/* A window has no credit to award: the hours are real. A range
+                rather than one number, so a TA who wanted few long blocks can
+                stop an hour short instead of taking a stub. */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <span className="flex-1 whitespace-nowrap text-[12.5px] text-muted">
+                  Hours per TA
+                </span>
+                <Input
+                  value={perTaMin}
+                  onChange={(e) => setPerTaMin(e.target.value)}
+                  onBlur={commitPerTaMin}
+                  onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  aria-label="Fewest hours per TA per week"
+                  className="h-7 w-[52px] text-right font-mono"
+                />
+                <span className="text-[12px] text-faint">to</span>
+                <Input
+                  value={perTa}
+                  onChange={(e) => setPerTa(e.target.value)}
+                  onBlur={commitPerTa}
+                  onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  aria-label="Most hours per TA per week"
+                  className="h-7 w-[52px] text-right font-mono"
+                />
+                <span className="w-[34px] text-[12px] text-faint">h/wk</span>
+              </div>
+              <p className="text-[11.5px] leading-[1.45] text-faint">
+                Every TA reaches the first number. The hours between the two
+                are only given when they come in the shape that TA asked for,
+                so somebody who wanted few long blocks stops short rather than
+                take a leftover hour.
+              </p>
+            </div>
             <div className="border-t border-line pt-2.5">
               <NumberSetting
                 label="Shortest block"

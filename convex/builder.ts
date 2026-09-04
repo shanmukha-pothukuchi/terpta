@@ -328,6 +328,7 @@ const solveInputValidator = v.object({
     }),
   ),
   windowHoursPerTa: v.optional(v.record(v.string(), v.number())),
+  windowHoursPerTaMin: v.optional(v.record(v.string(), v.number())),
   maxPerTaByDuty: v.optional(v.record(v.string(), v.number())),
   windowMinBlockMin: v.optional(v.record(v.string(), v.number())),
   windowBlackouts: v.optional(
@@ -451,12 +452,17 @@ export const loadSolverInput = internalQuery({
 
     const maxPerTaByDuty: Record<string, number> = {};
     const windowHoursPerTa: Record<string, number> = {};
+    const windowHoursPerTaMin: Record<string, number> = {};
     const windowMinBlockMin: Record<string, number> = {};
     for (const d of dutyTypes) {
       if (d.maxPerTa !== undefined && d.maxPerTa > 0) maxPerTaByDuty[d._id as string] = d.maxPerTa;
       // Absent means the default the duty-type screen displays, never zero.
       if (d.mode === "window") {
         windowHoursPerTa[d._id as string] = d.hoursPerTa ?? 2;
+        windowHoursPerTaMin[d._id as string] = Math.min(
+          d.hoursPerTaMin ?? d.hoursPerTa ?? 2,
+          d.hoursPerTa ?? 2,
+        );
         windowMinBlockMin[d._id as string] = d.minBlockMinutes ?? DEFAULT_MIN_BLOCK_MIN;
       }
     }
@@ -533,6 +539,7 @@ export const loadSolverInput = internalQuery({
       dateExceptions,
       lockedAssignments,
       windowHoursPerTa,
+      windowHoursPerTaMin,
       maxPerTaByDuty,
       windowMinBlockMin,
       windowBlackouts,
@@ -676,7 +683,11 @@ export const officeHourGaps = query({
           s.endMin !== undefined,
       );
       if (windows.length === 0) continue;
-      const targetMin = Math.round((duty.hoursPerTa ?? 2) * 60);
+      // Short means short of the fewest they must have, not of the most
+      // they could be given: stopping early is a choice, not a gap.
+      const targetMin = Math.round(
+        Math.min(duty.hoursPerTaMin ?? duty.hoursPerTa ?? 2, duty.hoursPerTa ?? 2) * 60,
+      );
       if (targetMin <= 0) continue;
       const minBlock = Math.max(
         SOLVER_SLOT,

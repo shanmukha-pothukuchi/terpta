@@ -100,8 +100,15 @@ export default defineSchema({
     mode: dutyModeValidator,
     color: v.string(),
     defaultHoursCredit: v.number(),
-    /** "window" only: office hours each TA must hold per week. */
+    /** "window" only: the most office hours a TA is given per week. */
     hoursPerTa: v.optional(v.number()),
+    /**
+     * "window" only: the fewest office hours a TA must end up with. Absent
+     * means the same as the most, i.e. an exact number. Setting it lower
+     * lets the generator stop early when the hours left would only fit as a
+     * shape the TA said they did not want.
+     */
+    hoursPerTaMin: v.optional(v.number()),
     /**
      * "window" only: the shortest block the solver may cut, in minutes.
      * Absent means 60 — half-hour office hours are not worth a TA's trip.

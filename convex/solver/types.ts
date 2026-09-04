@@ -115,8 +115,14 @@ export interface SolveInput {
   availability: SolverAvailabilityBlock[];
   dateExceptions: SolverDateException[];
   lockedAssignments: SolverLockedAssignment[];
-  /** Hours each TA owes per week, by window duty type id. */
+  /** The most office hours a TA is given per week, by window duty type id. */
   windowHoursPerTa?: Record<string, number>;
+  /**
+   * The fewest they must end up with. Between the two the generator only
+   * takes a block if it is the shape the TA asked for — a TA who wanted few
+   * long blocks stops early rather than accept a stub hour.
+   */
+  windowHoursPerTaMin?: Record<string, number>;
   /** Most sync shifts of a duty type one TA may be given, by duty type id. */
   maxPerTaByDuty?: Record<string, number>;
   /** Shortest office-hour block in minutes, by window duty type id. Default 60. */

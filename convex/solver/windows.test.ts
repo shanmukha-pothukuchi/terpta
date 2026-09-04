@@ -382,6 +382,67 @@ describe("office-hour windows", () => {
     expect(spans[1][0] - spans[0][1]).toBeGreaterThanOrEqual(120);
   });
 
+  it("stops short rather than tack a stub hour onto a few-long TA", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 600, 1020)],
+        taProfiles: [ta("a")], // few_long: two-hour blocks
+        // Two to three hours: the third only if it comes as a full block.
+        windowHoursPerTa: { oh: 3 },
+        windowHoursPerTaMin: { oh: 2 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    expect(out.windowBlocks.map((b) => b.endMin - b.startMin)).toEqual([120]);
+    // Two hours is inside the range, so nothing is reported missing.
+    expect(out.diagnostics.unfilledWindowHours).toEqual([]);
+  });
+
+  it("takes the fuller end of the range when it fits their shape", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 600, 1020), window("w-tue", "Tu", 600, 1020)],
+        taProfiles: [ta("a")],
+        windowHoursPerTa: { oh: 4 },
+        windowHoursPerTaMin: { oh: 2 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    // Four hours as two full blocks: optional hours are taken when they come
+    // in the shape the TA asked for.
+    expect(out.windowBlocks.map((b) => b.endMin - b.startMin)).toEqual([120, 120]);
+  });
+
+  it("gives a many-short TA the whole range, stubs and all", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 600, 1020), window("w-tue", "Tu", 600, 1020)],
+        taProfiles: [ta("a", { officeHoursStyle: "many_short" })],
+        windowHoursPerTa: { oh: 3 },
+        windowHoursPerTaMin: { oh: 2 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    expect(minutes(out.windowBlocks)).toBe(180);
+    expect(out.windowBlocks.every((b) => b.endMin - b.startMin === 60)).toBe(true);
+  });
+
+  it("still reports a TA who cannot reach the bottom of the range", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 600, 660)], // one hour of window, ever
+        taProfiles: [ta("a")],
+        windowHoursPerTa: { oh: 3 },
+        windowHoursPerTaMin: { oh: 2 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    expect(minutes(out.windowBlocks)).toBe(60);
+    expect(out.diagnostics.unfilledWindowHours).toEqual([
+      { taProfileId: "a", dutyTypeId: "oh", missingHours: 1 },
+    ]);
+  });
+
   it("keeps a pinned block and builds the rest around it", () => {
     const out = solve(
       base({

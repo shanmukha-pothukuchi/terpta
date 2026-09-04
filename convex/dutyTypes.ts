@@ -26,6 +26,7 @@ export const dutyTypeDoc = v.object({
   color: v.string(),
   defaultHoursCredit: v.number(),
   hoursPerTa: v.optional(v.number()),
+  hoursPerTaMin: v.optional(v.number()),
   maxPerTa: v.optional(v.number()),
   minBlockMinutes: v.optional(v.number()),
   noOverlapDutyRefs: v.optional(v.array(v.id("dutyTypes"))),
@@ -88,6 +89,7 @@ export const create = mutation({
      */
     defaultHoursCredit: v.optional(v.number()),
     hoursPerTa: v.optional(v.number()),
+    hoursPerTaMin: v.optional(v.number()),
     maxPerTa: v.optional(v.number()),
     minBlockMinutes: v.optional(v.number()),
     noOverlapDutyRefs: v.optional(v.array(v.id("dutyTypes"))),
@@ -109,6 +111,9 @@ export const create = mutation({
       ...(args.mode === "window"
         ? {
             hoursPerTa: args.hoursPerTa ?? 2,
+            ...(args.hoursPerTaMin !== undefined
+              ? { hoursPerTaMin: args.hoursPerTaMin }
+              : {}),
             minBlockMinutes: args.minBlockMinutes ?? DEFAULT_MIN_BLOCK,
             ...(args.noOverlapDutyRefs !== undefined
               ? { noOverlapDutyRefs: args.noOverlapDutyRefs }
@@ -131,6 +136,7 @@ export const update = mutation({
     color: v.optional(v.string()),
     defaultHoursCredit: v.optional(v.number()),
     hoursPerTa: v.optional(v.number()),
+    hoursPerTaMin: v.optional(v.number()),
     /** Zero clears the cap. */
     maxPerTa: v.optional(v.number()),
     minBlockMinutes: v.optional(v.number()),
@@ -179,6 +185,18 @@ export const update = mutation({
       // solver saw zero hours to place and generated no office hours at all
       // while the screen showed the default. Store the default it shows.
       patch.hoursPerTa = 2;
+    }
+    if (args.hoursPerTaMin !== undefined) {
+      const most = args.hoursPerTa ?? dutyType.hoursPerTa ?? 2;
+      if (args.hoursPerTaMin < 0) {
+        throw new ConvexError("The fewest hours must be zero or more");
+      }
+      if (args.hoursPerTaMin > most) {
+        throw new ConvexError(
+          `At least ${args.hoursPerTaMin}h cannot be asked of a TA who is given at most ${most}h`,
+        );
+      }
+      patch.hoursPerTaMin = args.hoursPerTaMin;
     }
     if (args.minBlockMinutes !== undefined) {
       if (args.minBlockMinutes < MIN_BLOCK_FLOOR) {
