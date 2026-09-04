@@ -9,6 +9,7 @@ import { assignLanes, laneStyle } from "../../../lib/lanes";
 import {
   CELL_PX,
   SLOT_COUNT,
+  SLOTS_PER_HOUR,
   dayIndex,
   slotRange,
   type Grid,
@@ -26,7 +27,7 @@ const FILL: Record<SlotState, { bg: string; edge: string }> = {
   },
 };
 
-const HOUR_LABELS = Array.from({ length: SLOT_COUNT / 2 }, (_, i) => {
+const HOUR_LABELS = Array.from({ length: SLOT_COUNT / SLOTS_PER_HOUR }, (_, i) => {
   const h = 8 + i;
   const twelve = h > 12 ? h - 12 : h;
   return {
@@ -141,7 +142,8 @@ export function AvailabilityGrid({
           {HOUR_LABELS.map((h) => (
             <div
               key={h.long}
-              className="box-border h-[44px] pr-[5px] pt-[3px] text-right font-mono text-[9.5px] text-faint sm:pr-2 sm:text-[10.5px]"
+              className="box-border pr-[5px] pt-[3px] text-right font-mono text-[9.5px] text-faint sm:pr-2 sm:text-[10.5px]"
+              style={{ height: SLOTS_PER_HOUR * CELL_PX }}
             >
               <span className="sm:hidden">{h.short}</span>
               <span className="hidden sm:inline">{h.long}</span>
@@ -157,10 +159,17 @@ export function AvailabilityGrid({
                 data-cell=""
                 data-d={d}
                 data-s={s}
-                className="box-border h-[22px] border-b transition-colors duration-100 hover:bg-white/[0.04]"
+                className="box-border border-b transition-colors duration-100 hover:bg-white/[0.04]"
                 style={{
+                  height: CELL_PX,
+                  // The hour reads strongest, the half hour next, the
+                  // quarters faintest — otherwise 48 equal lines are a fog.
                   borderBottomColor:
-                    s % 2 ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.035)",
+                    (s + 1) % SLOTS_PER_HOUR === 0
+                      ? "rgba(255,255,255,0.10)"
+                      : (s + 1) % (SLOTS_PER_HOUR / 2) === 0
+                        ? "rgba(255,255,255,0.05)"
+                        : "rgba(255,255,255,0.02)",
                 }}
               />
             ))}

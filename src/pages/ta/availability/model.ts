@@ -1,13 +1,23 @@
 import { DAY_CODES, type DayCode } from "../../../lib/format";
 
-/** One half-hour cell's state. Unpainted time is unavailable. */
+/** One cell's state. Unpainted time is unavailable. */
 export type SlotState = "available" | "prefer_not" | "unavailable";
 
 export const GRID_START_MIN = 8 * 60; // 8:00a
 export const GRID_END_MIN = 20 * 60; // 8:00p
-export const SLOT_MIN = 30;
-export const SLOT_COUNT = (GRID_END_MIN - GRID_START_MIN) / SLOT_MIN; // 24
-export const CELL_PX = 22;
+/**
+ * Quarter hours.
+ *
+ * Half-hour cells could not say "12:15 to 1:45", which is a real answer real
+ * TAs give: they rounded to something else, or wrote to the coordinator and
+ * had it typed in by hand. Fifteen minutes is as fine as a university
+ * timetable ever gets.
+ */
+export const SLOT_MIN = 15;
+export const SLOTS_PER_HOUR = 60 / SLOT_MIN;
+export const SLOT_COUNT = (GRID_END_MIN - GRID_START_MIN) / SLOT_MIN; // 48
+/** Row height. Four to the hour at 12px keeps the grid a screenful. */
+export const CELL_PX = 12;
 
 export interface ManualBlock {
   day: DayCode;
@@ -122,9 +132,13 @@ export function countHours(
       else if (grid[d][s] === "prefer_not") preferNot++;
     }
     available += dayAvail;
-    availableByDay.push(dayAvail / 2);
+    availableByDay.push(dayAvail / SLOTS_PER_HOUR);
   }
-  return { available: available / 2, preferNot: preferNot / 2, availableByDay };
+  return {
+    available: available / SLOTS_PER_HOUR,
+    preferNot: preferNot / SLOTS_PER_HOUR,
+    availableByDay,
+  };
 }
 
 export interface ExceptionItem {
