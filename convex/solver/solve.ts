@@ -92,6 +92,7 @@ const OH = {
   NEAR: 10, // per half hour of closeness to another block on that day
   NEAR_REACH: 120, // how far apart two blocks stop crowding each other
   COVER: 60, // credit per half hour that is below the window's floor
+  LONGER: 1000, // credit per minute of block length, for "fewer, longer"
 };
 const DAY_ORDER: Record<Day, number> = { M: 0, Tu: 1, W: 2, Th: 3, F: 4 };
 
@@ -960,10 +961,17 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
       const optional = targetMin - want >= requiredHoursMin;
       const sizes =
         optional && style === "few_long" ? [maxSizeOf(ta)] : sizesOf(ta);
+      // Every size is weighed together rather than the longest that fits
+      // winning outright. A longer block is what a "few long" TA asked for,
+      // but not more than they asked to keep an hour free: taking the two
+      // hours on offer used to cost them half an hour of "not then" when an
+      // hour they were plainly free for was sitting there.
+      let best: Placement | null = null;
+      let count = 0;
       for (const size of sizes) {
         if (size > want) continue;
-        let best: Placement | null = null;
-        let count = 0;
+        let sizeBest: Placement | null = null;
+        let sizeCount = 0;
         for (const w of windows) {
           const occ = occupancy.get(w.id)!;
           for (let start = w.startMin; start + size <= w.endMin; start += SLOT) {
@@ -989,7 +997,7 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
             const preferNot = ctx.preferNotMinutes(ta.id, w.day, start, end);
             if (optional && preferNot > 0) continue;
 
-            count += 1;
+            sizeCount += 1;
             // Hours a TA owes go where the window is thinnest first. This is
             // what "at least one TA on duty" buys: not extra hours, but the
             // ones already owed landing on the empty stretches.
@@ -1003,19 +1011,25 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
             let score =
               preferNot * OH.PREFER_NOT +
               spreadPenalty(w.day, start, end) -
-              uncovered * OH.COVER;
+              uncovered * OH.COVER -
+              size * OH.LONGER;
             if (
               style === "many_short" &&
               (blocksOf.get(ta.id) ?? []).some((b) => b.day === w.day && b.dutyTypeId === dutyId)
             ) {
               score += 10000; // one TA's short blocks go on different days
             }
-            if (best === null || score < best.score) best = { w, s: start, e: end, score };
+            if (sizeBest === null || score < sizeBest.score) {
+              sizeBest = { w, s: start, e: end, score };
+            }
           }
         }
-        if (best !== null) return { best, count };
+        if (sizeBest !== null && (best === null || sizeBest.score < best.score)) {
+          best = sizeBest;
+          count = sizeCount;
+        }
       }
-      return null;
+      return best === null ? null : { best, count };
     };
 
     /**

@@ -411,7 +411,7 @@ export const loadSolverInput = internalQuery({
   args: { periodRef: v.id("staffingPeriods") },
   returns: solveInputValidator,
   handler: async (ctx, args): Promise<SolveInput> => {
-    const { period } = await requireCoordinator(ctx, args.periodRef);
+    await requireCoordinator(ctx, args.periodRef);
 
     const dutyTypes = await ctx.db
       .query("dutyTypes")
@@ -470,7 +470,7 @@ export const loadSolverInput = internalQuery({
     // Hours a window may not be cut into, per window duty type. A lecture is
     // not a shift in this app — nobody is staffed on it — so it has to come
     // off the course's own meetings rather than out of the shift table.
-    const windowBlackouts = await windowBlackoutRanges(ctx, period, dutyTypes, shiftDocs);
+    const windowBlackouts = await windowBlackoutRanges(ctx, dutyTypes, shiftDocs);
 
     const availability: SolveInput["availability"] = [];
     const dateExceptions: SolveInput["dateExceptions"] = [];
@@ -562,7 +562,6 @@ type TimeRange = { day: Day; startMin: number; endMin: number };
  */
 async function windowBlackoutRanges(
   ctx: QueryCtx,
-  period: Doc<"staffingPeriods">,
   dutyTypes: Doc<"dutyTypes">[],
   shiftDocs: Doc<"shifts">[],
 ): Promise<Record<string, TimeRange[]>> {
@@ -574,12 +573,19 @@ async function windowBlackoutRanges(
 
   const lectureRanges: TimeRange[] = [];
   if (windowDuties.some((d) => d.noOverlapLectures)) {
-    const sections = await ctx.db
-      .query("sections")
-      .withIndex("by_course", (q) => q.eq("courseRef", period.courseRef))
-      .collect();
+    // Only the lectures this period actually staffs. A course has several
+    // lecture sections under different instructors, and the others are
+    // somebody else's TAs' problem — blacking them all out cost this course
+    // its whole Tuesday and Thursday afternoon for lectures none of its own
+    // students attend.
+    const staffed = new Set<string>();
+    for (const shift of shiftDocs) {
+      if (shift.sectionRef !== undefined) staffed.add(shift.sectionRef as string);
+    }
     const seen = new Set<string>();
-    for (const section of sections) {
+    for (const sectionId of staffed) {
+      const section = await ctx.db.get(sectionId as Id<"sections">);
+      if (!section) continue;
       for (const m of section.meetings) {
         if ((m.kind ?? section.type) !== "lecture") continue;
         // One lecture is listed on every section that attends it.
@@ -642,7 +648,7 @@ export const officeHourGaps = query({
     }),
   ),
   handler: async (ctx, args) => {
-    const { period } = await requireCoordinator(ctx, args.periodRef);
+    await requireCoordinator(ctx, args.periodRef);
     const dutyTypes = await ctx.db
       .query("dutyTypes")
       .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
@@ -654,7 +660,7 @@ export const officeHourGaps = query({
       .query("shifts")
       .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
       .collect();
-    const blackouts = await windowBlackoutRanges(ctx, period, dutyTypes, shiftDocs);
+    const blackouts = await windowBlackoutRanges(ctx, dutyTypes, shiftDocs);
     const profiles = await ctx.db
       .query("taProfiles")
       .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))

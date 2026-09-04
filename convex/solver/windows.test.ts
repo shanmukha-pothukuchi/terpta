@@ -540,6 +540,26 @@ describe("office-hour windows", () => {
     expect(out.windowBlocks.map((b) => [b.startMin, b.endMin])).toEqual([[1020, 1080]]);
   });
 
+  it("takes a shorter clean block over a longer one that crosses prefer_not", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 600, 840)],
+        taProfiles: [ta("a")], // few_long: reaches for two hours
+        availability: [
+          { taProfileId: "a", day: "M", startMin: 600, endMin: 690, status: "available" },
+          { taProfileId: "a", day: "M", startMin: 690, endMin: 750, status: "prefer_not" },
+        ],
+        // An hour and a half is enough, two would be nice.
+        windowHoursPerTa: { oh: 2 },
+        windowHoursPerTaMin: { oh: 1.5 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    // The two-hour block exists, and costs half an hour of "not then". The
+    // shape they asked for does not outrank the hour they asked to keep.
+    expect(out.windowBlocks.map((b) => [b.startMin, b.endMin])).toEqual([[600, 690]]);
+  });
+
   it("keeps a pinned block and builds the rest around it", () => {
     const out = solve(
       base({
