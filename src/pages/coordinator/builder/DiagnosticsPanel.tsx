@@ -1,3 +1,5 @@
+import type { FunctionReturnType } from "convex/server";
+import type { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
   shiftLongLabel,
@@ -7,13 +9,27 @@ import {
 } from "./model";
 import { weekSeats, type WeekOverlay } from "./weekOverlay";
 
+export type OfficeHourGap = FunctionReturnType<
+  typeof api.builder.officeHourGaps
+>[number];
+
+/** Why a TA is short of their office hours, in words a coordinator can act on. */
+const GAP_REASON: Record<OfficeHourGap["reason"], string> = {
+  no_free_time: "never free inside a window",
+  windows_full: "windows are full",
+  over_cap: "would go over their hours cap",
+};
+
 export interface DiagnosticsPanelProps {
   model: BuilderModel;
   highlight: Highlight;
   /** The selected week, for the one row that depends on it. */
   week?: WeekOverlay | null;
+  /** TAs holding fewer office hours than they owe; undefined = loading. */
+  officeHourGaps?: OfficeHourGap[];
   onToggle: (key: Exclude<Highlight, null | `ta:${string}`>) => void;
   onClear: () => void;
+  onOpenTa?: (taProfileRef: Id<"taProfiles">) => void;
 }
 
 interface DiagRow {
@@ -32,8 +48,10 @@ export function DiagnosticsPanel({
   model,
   highlight,
   week = null,
+  officeHourGaps = [],
   onToggle,
   onClear,
+  onOpenTa,
 }: DiagnosticsPanelProps) {
   const unfilledItems = [...model.weekly, ...model.events]
     .filter(
@@ -142,6 +160,33 @@ export function DiagnosticsPanel({
           );
         })}
       </div>
+      {/* Not one of the rows above: these TAs have nothing to highlight — the
+          whole point is that no block was cut for them. The reason is the
+          answer to "why does this TA have no office hours", which otherwise
+          means reading their availability against the windows by hand. */}
+      {officeHourGaps.length > 0 ? (
+        <div className="flex flex-col gap-[6px] border-t border-line px-[14px] py-[10px]">
+          <div className="flex items-center gap-[9px] text-[12.5px]">
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{ background: "#F5A524", boxShadow: "0 0 8px #F5A524" }}
+            />
+            <span className="flex-1">Short of office hours</span>
+            <span className="font-mono text-xs">{officeHourGaps.length}</span>
+          </div>
+          {officeHourGaps.map((gap) => (
+            <button
+              key={`${gap.taProfileRef}:${gap.dutyTypeRef}`}
+              type="button"
+              onClick={() => onOpenTa?.(gap.taProfileRef)}
+              className="pl-[17px] text-left text-[11.5px] leading-[1.35] text-muted transition-colors hover:text-ink"
+            >
+              {model.shortName(gap.name)} — {gap.heldHours} of {gap.targetHours}h ·{" "}
+              {GAP_REASON[gap.reason]}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

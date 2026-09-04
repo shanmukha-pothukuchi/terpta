@@ -14,6 +14,7 @@ const empty: ShiftCascade = {
   pendingSwaps: [],
   draftLogs: [],
   claimedLogs: [],
+  windowBlocks: [],
 };
 
 const log = (status: Doc<"hourLogs">["status"]) =>
@@ -68,10 +69,16 @@ describe("totalCounts", () => {
   it("sums every cascade of a duty type's shifts", () => {
     expect(
       totalCounts([
-        { assignments: 2, coverages: 1, pendingSwaps: 0, draftLogs: 3 },
-        { assignments: 1, coverages: 0, pendingSwaps: 4, draftLogs: 0 },
+        { assignments: 2, coverages: 1, pendingSwaps: 0, draftLogs: 3, windowBlocks: 0 },
+        { assignments: 1, coverages: 0, pendingSwaps: 4, draftLogs: 0, windowBlocks: 2 },
       ]),
-    ).toEqual({ assignments: 3, coverages: 1, pendingSwaps: 4, draftLogs: 3 });
+    ).toEqual({
+      assignments: 3,
+      coverages: 1,
+      pendingSwaps: 4,
+      draftLogs: 3,
+      windowBlocks: 2,
+    });
   });
 
   it("is zero for a duty type with no shifts", () => {
@@ -80,6 +87,7 @@ describe("totalCounts", () => {
       coverages: 0,
       pendingSwaps: 0,
       draftLogs: 0,
+      windowBlocks: 0,
     });
   });
 });

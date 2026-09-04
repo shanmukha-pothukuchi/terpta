@@ -40,7 +40,7 @@ import { ChipGhost, type DragPayload } from "./builder/AssignChip";
 import { WeekGrid } from "./builder/WeekGrid";
 import { EventsStrip } from "./builder/EventsStrip";
 import { AsyncTable } from "./builder/AsyncTable";
-import { DiagnosticsPanel } from "./builder/DiagnosticsPanel";
+import { DiagnosticsPanel, type OfficeHourGap } from "./builder/DiagnosticsPanel";
 import { RosterPanel } from "./builder/RosterPanel";
 import { CoveragePanel } from "./builder/CoveragePanel";
 import {
@@ -65,6 +65,8 @@ export interface BuilderFixture {
   courseLabel: string;
   /** DEV harness: week overlay, since the week query is skipped under a fixture. */
   week?: WeekOverlayInput;
+  /** DEV harness: TAs short of their office hours. */
+  officeHourGaps?: OfficeHourGap[];
 }
 
 class BuilderErrorBoundary extends Component<
@@ -140,6 +142,12 @@ export function BuilderScreen({
   const roster = useQuery(api.roster.list, skip ? "skip" : { periodRef });
   const board = useQuery(api.builder.board, skip ? "skip" : { periodRef });
   const periodInfo = useQuery(api.periods.get, skip ? "skip" : { periodRef });
+  // Why a TA has no office hours, computed from live data rather than from
+  // whenever Generate last ran.
+  const officeHourGaps = useQuery(
+    api.builder.officeHourGaps,
+    skip ? "skip" : { periodRef },
+  );
 
   const setCoverMut = useMutation(api.coverage.setCover);
   const overrideAssignment = useMutation(api.builder.overrideAssignment);
@@ -659,6 +667,8 @@ export function BuilderScreen({
                 model={model}
                 highlight={highlight}
                 week={week}
+                officeHourGaps={fixture ? fixture.officeHourGaps : officeHourGaps}
+                onOpenTa={setDrawerTa}
                 onToggle={(key) => setHighlight((h) => (h === key ? null : key))}
                 onClear={() => setHighlight(null)}
               />

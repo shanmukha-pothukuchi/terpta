@@ -27,12 +27,30 @@ export interface ShiftCascade {
   draftLogs: Doc<"hourLogs">[];
   /** Submitted, approved or flagged hours. Never deleted; they block instead. */
   claimedLogs: Doc<"hourLogs">[];
+  /**
+   * Office-hour blocks cut from this window by the generator. They exist only
+   * because the window does, so they go with it — otherwise they linger on
+   * the board and in TA schedules with nothing to regenerate them from.
+   */
+  windowBlocks: Doc<"shifts">[];
 }
 
 export async function collectShiftCascade(
   ctx: QueryCtx,
   shift: Doc<"shifts">,
 ): Promise<ShiftCascade> {
+  // A window is deleted with its own output. One level deep only: a block is
+  // never itself a window.
+  const windowBlocks =
+    shift.windowRef === undefined
+      ? (
+          await ctx.db
+            .query("shifts")
+            .withIndex("by_period", (q) => q.eq("periodRef", shift.periodRef))
+            .collect()
+        ).filter((s) => String(s.windowRef ?? "") === String(shift._id))
+      : [];
+
   const assignments = await ctx.db
     .query("assignments")
     .withIndex("by_shift", (q) => q.eq("shiftRef", shift._id))
@@ -74,7 +92,23 @@ export async function collectShiftCascade(
         assignmentIds.has(String(s.assignmentRef))),
   );
 
-  return { assignments, coverages, pendingSwaps, draftLogs, claimedLogs };
+  const cascade: ShiftCascade = {
+    assignments,
+    coverages,
+    pendingSwaps,
+    draftLogs,
+    claimedLogs,
+    windowBlocks,
+  };
+  for (const block of windowBlocks) {
+    const inner = await collectShiftCascade(ctx, block);
+    cascade.assignments.push(...inner.assignments);
+    cascade.coverages.push(...inner.coverages);
+    cascade.pendingSwaps.push(...inner.pendingSwaps);
+    cascade.draftLogs.push(...inner.draftLogs);
+    cascade.claimedLogs.push(...inner.claimedLogs);
+  }
+  return cascade;
 }
 
 /**
@@ -99,6 +133,7 @@ export interface CascadeCounts {
   coverages: number;
   pendingSwaps: number;
   draftLogs: number;
+  windowBlocks: number;
 }
 
 /** Delete a shift and everything that only existed because of it. */
@@ -111,12 +146,14 @@ export async function deleteShiftCascade(
   for (const swap of cascade.pendingSwaps) await ctx.db.delete(swap._id);
   for (const coverage of cascade.coverages) await ctx.db.delete(coverage._id);
   for (const assignment of cascade.assignments) await ctx.db.delete(assignment._id);
+  for (const block of cascade.windowBlocks) await ctx.db.delete(block._id);
   await ctx.db.delete(shift._id);
   return {
     assignments: cascade.assignments.length,
     coverages: cascade.coverages.length,
     pendingSwaps: cascade.pendingSwaps.length,
     draftLogs: cascade.draftLogs.length,
+    windowBlocks: cascade.windowBlocks.length,
   };
 }
 
@@ -128,8 +165,9 @@ export function totalCounts(all: CascadeCounts[]): CascadeCounts {
       coverages: acc.coverages + c.coverages,
       pendingSwaps: acc.pendingSwaps + c.pendingSwaps,
       draftLogs: acc.draftLogs + c.draftLogs,
+      windowBlocks: acc.windowBlocks + c.windowBlocks,
     }),
-    { assignments: 0, coverages: 0, pendingSwaps: 0, draftLogs: 0 },
+    { assignments: 0, coverages: 0, pendingSwaps: 0, draftLogs: 0, windowBlocks: 0 },
   );
 }
 

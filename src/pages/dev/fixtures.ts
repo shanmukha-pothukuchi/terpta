@@ -437,7 +437,30 @@ export const board: BoardData = {
   sections: boardSections,
 };
 
+/** TAs short of their office hours, one of each reason the panel renders. */
+export const officeHourGaps: NonNullable<BuilderFixture["officeHourGaps"]> = [
+  {
+    taProfileRef: fid<"taProfiles">("ta-priyak"),
+    name: "Priya Kumar",
+    dutyTypeRef: DT_OH._id,
+    dutyTypeName: "Office Hours",
+    heldHours: 0,
+    targetHours: 2,
+    reason: "no_free_time",
+  },
+  {
+    taProfileRef: fid<"taProfiles">("ta-marcus"),
+    name: "Marcus Johnson",
+    dutyTypeRef: DT_OH._id,
+    dutyTypeName: "Office Hours",
+    heldHours: 1,
+    targetHours: 2,
+    reason: "over_cap",
+  },
+];
+
 export const builderFixture: BuilderFixture = {
+  officeHourGaps,
   shifts,
   dutyTypes,
   roster,

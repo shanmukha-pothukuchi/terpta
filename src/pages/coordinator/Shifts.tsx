@@ -502,7 +502,15 @@ export function ShiftsView({
       ) : (
         <div className="flex flex-col gap-4">
           {dutyTypes.map((dt) => {
-            const own = shifts.filter((s) => s.dutyTypeRef === dt._id);
+            // Blocks cut from a window are the generator's output, not
+            // shifts anybody wrote here: listing them made one 10a-5p window
+            // read as four office-hour shifts and the count say "12 windows".
+            const own = shifts.filter(
+              (s) => s.dutyTypeRef === dt._id && s.windowRef === undefined,
+            );
+            const placedBlocks = shifts.filter(
+              (s) => s.dutyTypeRef === dt._id && s.windowRef !== undefined,
+            ).length;
             const weekly = own
               .filter((s) => s.recurrence === "weekly")
               .sort((a, b) => (a.startMin ?? 0) - (b.startMin ?? 0));
@@ -538,7 +546,10 @@ export function ShiftsView({
                     {dt.mode === "sync"
                       ? `sync · ${weekly.length} weekly · ${once.length} one-time`
                       : dt.mode === "window"
-                        ? `office hours · ${weekly.length} window${weekly.length === 1 ? "" : "s"} · ${dt.hoursPerTa ?? 2}h per TA`
+                        ? `office hours · ${weekly.length} window${weekly.length === 1 ? "" : "s"} · ${dt.hoursPerTa ?? 2}h per TA` +
+                          (placedBlocks > 0
+                            ? ` · ${placedBlocks} block${placedBlocks === 1 ? "" : "s"} placed`
+                            : "")
                         : `async · ${asyncShifts.length} pool${asyncShifts.length === 1 ? "" : "s"}`}
                   </span>
                   <span className="flex-1" />

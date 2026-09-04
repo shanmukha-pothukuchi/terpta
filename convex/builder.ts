@@ -6,6 +6,7 @@ import {
   mutation,
   query,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -27,6 +28,8 @@ import type {
 // ---------------------------------------------------------------------------
 /** Shortest office-hour block when a window duty type does not say. */
 const DEFAULT_MIN_BLOCK_MIN = 60;
+/** The half-hour grid office-hour blocks are cut on, as in the solver. */
+const SOLVER_SLOT = 30;
 const DEFAULT_PERIOD_START = "2026-08-31";
 const DEFAULT_PERIOD_END = "2026-12-11";
 
@@ -457,44 +460,7 @@ export const loadSolverInput = internalQuery({
     // Hours a window may not be cut into, per window duty type. A lecture is
     // not a shift in this app — nobody is staffed on it — so it has to come
     // off the course's own meetings rather than out of the shift table.
-    const windowBlackouts: Record<string, Array<{ day: Day; startMin: number; endMin: number }>> = {};
-    const windowDuties = dutyTypes.filter((d) => d.mode === "window");
-    if (windowDuties.some((d) => (d.noOverlapDutyRefs?.length ?? 0) > 0 || d.noOverlapLectures)) {
-      const lectureRanges: Array<{ day: Day; startMin: number; endMin: number }> = [];
-      if (windowDuties.some((d) => d.noOverlapLectures)) {
-        const sections = await ctx.db
-          .query("sections")
-          .withIndex("by_course", (q) => q.eq("courseRef", period.courseRef))
-          .collect();
-        const seen = new Set<string>();
-        for (const section of sections) {
-          for (const m of section.meetings) {
-            if ((m.kind ?? section.type) !== "lecture") continue;
-            // One lecture is listed on every section that attends it.
-            const key = `${m.day}|${m.startMin}|${m.endMin}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            lectureRanges.push({ day: m.day, startMin: m.startMin, endMin: m.endMin });
-          }
-        }
-      }
-      for (const d of windowDuties) {
-        const avoid = new Set((d.noOverlapDutyRefs ?? []).map((id) => id as string));
-        const ranges: Array<{ day: Day; startMin: number; endMin: number }> = [];
-        if (avoid.size > 0) {
-          for (const shift of shiftDocs) {
-            if (shift.windowRef !== undefined) continue;
-            if (!avoid.has(shift.dutyTypeRef as string)) continue;
-            if (shift.day === undefined || shift.startMin === undefined || shift.endMin === undefined) {
-              continue;
-            }
-            ranges.push({ day: shift.day, startMin: shift.startMin, endMin: shift.endMin });
-          }
-        }
-        if (d.noOverlapLectures) ranges.push(...lectureRanges);
-        if (ranges.length > 0) windowBlackouts[d._id as string] = ranges;
-      }
-    }
+    const windowBlackouts = await windowBlackoutRanges(ctx, period, dutyTypes, shiftDocs);
 
     const availability: SolveInput["availability"] = [];
     const dateExceptions: SolveInput["dateExceptions"] = [];
@@ -570,6 +536,239 @@ export const loadSolverInput = internalQuery({
       periodStart: DEFAULT_PERIOD_START,
       periodEnd: DEFAULT_PERIOD_END,
     };
+  },
+});
+
+type TimeRange = { day: Day; startMin: number; endMin: number };
+
+/**
+ * Hours each window duty type must stay clear of, keyed by duty type id.
+ *
+ * Shared by the generator and by {@link officeHourGaps} so the board can
+ * never say a TA could have been placed somewhere the solver refuses to use.
+ * A lecture is not a shift in this app — nobody is staffed on one — so it has
+ * to come off the course's own meetings rather than out of the shift table.
+ */
+async function windowBlackoutRanges(
+  ctx: QueryCtx,
+  period: Doc<"staffingPeriods">,
+  dutyTypes: Doc<"dutyTypes">[],
+  shiftDocs: Doc<"shifts">[],
+): Promise<Record<string, TimeRange[]>> {
+  const out: Record<string, TimeRange[]> = {};
+  const windowDuties = dutyTypes.filter((d) => d.mode === "window");
+  if (!windowDuties.some((d) => (d.noOverlapDutyRefs?.length ?? 0) > 0 || d.noOverlapLectures)) {
+    return out;
+  }
+
+  const lectureRanges: TimeRange[] = [];
+  if (windowDuties.some((d) => d.noOverlapLectures)) {
+    const sections = await ctx.db
+      .query("sections")
+      .withIndex("by_course", (q) => q.eq("courseRef", period.courseRef))
+      .collect();
+    const seen = new Set<string>();
+    for (const section of sections) {
+      for (const m of section.meetings) {
+        if ((m.kind ?? section.type) !== "lecture") continue;
+        // One lecture is listed on every section that attends it.
+        const key = `${m.day}|${m.startMin}|${m.endMin}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        lectureRanges.push({ day: m.day, startMin: m.startMin, endMin: m.endMin });
+      }
+    }
+  }
+
+  for (const d of windowDuties) {
+    const avoid = new Set((d.noOverlapDutyRefs ?? []).map((id) => id as string));
+    const ranges: TimeRange[] = [];
+    if (avoid.size > 0) {
+      for (const shift of shiftDocs) {
+        if (shift.windowRef !== undefined) continue;
+        if (!avoid.has(shift.dutyTypeRef as string)) continue;
+        if (shift.day === undefined || shift.startMin === undefined || shift.endMin === undefined) {
+          continue;
+        }
+        ranges.push({ day: shift.day, startMin: shift.startMin, endMin: shift.endMin });
+      }
+    }
+    if (d.noOverlapLectures) ranges.push(...lectureRanges);
+    if (ranges.length > 0) out[d._id as string] = ranges;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// officeHourGaps — who is short of their office hours, and what is in the way
+// ---------------------------------------------------------------------------
+
+const gapReasonValidator = v.union(
+  v.literal("no_free_time"),
+  v.literal("windows_full"),
+  v.literal("over_cap"),
+);
+
+/**
+ * Every TA holding fewer office hours than they owe, with the reason.
+ *
+ * "Why does this TA have nothing?" was only answerable by reading their
+ * availability against the windows and the blackout rules by hand. Computed
+ * from live data rather than from the last generate, so it stays true after
+ * the board is edited.
+ */
+export const officeHourGaps = query({
+  args: { periodRef: v.id("staffingPeriods") },
+  returns: v.array(
+    v.object({
+      taProfileRef: v.id("taProfiles"),
+      name: v.string(),
+      dutyTypeRef: v.id("dutyTypes"),
+      dutyTypeName: v.string(),
+      heldHours: v.number(),
+      targetHours: v.number(),
+      reason: gapReasonValidator,
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const { period } = await requireCoordinator(ctx, args.periodRef);
+    const dutyTypes = await ctx.db
+      .query("dutyTypes")
+      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
+      .collect();
+    const windowDuties = dutyTypes.filter((d) => d.mode === "window");
+    if (windowDuties.length === 0) return [];
+
+    const shiftDocs = await ctx.db
+      .query("shifts")
+      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
+      .collect();
+    const blackouts = await windowBlackoutRanges(ctx, period, dutyTypes, shiftDocs);
+    const profiles = await ctx.db
+      .query("taProfiles")
+      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
+      .collect();
+
+    const weeks = weeksBetween(DEFAULT_PERIOD_START, DEFAULT_PERIOD_END);
+    const assignmentsByShift = new Map<string, Doc<"assignments">[]>();
+    for (const shift of shiftDocs) {
+      assignmentsByShift.set(
+        shift._id as string,
+        await ctx.db
+          .query("assignments")
+          .withIndex("by_shift", (q) => q.eq("shiftRef", shift._id))
+          .collect(),
+      );
+    }
+
+    const out = [];
+    for (const duty of windowDuties) {
+      const windows = shiftDocs.filter(
+        (s) =>
+          s.dutyTypeRef === duty._id &&
+          s.windowRef === undefined &&
+          s.day !== undefined &&
+          s.startMin !== undefined &&
+          s.endMin !== undefined,
+      );
+      if (windows.length === 0) continue;
+      const targetMin = Math.round((duty.hoursPerTa ?? 2) * 60);
+      if (targetMin <= 0) continue;
+      const minBlock = Math.max(
+        SOLVER_SLOT,
+        Math.round((duty.minBlockMinutes ?? DEFAULT_MIN_BLOCK_MIN) / SOLVER_SLOT) * SOLVER_SLOT,
+      );
+      const avoid = blackouts[duty._id as string] ?? [];
+
+      // Seats already taken inside each window, so "the windows are full" can
+      // be told apart from "this TA is never free".
+      const takenByWindow = new Map<string, TimeRange[]>();
+      for (const block of shiftDocs) {
+        if (block.windowRef === undefined) continue;
+        if (block.day === undefined || block.startMin === undefined || block.endMin === undefined) {
+          continue;
+        }
+        const key = block.windowRef as string;
+        const list = takenByWindow.get(key) ?? [];
+        list.push({ day: block.day, startMin: block.startMin, endMin: block.endMin });
+        takenByWindow.set(key, list);
+      }
+
+      for (const profile of profiles) {
+        let heldMin = 0;
+        const mine: TimeRange[] = [];
+        for (const shift of shiftDocs) {
+          const rows = assignmentsByShift.get(shift._id as string) ?? [];
+          if (!rows.some((a) => a.taProfileRef === profile._id)) continue;
+          if (shift.day === undefined || shift.startMin === undefined || shift.endMin === undefined) {
+            continue;
+          }
+          if (shift.windowRef !== undefined) {
+            const block = await ctx.db.get(shift.windowRef);
+            if (block?.dutyTypeRef === duty._id) heldMin += shift.endMin - shift.startMin;
+          }
+          mine.push({ day: shift.day, startMin: shift.startMin, endMin: shift.endMin });
+        }
+        if (heldMin >= targetMin) continue;
+
+        const blocks = await ctx.db
+          .query("availabilityBlocks")
+          .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
+          .collect();
+
+        let anyFree = false; // a legal slot exists, ignoring who is in it
+        let anyOpen = false; // ...and it still has a seat
+        for (const w of windows) {
+          const day = w.day!;
+          for (let start = w.startMin!; start + minBlock <= w.endMin!; start += SOLVER_SLOT) {
+            const end = start + minBlock;
+            if (avoid.some((b) => b.day === day && minutesOverlap(b.startMin, b.endMin, start, end))) {
+              continue;
+            }
+            if (fitWindow(blocks, day, start, end) === "unavailable") continue;
+            if (mine.some((b) => b.day === day && minutesOverlap(b.startMin, b.endMin, start, end))) {
+              continue;
+            }
+            anyFree = true;
+            const taken = (takenByWindow.get(w._id as string) ?? []).filter(
+              (b) => b.day === day && minutesOverlap(b.startMin, b.endMin, start, end),
+            ).length;
+            if (taken < Math.max(1, w.requiredCount)) {
+              anyOpen = true;
+              break;
+            }
+          }
+          if (anyOpen) break;
+        }
+
+        let weeklyHours = 0;
+        for (const shift of shiftDocs) {
+          const rows = assignmentsByShift.get(shift._id as string) ?? [];
+          const row = rows.find((a) => a.taProfileRef === profile._id);
+          if (row) weeklyHours += weeklyHoursOf(shift, row.hoursAllocated, weeks);
+        }
+        // A seat may well be open — then the answer is "nobody has run
+        // Generate since", which is still the windows and not the TA.
+        const reason: "no_free_time" | "windows_full" | "over_cap" = !anyFree
+          ? "no_free_time"
+          : weeklyHours + minBlock / 60 > profile.maxHoursPerWeek + 1e-9
+            ? "over_cap"
+            : "windows_full";
+
+        const user = await ctx.db.get(profile.userRef);
+        out.push({
+          taProfileRef: profile._id,
+          name: user?.preferredName || user?.name || "Unknown",
+          dutyTypeRef: duty._id,
+          dutyTypeName: duty.name,
+          heldHours: round1(heldMin / 60),
+          targetHours: round1(targetMin / 60),
+          reason,
+        });
+      }
+    }
+    out.sort((a, b) => a.heldHours - b.heldHours || a.name.localeCompare(b.name));
+    return out;
   },
 });
 
