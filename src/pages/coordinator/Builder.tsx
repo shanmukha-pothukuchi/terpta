@@ -9,7 +9,15 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { CalendarOff, RefreshCw, Send, TriangleAlert, Undo2, Wand2 } from "lucide-react";
+import {
+  CalendarOff,
+  ClipboardList,
+  RefreshCw,
+  Send,
+  TriangleAlert,
+  Undo2,
+  Wand2,
+} from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { formatDate, termName } from "../../lib/format";
@@ -54,6 +62,7 @@ import {
 import { TaDrawer } from "./builder/TaDrawer";
 import { ShiftDrawer, type ShiftCandidate } from "./builder/ShiftDrawer";
 import { PublishModal } from "./builder/PublishModal";
+import { CoverageExportModal } from "./builder/CoverageExportModal";
 
 /** Fixture bundle so a DEV preview harness can render without auth/Convex. */
 export interface BuilderFixture {
@@ -160,6 +169,7 @@ export function BuilderScreen({
   const [drawerTa, setDrawerTa] = useState<Id<"taProfiles"> | null>(initialDrawerTa);
   const [drawerShift, setDrawerShift] = useState<Id<"shifts"> | null>(initialDrawerShift);
   const [publishOpen, setPublishOpen] = useState(initialPublishOpen);
+  const [exportOpen, setExportOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [addedTaIds, setAddedTaIds] = useState<string[]>([]);
@@ -611,6 +621,12 @@ export function BuilderScreen({
             {hasAssignments ? "Regenerate" : "Generate"}
             <span className="text-faint">· keeps {lockCount} locks</span>
           </Button>
+          {/* The week as text for a syllabus or a course post, off the whole
+              board rather than off what is currently shown. */}
+          <Button variant="secondary" onClick={() => setExportOpen(true)}>
+            <ClipboardList size={14} strokeWidth={1.5} className="text-muted" />
+            Hours to publish
+          </Button>
           <Button variant="primary" onClick={() => setPublishOpen(true)}>
             <Send size={14} strokeWidth={1.5} />
             Publish
@@ -718,6 +734,12 @@ export function BuilderScreen({
           onAssign={(shiftRef) => void doAssign(drawerTa, shiftRef, undefined, true)}
         />
       )}
+
+      <CoverageExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        model={fullModel}
+      />
 
       <PublishModal
         open={publishOpen}
