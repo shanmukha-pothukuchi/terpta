@@ -77,6 +77,7 @@ const OH = {
   SAME_DAY: 25, // per block already sitting on that day
   NEAR: 10, // per half hour of closeness to another block on that day
   NEAR_REACH: 120, // how far apart two blocks stop crowding each other
+  COVER: 60, // credit per half hour that is below the window's floor
 };
 const DAY_ORDER: Record<Day, number> = { M: 0, Tu: 1, W: 2, Th: 3, F: 4 };
 
@@ -937,9 +938,20 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
             if (weeklyHoursOf(ctx, load) + size / 60 > ta.maxHoursPerWeek + 1e-9) continue;
 
             count += 1;
+            // Hours a TA owes go where the window is thinnest first. This is
+            // what "at least one TA on duty" buys: not extra hours, but the
+            // ones already owed landing on the empty stretches.
+            let uncovered = 0;
+            const floor = Math.min(w.minCount ?? 0, w.requiredCount);
+            if (floor > 0) {
+              for (let i = slotIndex(w, start); i < slotIndex(w, end); i++) {
+                if (occ[i] < floor) uncovered += 1;
+              }
+            }
             let score =
               ctx.preferNotMinutes(ta.id, w.day, start, end) * OH.PREFER_NOT +
-              spreadPenalty(w.day, start, end);
+              spreadPenalty(w.day, start, end) -
+              uncovered * OH.COVER;
             if (
               style === "many_short" &&
               (blocksOf.get(ta.id) ?? []).some((b) => b.day === w.day && b.dutyTypeId === dutyId)
@@ -1007,6 +1019,10 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
         while (occ[i] < floor) {
           let chosen: { ta: SolverTaProfile; s: number; e: number; score: number } | null = null;
           for (const ta of tas) {
+            // Hours per TA is what it says: a ceiling. A window that wants
+            // more cover than the TAs owe between them stays part-covered
+            // rather than quietly handing somebody a sixth hour.
+            if ((need.get(ta.id) ?? 0) < minBlock) continue;
             const first = Math.max(w.startMin, slotStart - minBlock + SLOT);
             for (let start = first; start <= slotStart && start + minBlock <= w.endMin; start += SLOT) {
               const end = start + minBlock;
@@ -1025,13 +1041,8 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
               const load = state.loads.get(ta.id)!;
               const hours = weeklyHoursOf(ctx, load);
               if (hours + minBlock / 60 > ta.maxHoursPerWeek + 1e-9) continue;
-              // Anyone still owing office hours is served before anyone who
-              // has finished theirs: a floor should not hand a TA a fourth
-              // hour while another is short of their third. After that,
-              // whoever has the most room left in their week pays for it.
-              const owing = (need.get(ta.id) ?? 0) > 0 ? 0 : 1;
+              // Whoever has the most room left in their week goes first.
               const score =
-                owing * 1_000_000 +
                 hours * 1000 +
                 ctx.preferNotMinutes(ta.id, w.day, start, end) * OH.PREFER_NOT +
                 spreadPenalty(w.day, start, end);

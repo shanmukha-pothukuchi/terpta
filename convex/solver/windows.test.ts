@@ -335,24 +335,19 @@ describe("office-hour windows", () => {
     expect(spans[1][0] - spans[0][1]).toBeGreaterThanOrEqual(120);
   });
 
-  it("staffs a window to its floor even past what the TAs owe", () => {
+  it("never gives a TA more hours than they owe, even to cover a window", () => {
     const out = solve(
       base({
-        // 3h window, one seat, and it must never be empty.
+        // 3h window that should never be empty, but two TAs owing an hour
+        // each. Hours per TA is a ceiling, so an hour of it stays uncovered.
         shifts: [window("w-mon", "M", 600, 780, 1, 1)],
         taProfiles: [ta("a"), ta("b")],
         windowHoursPerTa: { oh: 1 },
         windowMinBlockMin: { oh: 60 },
       }),
     );
-    expect(minutes(out.windowBlocks)).toBe(180);
-    // Every half hour of the window is covered by somebody.
-    const covered = new Set<number>();
-    for (const b of out.windowBlocks) {
-      for (let m = b.startMin; m < b.endMin; m += 30) covered.add(m);
-    }
-    expect(covered.size).toBe(6);
-    // The extra hour went to whoever had room, not to a TA twice over.
+    expect(minutes(out.windowBlocks)).toBe(120);
+    expect(out.windowBlocks.map((b) => b.endMin - b.startMin)).toEqual([60, 60]);
     expect(new Set(out.windowBlocks.map((b) => b.taProfileId)).size).toBe(2);
   });
 
@@ -369,23 +364,22 @@ describe("office-hour windows", () => {
     expect(minutes(out.windowBlocks)).toBe(60);
   });
 
-  it("shares a floor between the TAs instead of loading one of them", () => {
+  it("puts the hours it does have where the window is emptiest", () => {
     const out = solve(
       base({
-        // Five hours that must never be empty, one seat, two TAs who owe an
-        // hour each: three hours have to come from somewhere.
+        // Five hours to keep covered, two hours to do it with: the two go as
+        // far apart as they can rather than sitting next to each other.
         shifts: [window("w-mon", "M", 600, 900, 1, 1)],
         taProfiles: [ta("a"), ta("b")],
         windowHoursPerTa: { oh: 1 },
         windowMinBlockMin: { oh: 60 },
       }),
     );
-    expect(minutes(out.windowBlocks)).toBe(300);
-    const byTa = new Map<string, number>();
-    for (const b of out.windowBlocks) {
-      byTa.set(b.taProfileId, (byTa.get(b.taProfileId) ?? 0) + (b.endMin - b.startMin));
-    }
-    expect([...byTa.values()].sort()).toEqual([120, 180]);
+    expect(minutes(out.windowBlocks)).toBe(120);
+    const spans = out.windowBlocks
+      .map((b) => [b.startMin, b.endMin])
+      .sort((x, y) => x[0] - y[0]);
+    expect(spans[1][0] - spans[0][1]).toBeGreaterThanOrEqual(120);
   });
 
   it("keeps a pinned block and builds the rest around it", () => {

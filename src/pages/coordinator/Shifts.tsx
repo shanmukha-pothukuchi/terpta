@@ -353,6 +353,10 @@ function ShiftFormModal({
                   className="w-16 text-right font-mono"
                 />
               </div>
+              <p className="mt-1 text-[11px] leading-[1.4] text-faint">
+                The smaller number steers where office hours land, not how
+                many are given out — hours per TA is the ceiling.
+              </p>
             </div>
           ) : (
             <div className="w-32">

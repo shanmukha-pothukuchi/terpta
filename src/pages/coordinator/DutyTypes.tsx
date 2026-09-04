@@ -450,7 +450,7 @@ function EditableRow({
               onChange={setPerTa}
               onCommit={commitPerTa}
               unit="h/wk"
-              hint="What each TA owes every week. The solver cuts blocks out of the windows until they have it."
+              hint="What each TA owes every week, and the most the generator will give them. A window asking for more cover than everyone owes is left part-covered rather than pushing somebody over this."
             />
             <div className="border-t border-line pt-2.5">
               <NumberSetting
