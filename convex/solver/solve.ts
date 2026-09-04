@@ -81,7 +81,11 @@ const DEFAULT_MIN_BLOCK = 60;
  * single prefer-not minute costs more than any amount of clumping.
  */
 const OH = {
-  PREFER_NOT: 10, // per minute the block crosses prefer_not time
+  // A minute of "not then" costs more than any amount of clumping can. The
+  // spread terms add up across every block already placed, so a merely large
+  // weight was not enough: office hours landed on an hour a TA had asked to
+  // keep, because the tidier hour was taken by somebody else.
+  PREFER_NOT: 100000, // per minute the block crosses prefer_not time
   STACK: 40, // per half hour already staffed on that day at that hour
   SAME_TIME: 12, // per half hour staffed at that hour on some other day
   SAME_DAY: 25, // per block already sitting on that day

@@ -483,6 +483,27 @@ describe("office-hour windows", () => {
     ]);
   });
 
+  it("takes the hour a TA asked to keep over the tidier one", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 600, 1020, 2), window("w-tue", "Tu", 600, 1020, 2)],
+        // "b" is free all Monday and would rather not on Tuesday afternoon.
+        taProfiles: [ta("a"), ta("b")],
+        availability: [
+          { taProfileId: "a", day: "M", startMin: 600, endMin: 1020, status: "available" },
+          { taProfileId: "b", day: "M", startMin: 600, endMin: 1020, status: "available" },
+          { taProfileId: "b", day: "Tu", startMin: 600, endMin: 1020, status: "prefer_not" },
+        ],
+        windowHoursPerTa: { oh: 2 },
+        windowMinBlockMin: { oh: 120 },
+      }),
+    );
+    // Monday is where "a" already is, so spreading would send "b" to
+    // Tuesday. Tuesday is time "b" asked to keep, and that outranks it.
+    const b = out.windowBlocks.find((x) => x.taProfileId === "b");
+    expect(b?.day).toBe("M");
+  });
+
   it("keeps a pinned block and builds the rest around it", () => {
     const out = solve(
       base({
