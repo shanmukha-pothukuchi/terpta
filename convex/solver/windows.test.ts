@@ -443,6 +443,46 @@ describe("office-hour windows", () => {
     ]);
   });
 
+  it("cuts on the quarter hour, so 12:15 to 1:45 is a block", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 600, 1020)],
+        taProfiles: [ta("a")],
+        // The only time offered: 12:15-1:45. On a half-hour grid the best
+        // that fitted was 12:30-1:30, clipping a quarter hour off each end.
+        availability: [
+          { taProfileId: "a", day: "M", startMin: 735, endMin: 825, status: "available" },
+        ],
+        windowHoursPerTa: { oh: 1.5 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    expect(out.windowBlocks).toHaveLength(1);
+    expect(out.windowBlocks[0]).toMatchObject({ startMin: 735, endMin: 825 });
+  });
+
+  it("uses the whole of two quarter-hour windows rather than an hour of each", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-tue", "Tu", 600, 1020), window("w-thu", "Th", 600, 1020)],
+        taProfiles: [ta("a")],
+        availability: [
+          { taProfileId: "a", day: "Tu", startMin: 735, endMin: 825, status: "available" },
+          { taProfileId: "a", day: "Th", startMin: 735, endMin: 825, status: "available" },
+        ],
+        windowHoursPerTa: { oh: 3 },
+        windowHoursPerTaMin: { oh: 2 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    // Ninety minutes on each of the two days she offered, not sixty.
+    expect(minutes(out.windowBlocks)).toBe(180);
+    expect(out.windowBlocks.map((b) => [b.day, b.startMin, b.endMin])).toEqual([
+      ["Tu", 735, 825],
+      ["Th", 735, 825],
+    ]);
+  });
+
   it("keeps a pinned block and builds the rest around it", () => {
     const out = solve(
       base({

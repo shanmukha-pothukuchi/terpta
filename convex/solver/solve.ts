@@ -59,8 +59,18 @@ type SyncShift = Extract<SolverShift, { kind: "weekly_sync" | "once_sync" }>;
 type AsyncShift = Extract<SolverShift, { kind: "async" }>;
 type WindowShift = Extract<SolverShift, { kind: "window" }>;
 
-/** Office-hour blocks are cut on a half-hour grid. */
-const SLOT = 30;
+/**
+ * Office-hour blocks are cut on a quarter-hour grid.
+ *
+ * Availability is painted on quarter hours, and a TA free 12:15 to 1:45 got
+ * an hour out of ninety minutes on a half-hour grid: 12:30-1:30 was the only
+ * thing that fit, so their day was clipped at both ends and their week came
+ * out split when it need not have been. Block lengths still step by the half
+ * hour; it is where a block may start that got finer.
+ */
+const SLOT = 15;
+/** Block lengths still come in half hours: 2h, 1h30, 1h. */
+const SIZE_STEP = 30;
 /** Shortest office-hour block when the duty type does not say otherwise. */
 const DEFAULT_MIN_BLOCK = 60;
 
@@ -839,6 +849,23 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
     if (load) load.weeklyMin += e - s;
   };
 
+  /** Undo a placement, so a TA's week can be re-cut and compared. */
+  const unplace = (block: SolvedWindowBlock) => {
+    const w = ctx.shiftById.get(block.windowShiftId);
+    if (!w || w.kind !== "window") return;
+    const occ = occupancy.get(w.id)!;
+    for (let i = slotIndex(w, block.startMin); i < slotIndex(w, block.endMin); i++) {
+      occ[i] -= 1;
+    }
+    const load = state.loads.get(block.taProfileId);
+    if (load) load.weeklyMin -= block.endMin - block.startMin;
+    const all = state.windowBlocks.indexOf(block);
+    if (all >= 0) state.windowBlocks.splice(all, 1);
+    const mine = blocksOf.get(block.taProfileId);
+    const at = mine?.indexOf(block) ?? -1;
+    if (mine && at >= 0) mine.splice(at, 1);
+  };
+
   // Pinned blocks first: they consume capacity and count toward the owner.
   for (const lb of ctx.input.lockedWindowBlocks ?? []) {
     const w = ctx.shiftById.get(lb.windowShiftId);
@@ -870,7 +897,7 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
       Math.max(styleOf(ta) === "few_long" ? 120 : 60, minBlock);
     const sizesOf = (ta: SolverTaProfile) => {
       const out: number[] = [];
-      for (let s = maxSizeOf(ta); s >= minBlock; s -= SLOT) out.push(s);
+      for (let s = maxSizeOf(ta); s >= minBlock; s -= SIZE_STEP) out.push(s);
       return out;
     };
 
@@ -1016,6 +1043,99 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
       place(best.w, pick.ta.id, best.s, best.e, false);
       need.set(pick.ta.id, (need.get(pick.ta.id) ?? 0) - (best.e - best.s));
     }
+
+    /**
+     * Re-cut one TA's week, now that everybody has been placed.
+     *
+     * Placing a block at a time is greedy: an hour taken early can leave a
+     * two-hour stretch it half-covers unusable, and the TA ends up with two
+     * blocks where one would have done. So each TA's own blocks come back
+     * out and are laid again from scratch — first as one block, then two,
+     * and so on — against everyone else's, which stay put. The result is
+     * kept only if it is fewer blocks, or the same number holding more
+     * hours. Nobody else's week can get worse for it.
+     */
+    const recut = (ta: SolverTaProfile) => {
+      const mine = (blocksOf.get(ta.id) ?? []).filter(
+        (b) => b.dutyTypeId === dutyId && !b.locked,
+      );
+      if (mine.length < 2) return; // one block cannot be improved on
+      const held = mine.reduce((n, b) => n + (b.endMin - b.startMin), 0);
+      const original = mine.map((b) => ({
+        w: ctx.shiftById.get(b.windowShiftId) as WindowShift,
+        s: b.startMin,
+        e: b.endMin,
+      }));
+      for (const b of mine) unplace(b);
+
+      /** Lay `limit` blocks, longest first, and say what they came to. */
+      const layOut = (limit: number): Placement[] => {
+        const chosen: Placement[] = [];
+        let budget = targetMin;
+        for (let n = 0; n < limit; n++) {
+          let best: Placement | null = null;
+          for (const size of sizesOf(ta)) {
+            if (size > budget) continue;
+            for (const w of windows) {
+              const occ = occupancy.get(w.id)!;
+              for (let start = w.startMin; start + size <= w.endMin; start += SLOT) {
+                const end = start + size;
+                let room = true;
+                for (let i = slotIndex(w, start); i < slotIndex(w, end); i++) {
+                  if (occ[i] >= w.requiredCount) {
+                    room = false;
+                    break;
+                  }
+                }
+                if (!room) continue;
+                if (chosen.some((c) => c.w.day === w.day && timeOverlap(c.s, c.e, start, end))) {
+                  continue;
+                }
+                if (blockedByDuty(dutyId, w.day, start, end)) continue;
+                if (!ctx.coversWindow(ta.id, w.day, start, end)) continue;
+                if (ctx.overlapsUnavail(ta.id, w.day, start, end)) continue;
+                if (busy(ta.id, w.day, start, end)) continue;
+                const load = state.loads.get(ta.id)!;
+                const soFar = chosen.reduce((n2, c) => n2 + (c.e - c.s), 0);
+                if (
+                  weeklyHoursOf(ctx, load) + (soFar + size) / 60 >
+                  ta.maxHoursPerWeek + 1e-9
+                ) {
+                  continue;
+                }
+                const score =
+                  ctx.preferNotMinutes(ta.id, w.day, start, end) * OH.PREFER_NOT +
+                  spreadPenalty(w.day, start, end) +
+                  (chosen.some((c) => c.w.day === w.day) ? OH.SAME_DAY : 0);
+                if (best === null || score < best.score) best = { w, s: start, e: end, score };
+              }
+            }
+            if (best) break; // longest size that fits anywhere
+          }
+          const pick = best as Placement | null;
+          if (pick === null) break;
+          chosen.push(pick);
+          budget -= pick.e - pick.s;
+        }
+        return chosen;
+      };
+
+      let winner: Placement[] | null = null;
+      for (let limit = 1; limit < mine.length; limit++) {
+        const attempt = layOut(limit);
+        const total = attempt.reduce((n, c) => n + (c.e - c.s), 0);
+        if (total < Math.max(requiredHoursMin, held)) continue;
+        winner = attempt;
+        break; // fewer blocks is the whole point; stop at the first that works
+      }
+
+      for (const p of winner ?? original) place(p.w, ta.id, p.s, p.e, false);
+      if (winner) {
+        const total = winner.reduce((n, c) => n + (c.e - c.s), 0);
+        need.set(ta.id, targetMin - total);
+      }
+    };
+    for (const ta of tas) recut(ta);
 
     /**
      * Keep the window staffed to its floor.

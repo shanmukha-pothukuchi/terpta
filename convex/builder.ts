@@ -28,8 +28,8 @@ import type {
 // ---------------------------------------------------------------------------
 /** Shortest office-hour block when a window duty type does not say. */
 const DEFAULT_MIN_BLOCK_MIN = 60;
-/** The half-hour grid office-hour blocks are cut on, as in the solver. */
-const SOLVER_SLOT = 30;
+/** The quarter-hour grid office-hour blocks are cut on, as in the solver. */
+const SOLVER_SLOT = 15;
 const DEFAULT_PERIOD_START = "2026-08-31";
 const DEFAULT_PERIOD_END = "2026-12-11";
 
