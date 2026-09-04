@@ -983,6 +983,12 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
             const load = state.loads.get(ta.id)!;
             if (weeklyHoursOf(ctx, load) + size / 60 > ta.maxHoursPerWeek + 1e-9) continue;
 
+            // An hour they do not owe never goes on an hour they asked to
+            // keep. Reaching the bottom of the range can cross prefer_not
+            // time when nothing else fits; going past it cannot.
+            const preferNot = ctx.preferNotMinutes(ta.id, w.day, start, end);
+            if (optional && preferNot > 0) continue;
+
             count += 1;
             // Hours a TA owes go where the window is thinnest first. This is
             // what "at least one TA on duty" buys: not extra hours, but the
@@ -995,7 +1001,7 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
               }
             }
             let score =
-              ctx.preferNotMinutes(ta.id, w.day, start, end) * OH.PREFER_NOT +
+              preferNot * OH.PREFER_NOT +
               spreadPenalty(w.day, start, end) -
               uncovered * OH.COVER;
             if (
@@ -1177,6 +1183,11 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
               if (!ctx.coversWindow(ta.id, w.day, start, end)) continue;
               if (ctx.overlapsUnavail(ta.id, w.day, start, end)) continue;
               if (busy(ta.id, w.day, start, end)) continue;
+              // Covering the window is the coordinator's wish; keeping an
+              // hour free is the TA's. This pass picks the slot first and the
+              // person second, so without this it finds whoever can be put on
+              // the hour they asked to keep, and puts them on it.
+              if (ctx.preferNotMinutes(ta.id, w.day, start, end) > 0) continue;
               const load = state.loads.get(ta.id)!;
               const hours = weeklyHoursOf(ctx, load);
               if (hours + minBlock / 60 > ta.maxHoursPerWeek + 1e-9) continue;

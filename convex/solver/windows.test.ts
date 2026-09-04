@@ -504,6 +504,42 @@ describe("office-hour windows", () => {
     expect(b?.day).toBe("M");
   });
 
+  it("will not spend an hour a TA asked to keep on an hour they do not owe", () => {
+    const out = solve(
+      base({
+        // A window that should never be empty, and a TA who is plainly free
+        // for one hour of it and would rather not for another.
+        shifts: [window("w-mon", "M", 600, 1080, 1, 1)],
+        taProfiles: [ta("a")],
+        availability: [
+          { taProfileId: "a", day: "M", startMin: 600, endMin: 660, status: "available" },
+          { taProfileId: "a", day: "M", startMin: 1020, endMin: 1080, status: "prefer_not" },
+        ],
+        windowHoursPerTa: { oh: 2 },
+        windowHoursPerTaMin: { oh: 1 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    // The hour they owe, and not the one they asked to keep — the floor does
+    // not get to spend it.
+    expect(out.windowBlocks.map((b) => [b.startMin, b.endMin])).toEqual([[600, 660]]);
+  });
+
+  it("still crosses prefer_not time when that is the only way to what they owe", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 600, 1080)],
+        taProfiles: [ta("a")],
+        availability: [
+          { taProfileId: "a", day: "M", startMin: 1020, endMin: 1080, status: "prefer_not" },
+        ],
+        windowHoursPerTa: { oh: 1 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    expect(out.windowBlocks.map((b) => [b.startMin, b.endMin])).toEqual([[1020, 1080]]);
+  });
+
   it("keeps a pinned block and builds the rest around it", () => {
     const out = solve(
       base({
