@@ -189,6 +189,23 @@ export default defineSchema({
     .index("by_period", ["periodRef"])
     .index("by_user_period", ["userRef", "periodRef"]),
 
+  /**
+   * A subscribable calendar address. The secret is the whole credential —
+   * long, random and read-only — so a calendar app can keep asking for the
+   * schedule without carrying a session. Rotating it is how one is revoked.
+   */
+  calendarFeeds: defineTable({
+    secret: v.string(),
+    kind: v.union(v.literal("ta"), v.literal("course")),
+    /** Set for a TA's own schedule feed. */
+    taProfileRef: v.optional(v.id("taProfiles")),
+    periodRef: v.id("staffingPeriods"),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_secret", ["secret"])
+    .index("by_period", ["periodRef"]),
+
   availabilityBlocks: defineTable({
     taProfileRef: v.id("taProfiles"),
     day: dayValidator,

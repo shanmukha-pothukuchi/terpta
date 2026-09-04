@@ -170,6 +170,53 @@ http.route({
 });
 
 // ---------------------------------------------------------------------------
+// GET /calendar.ics?feed=…  — the subscribable version
+//
+// The address is the credential: no session, read-only, revoked by rotating
+// it. Answers 200 with an empty calendar rather than 404 when a period is not
+// published yet, so a calendar app that was pointed at it early keeps asking
+// and fills in the day the schedule goes out.
+// ---------------------------------------------------------------------------
+
+http.route({
+  path: "/calendar.ics",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const secret = url.searchParams.get("feed") ?? "";
+    const feed = await ctx.runQuery(internal.calendarFeeds.resolve, { secret });
+    if (!feed) return new Response("Unknown calendar feed", { status: 404 });
+
+    let data: ScheduleData | null = null;
+    if (!feed.published) {
+      data = { taName: "TerpTA", taEmail: "", events: [] };
+    } else if (feed.kind === "ta" && feed.taProfileRef) {
+      data = await ctx.runQuery(internal.exportTokens.scheduleForExport, {
+        taProfileRef: feed.taProfileRef,
+      });
+    } else if (feed.kind === "course") {
+      data = await ctx.runQuery(internal.exportTokens.courseCalendarForExport, {
+        periodRef: feed.periodRef,
+      });
+    }
+    if (!data) return new Response("Calendar not found", { status: 404 });
+
+    return new Response(buildIcs(data), {
+      status: 200,
+      headers: {
+        "Content-Type": "text/calendar; charset=utf-8",
+        // Named inline: a subscription is not a download, and a client that
+        // saves it as a file is doing the thing this route exists to avoid.
+        "Content-Disposition": 'inline; filename="terpta.ics"',
+        // Calendar apps poll on their own schedule; this only keeps a proxy
+        // from serving yesterday's for the rest of the day.
+        "Cache-Control": "public, max-age=900",
+      },
+    });
+  }),
+});
+
+// ---------------------------------------------------------------------------
 // GET /hour-logs.csv?token=…&from=YYYY-MM-DD&to=YYYY-MM-DD
 // ---------------------------------------------------------------------------
 

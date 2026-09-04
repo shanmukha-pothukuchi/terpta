@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react";
+import { useMutation } from "convex/react";
 import { Check, Copy } from "lucide-react";
+import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 import { Button, Modal, toast } from "../../../components/ui";
+import { CalendarFeed } from "../../../components/CalendarFeed";
+import { errorMessage } from "../../../lib/errorMessage";
 import type { DayCode } from "../../../lib/format";
 import { formatCoverage, type CoverageGroup } from "../../../lib/coverageExport";
 import type { BuilderModel } from "./model";
@@ -9,6 +14,8 @@ export interface CoverageExportModalProps {
   open: boolean;
   onClose: () => void;
   model: BuilderModel;
+  /** Absent in previews, which have no Convex to ask for a feed address. */
+  periodRef?: Id<"staffingPeriods">;
 }
 
 /**
@@ -18,8 +25,29 @@ export interface CoverageExportModalProps {
  * hours while assigning discussions should not quietly hide them from the
  * page students end up reading.
  */
-export function CoverageExportModal({ open, onClose, model }: CoverageExportModalProps) {
+export function CoverageExportModal({
+  open,
+  onClose,
+  model,
+  periodRef,
+}: CoverageExportModalProps) {
   const [copied, setCopied] = useState(false);
+  const [feed, setFeed] = useState<string | undefined>(undefined);
+  const [feedBusy, setFeedBusy] = useState(false);
+  const createFeed = useMutation(api.calendarFeeds.forPeriod);
+  const rotateFeed = useMutation(api.calendarFeeds.rotate);
+
+  const askForFeed = (rotate: boolean) => {
+    if (!periodRef) return;
+    setFeedBusy(true);
+    const call = rotate
+      ? rotateFeed({ kind: "course" as const, periodRef })
+      : createFeed({ periodRef });
+    call
+      .then((r) => setFeed(r.secret))
+      .catch((e) => toast(errorMessage(e), { tone: "error" }))
+      .finally(() => setFeedBusy(false));
+  };
 
   const text = useMemo(() => {
     const byDuty = new Map<string, CoverageGroup>();
@@ -92,6 +120,20 @@ export function CoverageExportModal({ open, onClose, model }: CoverageExportModa
             className="w-full resize-y rounded-[10px] border border-line bg-page p-3 font-mono text-[12.5px] leading-[1.6] text-ink outline-none"
           />
         )}
+        {periodRef ? (
+          <div className="border-t border-line pt-3">
+            <div className="mb-2 text-[12.5px] font-medium text-ink">
+              Or a calendar to subscribe to
+            </div>
+            <CalendarFeed
+              secret={feed}
+              loading={feedBusy}
+              onCreate={() => askForFeed(false)}
+              onRotate={feed ? () => askForFeed(true) : undefined}
+              description="Every staffed hour of the course, as a calendar students can add once. It follows the published schedule, so a change turns up without them doing anything."
+            />
+          </div>
+        ) : null}
       </div>
     </Modal>
   );

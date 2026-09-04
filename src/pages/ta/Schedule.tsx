@@ -46,6 +46,7 @@ import {
   Card,
   EmptyState,
   IconButton,
+  Modal,
   PageHeader,
   ProgressBar,
   Spinner,
@@ -64,6 +65,7 @@ import {
   weekRange,
 } from "../../lib/week";
 import SwapRequestModal, { type SwapModalTarget } from "./SwapRequestModal";
+import { CalendarFeed } from "../../components/CalendarFeed";
 
 type ScheduleResult = FunctionReturnType<typeof api.ta.getSchedule>;
 export type ScheduleItem = ScheduleResult["items"][number];
@@ -880,7 +882,6 @@ export default function TaSchedule() {
     api.ta.getProfile,
     pick.periodId ? { periodRef: pick.periodId } : "skip",
   );
-  const mint = useMutation(api.exportTokens.mint);
   // Read swaps back from the database rather than tracking them locally, so a
   // request the coordinator resolves stops reading "Pending" on its own.
   const mySwaps = useQuery(
@@ -896,6 +897,10 @@ export default function TaSchedule() {
   const [swapTarget, setSwapTarget] = useState<SwapModalTarget | null>(null);
   const [swapOpen, setSwapOpen] = useState(false);
   const [minting, setMinting] = useState(false);
+  const [feedOpen, setFeedOpen] = useState(false);
+  const [feedSecret, setFeedSecret] = useState<string | undefined>(undefined);
+  const createFeed = useMutation(api.calendarFeeds.mine);
+  const rotateFeed = useMutation(api.calendarFeeds.rotate);
   const [weekStart, setWeekStart] = useState(thisMonday);
   // Kept per profile: a TA in two courses filters each one separately.
   const hiddenDuties = useHiddenIds(
@@ -940,28 +945,23 @@ export default function TaSchedule() {
     );
   }
 
-  const addToCalendar = async () => {
+  // A downloaded .ics is a photograph of today's schedule. Asking for the
+  // feed address instead means a swap approved in October turns up in the
+  // calendar entry the TA added in September.
+  const askForFeed = (rotate: boolean) => {
     if (!pick.taProfileId) return;
     setMinting(true);
-    try {
-      const token = await mint({ kind: "schedule", taProfileRef: pick.taProfileId });
-      const env = import.meta.env as Record<string, string | undefined>;
-      const base =
-        env.VITE_CONVEX_SITE_URL ??
-        (env.VITE_CONVEX_URL ?? "").replace(".convex.cloud", ".convex.site");
-      window.open(
-        `${base}/schedule.ics?token=${encodeURIComponent(token)}`,
-        "_blank",
-        "noopener",
-      );
-      toast("Calendar file ready — check your downloads");
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Could not create calendar link", {
-        tone: "error",
-      });
-    } finally {
-      setMinting(false);
-    }
+    const call = rotate
+      ? rotateFeed({ kind: "ta" as const, taProfileRef: pick.taProfileId })
+      : createFeed({ taProfileRef: pick.taProfileId });
+    call
+      .then((r) => setFeedSecret(r.secret))
+      .catch((err) =>
+        toast(err instanceof Error ? err.message : "Could not create the calendar link", {
+          tone: "error",
+        }),
+      )
+      .finally(() => setMinting(false));
   };
 
   return (
@@ -1041,9 +1041,25 @@ export default function TaSchedule() {
         hiddenDuties={hiddenDuties.hidden}
         onToggleDuty={hiddenDuties.toggle}
         onShowAllDuties={hiddenDuties.showAll}
-        onAddToCalendar={() => void addToCalendar()}
-        addingToCalendar={minting}
+        onAddToCalendar={() => setFeedOpen(true)}
+        addingToCalendar={false}
       />
+      <Modal
+        open={feedOpen}
+        onClose={() => setFeedOpen(false)}
+        title="Add to your calendar"
+        width={460}
+        footer={<Button onClick={() => setFeedOpen(false)}>Close</Button>}
+      >
+        <CalendarFeed
+          secret={feedSecret}
+          loading={minting}
+          onCreate={() => askForFeed(false)}
+          onRotate={feedSecret ? () => askForFeed(true) : undefined}
+          description="Your shifts, as a calendar you add once. Swaps, covers and anything the coordinator republishes turn up on their own."
+        />
+      </Modal>
+
       <SwapRequestModal
         open={swapOpen}
         onClose={() => setSwapOpen(false)}

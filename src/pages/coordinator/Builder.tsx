@@ -739,6 +739,7 @@ export function BuilderScreen({
         open={exportOpen}
         onClose={() => setExportOpen(false)}
         model={fullModel}
+        periodRef={fixture ? undefined : periodRef}
       />
 
       <PublishModal

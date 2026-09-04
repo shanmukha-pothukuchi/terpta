@@ -11,6 +11,7 @@
 import type * as admin from "../admin.js";
 import type * as authkit from "../authkit.js";
 import type * as builder from "../builder.js";
+import type * as calendarFeeds from "../calendarFeeds.js";
 import type * as coverage from "../coverage.js";
 import type * as dutyTypes from "../dutyTypes.js";
 import type * as emails from "../emails.js";
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   authkit: typeof authkit;
   builder: typeof builder;
+  calendarFeeds: typeof calendarFeeds;
   coverage: typeof coverage;
   dutyTypes: typeof dutyTypes;
   emails: typeof emails;

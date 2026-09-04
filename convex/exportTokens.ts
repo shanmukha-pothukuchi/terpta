@@ -167,6 +167,102 @@ const scheduleEventValidator = v.object({
   dueDate: v.optional(v.string()),
 });
 
+/**
+ * Every staffed hour of a course, for the feed students subscribe to.
+ *
+ * Names go in the description rather than the title: a student scanning
+ * their week wants to know office hours are on, and which TA is holding
+ * them is the detail behind it.
+ */
+export const courseCalendarForExport = internalQuery({
+  args: { periodRef: v.id("staffingPeriods") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      taName: v.string(),
+      taEmail: v.string(),
+      events: v.array(scheduleEventValidator),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const period = await ctx.db.get(args.periodRef);
+    if (!period) return null;
+    const course = await ctx.db.get(period.courseRef);
+
+    const shifts = await ctx.db
+      .query("shifts")
+      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
+      .collect();
+
+    const dutyNames = new Map<string, string>();
+    for (const duty of await ctx.db
+      .query("dutyTypes")
+      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
+      .collect()) {
+      dutyNames.set(duty._id as string, duty.name);
+    }
+
+    const events = [];
+    for (const shift of shifts) {
+      const rows = await ctx.db
+        .query("assignments")
+        .withIndex("by_shift", (q) => q.eq("shiftRef", shift._id))
+        .collect();
+      // Nobody is on it, so nobody should be told to turn up to it.
+      if (rows.length === 0) continue;
+
+      const names: string[] = [];
+      for (const row of rows) {
+        const profile = await ctx.db.get(row.taProfileRef);
+        const user = profile ? await ctx.db.get(profile.userRef) : null;
+        const name = user?.preferredName || user?.name;
+        if (name) names.push(name);
+      }
+      names.sort();
+
+      let title = dutyNames.get(shift.dutyTypeRef as string) ?? "Shift";
+      if (shift.sectionRef) {
+        const section = await ctx.db.get(shift.sectionRef);
+        if (section) title = `${title} ${section.sectionNumber}`;
+      } else if (shift.description) {
+        title = shift.description;
+      }
+
+      const description = names.length > 0 ? `With ${names.join(", ")}` : undefined;
+      if (shift.recurrence === "weekly" && shift.day && shift.startMin !== undefined) {
+        events.push({
+          uid: `${shift._id}@terpta`,
+          kind: "weekly" as const,
+          title,
+          ...(description ? { description } : {}),
+          day: shift.day,
+          startMin: shift.startMin,
+          endMin: shift.endMin ?? shift.startMin,
+          startDate: shift.startDate ?? "2026-08-31",
+          endDate: shift.endDate ?? "2026-12-11",
+        });
+      } else if (shift.recurrence === "once" && shift.date && shift.startMin !== undefined) {
+        events.push({
+          uid: `${shift._id}@terpta`,
+          kind: "once" as const,
+          title,
+          ...(description ? { description } : {}),
+          date: shift.date,
+          startMin: shift.startMin,
+          endMin: shift.endMin ?? shift.startMin,
+        });
+      }
+      // Async pools have no hour to sit in a student's calendar.
+    }
+
+    return {
+      taName: `${course?.courseId ?? "Course"} staff`,
+      taEmail: "",
+      events,
+    };
+  },
+});
+
 export const scheduleForExport = internalQuery({
   args: { taProfileRef: v.id("taProfiles") },
   returns: v.union(
