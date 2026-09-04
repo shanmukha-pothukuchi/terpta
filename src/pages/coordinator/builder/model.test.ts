@@ -4,14 +4,11 @@ import { shortNameMap } from "./model";
 const shortsOf = (names: string[]) => names.map((n) => shortNameMap(names).get(n));
 
 describe("shortNameMap", () => {
-  it("leaves unambiguous names as first names", () => {
-    expect(shortsOf(["Priya Shah", "Daniel Chen"])).toEqual(["Priya", "Daniel"]);
-  });
-
-  it("adds a last initial only to the names that collide", () => {
+  it("names everybody with a last initial, sharing a first name or not", () => {
+    expect(shortsOf(["Priya Shah", "Daniel Chen"])).toEqual(["Priya S.", "Daniel C."]);
     expect(
       shortsOf(["Sreeram Pothukuchi", "Sreeram Vaidyanathan", "Daniel Chen"]),
-    ).toEqual(["Sreeram P.", "Sreeram V.", "Daniel"]);
+    ).toEqual(["Sreeram P.", "Sreeram V.", "Daniel C."]);
   });
 
   it("falls back to the whole name when an initial is not enough", () => {
@@ -37,6 +34,6 @@ describe("shortNameMap", () => {
 
   it("treats case and spacing as noise", () => {
     expect(shortsOf(["priya shah", "Priya Kumar"])).toEqual(["priya S.", "Priya K."]);
-    expect(shortNameMap(["  Daniel   Chen  "]).get("  Daniel   Chen  ")).toBe("Daniel");
+    expect(shortNameMap(["  Daniel   Chen  "]).get("  Daniel   Chen  ")).toBe("Daniel C.");
   });
 });

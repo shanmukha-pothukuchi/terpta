@@ -85,7 +85,7 @@ export function AssignChip({
         e.stopPropagation();
         onOpen?.();
       }}
-      className="group inline-flex cursor-grab select-none items-center gap-[5px] whitespace-nowrap rounded-[6px] text-ink transition-shadow duration-150"
+      className="group inline-flex max-w-full cursor-grab select-none items-center gap-[5px] whitespace-nowrap rounded-[6px] text-ink transition-shadow duration-150"
       style={{
         height: size === "sm" ? 20 : 22,
         padding: "0 3px 0 7px",
@@ -95,7 +95,9 @@ export function AssignChip({
         opacity: isDragging ? 0.35 : 1,
       }}
     >
-      <span>{name}</span>
+      {/* Names carry a last initial now, so a narrow lane truncates rather
+          than pushing the lock and remove buttons out of the block. */}
+      <span className="min-w-0 truncate">{name}</span>
       {/* Not struck through: a line through a name you just dropped in reads
           as "that did not take", when it means "they are away that day". The
           calendar mark plus the amber ring says the state without denying the

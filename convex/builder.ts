@@ -762,7 +762,9 @@ export const officeHourGaps = query({
         const user = await ctx.db.get(profile.userRef);
         out.push({
           taProfileRef: profile._id,
-          name: user?.preferredName || user?.name || "Unknown",
+          // The full name: the board shortens it to "First L." itself, and a
+          // preferred name has no surname to take an initial from.
+          name: user?.name || user?.preferredName || "Unknown",
           dutyTypeRef: duty._id,
           dutyTypeName: duty.name,
           heldHours: round1(heldMin / 60),

@@ -203,33 +203,26 @@ function withInitial(name: string): string {
 }
 
 /**
- * The shortest name that still says who somebody is.
+ * How a TA is named anywhere the board is tight for room.
  *
- * A board of first names is easy to read right up until two TAs share one,
- * at which point "Sreeram" on two chips is worse than useless. Everyone
- * unambiguous keeps their first name; the ones who collide gain a last
- * initial, and if that still collides they get their whole name. Nobody
- * else's chip grows to pay for it.
+ * "First L." — a first name alone is not an identification, and a
+ * coordinator reading a chip should not have to remember which Priya is on
+ * Tuesdays. A TA with no surname to take an initial from keeps their one
+ * word, and if two people still come out identical they get their whole
+ * names rather than a chip that names either of them.
  */
 export function shortNameMap(names: Iterable<string>): Map<string, string> {
   const all = [...new Set(names)].filter((n) => n.trim().length > 0);
-  const count = (values: string[]) => {
-    const m = new Map<string, number>();
-    for (const v of values) m.set(v.toLowerCase(), (m.get(v.toLowerCase()) ?? 0) + 1);
-    return m;
-  };
-
-  const firstCounts = count(all.map(firstName));
   const draft = new Map<string, string>();
-  for (const name of all) {
-    const first = firstName(name);
-    draft.set(name, (firstCounts.get(first.toLowerCase()) ?? 0) > 1 ? withInitial(name) : first);
-  }
+  for (const name of all) draft.set(name, withInitial(name));
 
-  // Two Sreeram P.s, or a TA with no surname to take an initial from.
-  const draftCounts = count([...draft.values()]);
+  // Two Priya S.s, or two people with one word and the same word.
+  const counts = new Map<string, number>();
+  for (const short of draft.values()) {
+    counts.set(short.toLowerCase(), (counts.get(short.toLowerCase()) ?? 0) + 1);
+  }
   for (const [name, short] of draft) {
-    if ((draftCounts.get(short.toLowerCase()) ?? 0) > 1) draft.set(name, name);
+    if ((counts.get(short.toLowerCase()) ?? 0) > 1) draft.set(name, name);
   }
   return draft;
 }
