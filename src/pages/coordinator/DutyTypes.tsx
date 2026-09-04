@@ -32,7 +32,8 @@ export interface DutyTypeFields {
   name: string;
   mode: "sync" | "async" | "window";
   color: string;
-  defaultHoursCredit: number;
+  /** Only a fallback for async pools; nothing on this screen asks for it. */
+  defaultHoursCredit?: number;
   /** "window" only: office hours each TA must hold per week. */
   hoursPerTa?: number;
   /** Sync only: most shifts of this kind the solver gives one TA. 0 = no cap. */
@@ -342,13 +343,11 @@ function EditableRow({
   onDelete: () => void;
 }) {
   const [name, setName] = useState(dt.name);
-  const [credit, setCredit] = useState(String(dt.defaultHoursCredit));
   const [perTa, setPerTa] = useState(String(dt.hoursPerTa ?? 2));
   const [cap, setCap] = useState(dt.maxPerTa === undefined ? "" : String(dt.maxPerTa));
   const minBlock = dt.minBlockMinutes ?? DEFAULT_MIN_BLOCK;
   const [minText, setMinText] = useState(String(minBlock / 60));
   useEffect(() => setName(dt.name), [dt.name]);
-  useEffect(() => setCredit(String(dt.defaultHoursCredit)), [dt.defaultHoursCredit]);
   useEffect(() => setPerTa(String(dt.hoursPerTa ?? 2)), [dt.hoursPerTa]);
   useEffect(() => setCap(dt.maxPerTa === undefined ? "" : String(dt.maxPerTa)), [dt.maxPerTa]);
   useEffect(
@@ -364,14 +363,6 @@ function EditableRow({
       return;
     }
     if (trimmed !== dt.name) onUpdate({ name: trimmed });
-  };
-  const commitCredit = () => {
-    const n = Number(credit);
-    if (!Number.isFinite(n) || n < 0) {
-      setCredit(String(dt.defaultHoursCredit));
-      return;
-    }
-    if (n !== dt.defaultHoursCredit) onUpdate({ defaultHoursCredit: n });
   };
   const commitPerTa = () => {
     const n = Number(perTa);
@@ -411,16 +402,13 @@ function EditableRow({
     });
   };
 
-  const hourText = (n: number) => (Number.isInteger(n) ? String(n) : String(n));
   const summary = isWindow
-    ? `${hourText(dt.hoursPerTa ?? 2)}h/TA · ${minBlock % 60 === 0 ? `${minBlock / 60}h` : `${minBlock}m`} min${
+    ? `${dt.hoursPerTa ?? 2}h/TA · ${minBlock % 60 === 0 ? `${minBlock / 60}h` : `${minBlock}m`} min${
         avoidCount > 0 ? ` · ${avoidCount}` : ""
       }`
-    : dt.mode === "sync"
-      ? `${hourText(dt.defaultHoursCredit)}h credit${
-          dt.maxPerTa !== undefined && dt.maxPerTa > 0 ? ` · max ${dt.maxPerTa}` : ""
-        }`
-      : `${hourText(dt.defaultHoursCredit)}h credit`;
+    : dt.maxPerTa !== undefined && dt.maxPerTa > 0
+      ? `max ${dt.maxPerTa} per TA`
+      : "no limit";
 
   return (
     <div
@@ -444,6 +432,10 @@ function EditableRow({
         }
       />
       <ColorSwatchPicker value={dt.color} onChange={(color) => onUpdate({ color })} />
+      {dt.mode === "async" ? (
+        // Hours for pooled work live on each pool, not on the kind of work.
+        <span className="text-[12px] text-faint">Set on each pool</span>
+      ) : (
       <SettingsPopover
         summary={summary}
         title={`${dt.name} settings`}
@@ -506,37 +498,20 @@ function EditableRow({
             </div>
           </>
         ) : (
-          <>
-            <NumberSetting
-              label="Hours credit"
-              value={credit}
-              onChange={setCredit}
-              onCommit={commitCredit}
-              unit="h"
-              hint={
-                dt.mode === "async"
-                  ? "What a pool of this kind is worth when a shift does not say otherwise."
-                  : "What one of these shifts counts for toward a TA's weekly hours."
-              }
-            />
-            {dt.mode === "sync" ? (
-              <div className="border-t border-line pt-2.5">
-                {/* "One discussion per TA": the solver stops at the cap; a
-                    coordinator placing someone by hand is not stopped. */}
-                <NumberSetting
-                  label="Max per TA"
-                  value={cap}
-                  onChange={setCap}
-                  onCommit={commitCap}
-                  step={1}
-                  placeholder="none"
-                  hint="The most shifts of this kind the generator gives one TA. Blank means no limit; placing someone by hand is never blocked."
-                />
-              </div>
-            ) : null}
-          </>
+          /* "One discussion per TA": the solver stops at the cap; a
+             coordinator placing someone by hand is not stopped. */
+          <NumberSetting
+            label="Max per TA"
+            value={cap}
+            onChange={setCap}
+            onCommit={commitCap}
+            step={1}
+            placeholder="none"
+            hint="The most shifts of this kind the generator gives one TA. Blank means no limit; placing someone by hand is never blocked."
+          />
         )}
       </SettingsPopover>
+      )}
       <IconButton
         variant="danger"
         onClick={onDelete}
@@ -559,18 +534,9 @@ function DraftRow({
   const [name, setName] = useState("");
   const [mode, setMode] = useState<"sync" | "async" | "window">("sync");
   const [color, setColor] = useState(DUTY_COLORS[1]);
-  const [credit, setCredit] = useState("1");
 
   const save = () => {
-    const n = Number(credit);
-    const safe = Number.isFinite(n) && n >= 0 ? n : 1;
-    onSave({
-      name: name.trim(),
-      mode,
-      color,
-      defaultHoursCredit: mode === "window" ? 0 : safe,
-      ...(mode === "window" ? { hoursPerTa: safe } : {}),
-    });
+    onSave({ name: name.trim(), mode, color });
   };
 
   return (
@@ -601,22 +567,11 @@ function DraftRow({
       </div>
       <ModeToggle value={mode} onChange={setMode} />
       <ColorSwatchPicker value={color} onChange={setColor} />
-      {/* The one number needed up front; the rest is set from the row's
-          settings once the duty type exists. */}
-      <div className="flex items-center gap-1.5">
-        <Input
-          value={credit}
-          onChange={(e) => setCredit(e.target.value)}
-          type="number"
-          min={0}
-          step={0.5}
-          aria-label={mode === "window" ? "Office hours per TA per week" : "Default hours credit"}
-          className="h-7 w-16 text-right font-mono"
-        />
-        <span className="whitespace-nowrap text-[12px] text-faint">
-          {mode === "window" ? "h/TA" : "h"}
-        </span>
-      </div>
+      {/* Nothing else is needed to create one: a timed shift is worth the
+          time it runs, and the rest is set from the row once it exists. */}
+      <span className="text-[12px] text-faint">
+        {mode === "async" ? "Set on each pool" : "set after adding"}
+      </span>
       <div />
     </div>
   );
@@ -650,7 +605,7 @@ export function DutyTypesView({
       <div>
         <PageHeader
           title="Duty types"
-          description="The kinds of work in this period — discussions, office hours, grading — with colors and default hour credits."
+          description="The kinds of work in this period — discussions, office hours, grading — with their colors and rules."
         />
         <EmptyState
           icon={Tags}
@@ -669,7 +624,7 @@ export function DutyTypesView({
     <div className="mx-auto max-w-3xl">
       <PageHeader
         title="Duty types"
-        description="The kinds of work in this period — discussions, office hours, grading — with colors and default hour credits."
+        description="The kinds of work in this period — discussions, office hours, grading — with their colors and rules."
         actions={
           <Button onClick={() => setAdding(true)} disabled={adding || dutyTypes === undefined}>
             <Plus size={14} strokeWidth={1.5} aria-hidden />

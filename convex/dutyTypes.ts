@@ -81,7 +81,12 @@ export const create = mutation({
     name: v.string(),
     mode: modeValidator,
     color: v.string(),
-    defaultHoursCredit: v.number(),
+    /**
+     * Only ever a fallback for an async pool that does not state its own
+     * hours: a timed shift is worth the time it runs, so nothing asks for
+     * this any more.
+     */
+    defaultHoursCredit: v.optional(v.number()),
     hoursPerTa: v.optional(v.number()),
     maxPerTa: v.optional(v.number()),
     minBlockMinutes: v.optional(v.number()),
@@ -92,7 +97,7 @@ export const create = mutation({
   handler: async (ctx, args) => {
     await requireCoordinator(ctx, args.periodRef);
     if (args.name.trim().length === 0) throw new ConvexError("Name is required");
-    if (args.defaultHoursCredit < 0) {
+    if ((args.defaultHoursCredit ?? 0) < 0) {
       throw new ConvexError("defaultHoursCredit must be >= 0");
     }
     return await ctx.db.insert("dutyTypes", {
@@ -100,7 +105,7 @@ export const create = mutation({
       name: args.name.trim(),
       mode: args.mode,
       color: args.color,
-      defaultHoursCredit: args.defaultHoursCredit,
+      defaultHoursCredit: args.defaultHoursCredit ?? 0,
       ...(args.mode === "window"
         ? {
             hoursPerTa: args.hoursPerTa ?? 2,
