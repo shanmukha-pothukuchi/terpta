@@ -46,6 +46,42 @@ function Legend({ swatch, label }: { swatch: ReactNode; label: string }) {
   );
 }
 
+/**
+ * The recorded stand-in for one date, on the block beside the roster.
+ *
+ * A date-scoped cover is not an assignment, so it had no chip: the only
+ * trace on the board was a badge in the header, easy to miss beside a chip
+ * for the TA who is not coming. The person who is coming deserves the more
+ * visible of the two. Not draggable: it is one date, not a seat.
+ */
+function StandInChip({
+  name,
+  note,
+  onOpen,
+}: {
+  name: string;
+  note: string;
+  onOpen: () => void;
+}) {
+  return (
+    <span
+      title={note}
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen();
+      }}
+      className="inline-flex h-5 max-w-full cursor-pointer select-none items-center gap-[4px] whitespace-nowrap rounded-[6px] px-[7px] text-[11.5px] text-ok-text"
+      style={{
+        background: "rgba(61,214,140,0.10)",
+        boxShadow: "inset 0 0 0 1px rgba(61,214,140,0.45)",
+      }}
+    >
+      <UserRoundCheck size={11} strokeWidth={1.5} className="shrink-0" aria-hidden />
+      <span className="min-w-0 truncate">{name}</span>
+    </span>
+  );
+}
+
 function hourLabel(min: number, first: boolean): string {
   const h24 = Math.floor(min / 60);
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
@@ -285,6 +321,15 @@ function Slot({
         )}
       </div>
       <div className="flex min-w-0 flex-wrap gap-1">
+        {/* First, so a block with room for one row of chips shows the person
+            who is coming; the one who is not is on the badge and the panel. */}
+        {coverage?.coverTaRef && recordedCover ? (
+          <StandInChip
+            name={recordedCover}
+            note={`${coverage.coverName} covers for ${coverage.absentName} on ${coverage.date} · that date only`}
+            onOpen={() => onOpenTa(coverage.coverTaRef as Id<"taProfiles">)}
+          />
+        ) : null}
         {roster.map(({ assignment: a, absence, away }) => {
           const conflicts = model.conflictsByAssignment.get(a._id as string) ?? [];
           const conflict = conflicts.length > 0;

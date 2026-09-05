@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { CalendarOff, Lock, LockOpen, Search, X } from "lucide-react";
+import { CalendarOff, Lock, LockOpen, Search, UserRoundCheck, X } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
@@ -30,8 +30,15 @@ export interface ShiftDrawerProps {
   onOpenTa: (taProfileRef: Id<"taProfiles">) => void;
   /** Put this TA on the shift for the rest of term. */
   onAssign: (taProfileRef: Id<"taProfiles">) => void;
-  /** Fill the open hole for one date. Absent when there is no hole this week. */
+  /**
+   * Stand this TA in for one date. Absent when nobody on the shift is away
+   * this week; present, and replacing the current stand-in, when somebody is.
+   */
   onCoverDate?: (taProfileRef: Id<"taProfiles">) => void;
+  /** Give the current stand-in the shift every week. */
+  onMakeCoverPermanent?: (taProfileRef: Id<"taProfiles">) => void;
+  /** Take the current stand-in back off the date, leaving the hole open. */
+  onClearCover?: () => void;
   onToggleLock: (assignmentRef: Id<"assignments">) => void;
   onRemoveAssignment: (assignmentRef: Id<"assignments">) => void;
   /** DEV harness override — skips the Convex query when provided. */
@@ -92,6 +99,8 @@ export function ShiftDrawer({
   onOpenTa,
   onAssign,
   onCoverDate,
+  onMakeCoverPermanent,
+  onClearCover,
   onToggleLock,
   onRemoveAssignment,
   fixtureCandidates,
@@ -104,7 +113,7 @@ export function ShiftDrawer({
 
   const [entered, setEntered] = useState(false);
   const [filter, setFilter] = useState("");
-  /** "week" only offered while a one-date hole is open on this shift. */
+  /** "date" only offered while somebody on this shift is away this week. */
   const [scope, setScope] = useState<"term" | "date">(onCoverDate ? "date" : "term");
   useEffect(() => {
     if (!onCoverDate) setScope("term");
@@ -163,10 +172,16 @@ export function ShiftDrawer({
   const shown = useMemo(() => {
     if (!candidates) return [];
     const q = filter.trim().toLowerCase();
+    // The stand-in has a row of their own above; listing them again would
+    // offer to cover a date they already cover.
+    const covering = String(coverage?.coverTaRef ?? "");
     return candidates.filter(
-      (c) => !c.assigned && (q === "" || c.name.toLowerCase().includes(q)),
+      (c) =>
+        !c.assigned &&
+        String(c.taProfileRef) !== covering &&
+        (q === "" || c.name.toLowerCase().includes(q)),
     );
-  }, [candidates, filter]);
+  }, [candidates, filter, coverage?.coverTaRef]);
 
   const title = section
     ? `Section ${section.sectionNumber}`
@@ -339,6 +354,51 @@ export function ShiftDrawer({
                 );
               })
             )}
+            {/* The stand-in for the date, distinct from the seats: one date,
+                not the term. "Assign" here is the one place it becomes the
+                term — the cover is the same person, kept. */}
+            {coverage?.coverTaRef && coverage.coverName ? (
+              <div
+                className="flex items-center gap-2 rounded-[9px] px-3 py-2"
+                style={{
+                  background: "rgba(61,214,140,0.08)",
+                  boxShadow: "inset 0 0 0 1px rgba(61,214,140,0.35)",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => onOpenTa(coverage.coverTaRef as Id<"taProfiles">)}
+                  className="min-w-0 flex-1 truncate text-left text-[12.5px] text-ink hover:underline"
+                >
+                  {coverage.coverName}
+                </button>
+                <span className="flex shrink-0 items-center gap-1 text-[11px] text-ok-text">
+                  <UserRoundCheck size={11} strokeWidth={1.5} aria-hidden />
+                  Covers {formatDate(coverage.date)}
+                </span>
+                {onMakeCoverPermanent ? (
+                  <button
+                    type="button"
+                    title="Give them this shift every week"
+                    onClick={() => onMakeCoverPermanent(coverage.coverTaRef as Id<"taProfiles">)}
+                    className="h-6 shrink-0 cursor-pointer whitespace-nowrap rounded-[7px] bg-ink px-2 text-[11.5px] font-medium text-page transition-colors hover:bg-white"
+                  >
+                    Assign
+                  </button>
+                ) : null}
+                {onClearCover ? (
+                  <button
+                    type="button"
+                    onClick={onClearCover}
+                    title="Take them off this date"
+                    aria-label={`Take ${coverage.coverName} off ${formatDate(coverage.date)}`}
+                    className="flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[#F4A3AE] hover:bg-[rgba(226,24,51,0.18)]"
+                  >
+                    <X size={12} strokeWidth={1.5} />
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="flex flex-col gap-2">

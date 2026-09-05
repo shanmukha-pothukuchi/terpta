@@ -344,10 +344,12 @@ export function BuilderScreen({
    */
   const doCover = async (cov: WeekCoverage, taProfileRef: Id<"taProfiles">) => {
     const name = model.taShort(taProfileRef);
+    // Replacing a stand-in puts the previous one back on Undo, not nobody.
+    const previous = cov.coverTaRef ?? undefined;
     try {
       await setCoverMut({ coverageRef: cov._id, coverTaRef: taProfileRef });
       pushUndo(async () => {
-        await setCoverMut({ coverageRef: cov._id });
+        await setCoverMut({ coverageRef: cov._id, coverTaRef: previous });
       });
       toast(
         `${name} covers ${shiftLabel(cov.shiftRef)} on ${formatDate(cov.date)} — that date only`,
@@ -403,6 +405,21 @@ export function BuilderScreen({
       );
     } catch (e) {
       err(e, "Could not set the cover");
+    }
+  };
+
+  /** Take the stand-in back off the date; the hole stays open. */
+  const doClearCover = async (cov: WeekCoverage) => {
+    const previous = cov.coverTaRef ?? undefined;
+    if (!previous) return;
+    try {
+      await setCoverMut({ coverageRef: cov._id });
+      pushUndo(async () => {
+        await setCoverMut({ coverageRef: cov._id, coverTaRef: previous });
+      });
+      toast(`${model.taShort(previous)} no longer covers ${formatDate(cov.date)}`);
+    } catch (e) {
+      err(e, "Could not clear the cover");
     }
   };
 
@@ -628,19 +645,18 @@ export function BuilderScreen({
   })).filter((d) => d.count > 0);
   const openShift =
     drawerShift !== null ? shiftById(drawerShift as string) : undefined;
-  // Only offer "this date only" when there is a hole to fill on it; otherwise
-  // the panel would quietly write a one-week cover nobody asked for.
+  // Only offer "this date only" while somebody on the shift is away this
+  // week; otherwise the panel would quietly write a one-week cover nobody
+  // asked for. A hole already filled still counts: the next "Cover" swaps the
+  // stand-in, and the panel keeps saying "Cover" rather than flipping to
+  // "Assign" the moment one is picked.
   const coverageOfOpenShift = openShift
     ? coverageFor(week, openShift._id, openShift.day)
     : undefined;
-  const openShiftCoverage =
-    coverageOfOpenShift && coverageOfOpenShift.coverTaRef === null
-      ? coverageOfOpenShift
-      : undefined;
   // Or a holder away that day with nothing written down yet: the same hole,
   // one record short.
   const openShiftAwayHole =
-    openShift && !openShiftCoverage
+    openShift && !coverageOfOpenShift
       ? awayHole(week, openShift, model.assignmentsByShift.get(openShift._id as string) ?? [])
       : undefined;
 
@@ -787,11 +803,21 @@ export function BuilderScreen({
           onOpenTa={setDrawerTa}
           onAssign={(ta) => void doAssign(ta, openShift._id, undefined, true)}
           onCoverDate={
-            openShiftCoverage
-              ? (ta) => void doCover(openShiftCoverage, ta)
+            coverageOfOpenShift
+              ? (ta) => void doCover(coverageOfOpenShift, ta)
               : openShiftAwayHole
                 ? (ta) => void doCoverAway(openShift._id, openShiftAwayHole, ta)
                 : undefined
+          }
+          onMakeCoverPermanent={
+            coverageOfOpenShift?.coverTaRef
+              ? (ta) => void makeCoverPermanent(coverageOfOpenShift, ta)
+              : undefined
+          }
+          onClearCover={
+            coverageOfOpenShift?.coverTaRef
+              ? () => void doClearCover(coverageOfOpenShift)
+              : undefined
           }
           onToggleLock={(ref) => void onToggleLock(ref)}
           onRemoveAssignment={(ref) => void doUnassign(ref)}
