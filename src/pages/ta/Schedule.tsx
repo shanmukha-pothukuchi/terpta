@@ -1018,6 +1018,7 @@ export default function TaSchedule() {
                         ),
                         day: o.shift.recurrence === "weekly" ? o.shift.day : undefined,
                         onceDate: o.shift.recurrence === "once" ? o.shift.date : undefined,
+                        date: o.date,
                       }
                     : null,
               }))

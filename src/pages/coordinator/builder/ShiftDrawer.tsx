@@ -14,7 +14,7 @@ import {
 } from "../../../lib/format";
 import { dateOfDayInWeek } from "../../../lib/week";
 import { Spinner } from "../../../components/ui";
-import { coverageFor, isAwayOnDay, type WeekOverlay } from "./weekOverlay";
+import { awayHole, coverageFor, isAwayOnDay, type WeekOverlay } from "./weekOverlay";
 import { roomOf, type BuilderModel, type ShiftRow } from "./model";
 
 export type ShiftCandidate = FunctionReturnType<
@@ -131,6 +131,8 @@ export function ShiftDrawer({
   const missing = Math.max(0, shift.requiredCount - assigned.length);
   const room = roomOf(model, shift);
   const coverage = coverageFor(week, shift._id, shift.day);
+  // A holder away by their own calendar, with nothing written down yet.
+  const hole = coverage ? undefined : awayHole(week, shift, assigned);
   const dormant = week?.dormantShiftIds.has(shift._id as string) ?? false;
   const occurrenceDate =
     shift.date ??
@@ -225,6 +227,15 @@ export function ShiftDrawer({
               {coverage.coverName
                 ? `${coverage.coverName} is covering for ${coverage.absentName} on ${formatDate(coverage.date)}.`
                 : `${coverage.absentName} is away on ${formatDate(coverage.date)} — nobody is covering yet.`}
+            </div>
+          ) : hole ? (
+            <div
+              className="rounded-[9px] px-3 py-2 text-[12.5px]"
+              style={{ background: "rgba(245,165,36,0.12)", color: "#F7C566" }}
+            >
+              {model.taShort(hole.absentTaRef as Id<"taProfiles">)} is away on{" "}
+              {formatDate(hole.date)} — nobody is covering yet. A TA added for that
+              date stands in once; the shift stays theirs.
             </div>
           ) : null}
 

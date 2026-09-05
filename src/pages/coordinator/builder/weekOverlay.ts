@@ -115,6 +115,62 @@ export function coverageDropTarget(
   return coverage;
 }
 
+/** A seat whose holder is away on the date, with no record of a stand-in yet. */
+export interface AwayHole {
+  absentTaRef: Id<"taProfiles"> | string;
+  date: string;
+}
+
+/**
+ * The seat on a shift that is empty this week because its holder marked the
+ * date as an exception, and nobody has been recorded as standing in.
+ *
+ * Distinct from an open coverage: a coverage is a hole the coordinator (or an
+ * approved swap) already wrote down; this is one the TA's own calendar made,
+ * which no record exists for yet.
+ */
+export function awayHole(
+  overlay: WeekOverlay | null,
+  shift: SeatShift,
+  assignments: Array<{ taProfileRef: Id<"taProfiles"> | string }>,
+): AwayHole | undefined {
+  const seats = weekSeats(overlay, shift, assignments);
+  if (!seats.date) return undefined;
+  const date = seats.date;
+  const recorded = new Set(
+    (overlay?.coverages ?? [])
+      .filter((c) => String(c.shiftRef) === String(shift._id) && c.date === date)
+      .map((c) => String(c.absentTaRef)),
+  );
+  const hole = seats.away.find(
+    (a) => a.reason !== null && !recorded.has(String(a.taProfileRef)),
+  );
+  return hole ? { absentTaRef: hole.taProfileRef, date } : undefined;
+}
+
+/**
+ * The away seat a drop should stand in for, or undefined to fall through.
+ *
+ * Same reasoning as {@link coverageDropTarget}: a name from the roster onto a
+ * slot whose holder is away that day means "stand in that day". Before this,
+ * such a drop fell through to the standing roster and put the TA on the shift
+ * every week — the one thing the coordinator was not asking for. Moving an
+ * existing chip still edits the roster, and a TA already on the shift (the
+ * away one included) has no seat to stand in for.
+ */
+export function awayDropTarget(
+  overlay: WeekOverlay | null,
+  shift: SeatShift,
+  assignments: Array<{ taProfileRef: Id<"taProfiles"> | string }>,
+  taProfileRef: Id<"taProfiles"> | string,
+  opts: { isMove: boolean },
+): AwayHole | undefined {
+  if (opts.isMove) return undefined;
+  const id = String(taProfileRef);
+  if (assignments.some((a) => String(a.taProfileRef) === id)) return undefined;
+  return awayHole(overlay, shift, assignments);
+}
+
 /**
  * Is this TA away on the day this shift meets?
  *

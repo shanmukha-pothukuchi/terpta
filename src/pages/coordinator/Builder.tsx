@@ -52,10 +52,13 @@ import { DiagnosticsPanel, type OfficeHourGap } from "./builder/DiagnosticsPanel
 import { RosterPanel } from "./builder/RosterPanel";
 import { CoveragePanel } from "./builder/CoveragePanel";
 import {
+  awayDropTarget,
+  awayHole,
   awayTaIds,
   buildWeekOverlay,
   coverageDropTarget,
   coverageFor,
+  type AwayHole,
   type WeekCoverage,
   type WeekOverlayInput,
 } from "./builder/weekOverlay";
@@ -159,6 +162,8 @@ export function BuilderScreen({
   );
 
   const setCoverMut = useMutation(api.coverage.setCover);
+  const openCoverMut = useMutation(api.coverage.open);
+  const removeCoverMut = useMutation(api.coverage.remove);
   const overrideAssignment = useMutation(api.builder.overrideAssignment);
   const removeAssignment = useMutation(api.builder.removeAssignment);
   const toggleLockMut = useMutation(api.builder.toggleLock);
@@ -360,13 +365,59 @@ export function BuilderScreen({
     }
   };
 
-  /** Promote a one-date stand-in to the standing assignment for the shift. */
-  const makeCoverPermanent = async (
-    cov: WeekCoverage,
+  /**
+   * Stand in for a TA who is away on a date, when no record of the hole
+   * exists yet.
+   *
+   * An away TA who made no swap request left nothing to drop a name into, so
+   * the drop used to fall through to the standing roster and put the TA on
+   * the shift every week. This writes the one-date record the drop means.
+   */
+  const doCoverAway = async (
+    shiftRef: Id<"shifts">,
+    hole: AwayHole,
     taProfileRef: Id<"taProfiles">,
   ) => {
+    const name = model.taShort(taProfileRef);
     try {
-      await setCoverMut({ coverageRef: cov._id });
+      const coverageRef = await openCoverMut({
+        shiftRef,
+        date: hole.date,
+        absentTaRef: hole.absentTaRef as Id<"taProfiles">,
+        coverTaRef: taProfileRef,
+      });
+      pushUndo(async () => {
+        await removeCoverMut({ coverageRef });
+      });
+      toast(
+        `${name} covers ${shiftLabel(shiftRef)} on ${formatDate(hole.date)} — that date only`,
+        {
+          tone: "success",
+          duration: 8000,
+          link: {
+            label: "Make it permanent",
+            onClick: () =>
+              void makeCoverPermanent({ _id: coverageRef, shiftRef }, taProfileRef, true),
+          },
+        },
+      );
+    } catch (e) {
+      err(e, "Could not set the cover");
+    }
+  };
+
+  /**
+   * Promote a one-date stand-in to the standing assignment for the shift.
+   * A hole this screen opened itself is taken back off the week with it.
+   */
+  const makeCoverPermanent = async (
+    cov: Pick<WeekCoverage, "_id" | "shiftRef">,
+    taProfileRef: Id<"taProfiles">,
+    openedHere = false,
+  ) => {
+    try {
+      if (openedHere) await removeCoverMut({ coverageRef: cov._id });
+      else await setCoverMut({ coverageRef: cov._id });
       await doAssign(taProfileRef, cov.shiftRef);
       toast(
         `${model.taShort(taProfileRef)} now has ${shiftLabel(cov.shiftRef)} every week`,
@@ -546,6 +597,21 @@ export function BuilderScreen({
       void doCover(open, payload.taProfileRef);
       return;
     }
+    // Same gesture onto a seat whose holder is away that day with no record
+    // yet: stand in for the day, never join the shift for the term.
+    const away = target
+      ? awayDropTarget(
+          week,
+          target,
+          model.assignmentsByShift.get(targetShiftRef as string) ?? [],
+          payload.taProfileRef,
+          { isMove: source !== undefined },
+        )
+      : undefined;
+    if (away) {
+      void doCoverAway(targetShiftRef, away, payload.taProfileRef);
+      return;
+    }
 
     void doAssign(payload.taProfileRef, targetShiftRef, source);
   };
@@ -570,6 +636,12 @@ export function BuilderScreen({
   const openShiftCoverage =
     coverageOfOpenShift && coverageOfOpenShift.coverTaRef === null
       ? coverageOfOpenShift
+      : undefined;
+  // Or a holder away that day with nothing written down yet: the same hole,
+  // one record short.
+  const openShiftAwayHole =
+    openShift && !openShiftCoverage
+      ? awayHole(week, openShift, model.assignmentsByShift.get(openShift._id as string) ?? [])
       : undefined;
 
   let conflictCount = 0;
@@ -717,7 +789,9 @@ export function BuilderScreen({
           onCoverDate={
             openShiftCoverage
               ? (ta) => void doCover(openShiftCoverage, ta)
-              : undefined
+              : openShiftAwayHole
+                ? (ta) => void doCoverAway(openShift._id, openShiftAwayHole, ta)
+                : undefined
           }
           onToggleLock={(ref) => void onToggleLock(ref)}
           onRemoveAssignment={(ref) => void doUnassign(ref)}

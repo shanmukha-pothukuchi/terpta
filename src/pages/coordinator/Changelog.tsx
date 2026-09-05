@@ -35,6 +35,8 @@ const ACTION_LABEL: Record<string, string> = {
   "coverage.fill": "Picked a one-off fill-in",
   "coverage.autofill": "Auto-filled a one-off slot",
   "coverage.clear": "Cleared a one-off fill-in",
+  "coverage.open": "Covered an away TA for one date",
+  "coverage.remove": "Took back a one-date cover",
 };
 
 const SWAP_TONE: Record<SwapRow["status"], BadgeTone> = {

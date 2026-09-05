@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
+  awayDropTarget,
+  awayHole,
   awayTaIds,
   buildWeekOverlay,
   coverageDropTarget,
@@ -216,5 +218,61 @@ describe("weekSeats", () => {
 
   it("is inert without a week", () => {
     expect(weekSeats(null, shift, [priya]).short).toBe(0);
+  });
+});
+
+describe("awayHole / awayDropTarget", () => {
+  const overlay = buildWeekOverlay(input);
+  const wedOh = { _id: sid("shift-oh-wed"), recurrence: "weekly" as const, day: "W" as const, requiredCount: 1 };
+  const monOh = { _id: sid("shift-oh-mon"), recurrence: "weekly" as const, day: "M" as const, requiredCount: 1 };
+  const priya = [{ taProfileRef: tid("ta-priya") }];
+
+  it("finds the seat of a TA away on the shift's date, with no record yet", () => {
+    expect(awayHole(overlay, wedOh, priya)).toEqual({
+      absentTaRef: "ta-priya",
+      date: "2026-09-16",
+    });
+  });
+
+  it("is nothing on a day the TA is not away", () => {
+    expect(awayHole(overlay, monOh, priya)).toBeUndefined();
+  });
+
+  it("is nothing once a coverage records the absence", () => {
+    const withRecord = buildWeekOverlay({
+      ...input,
+      coverages: [
+        {
+          _id: cid("cov-2"),
+          shiftRef: sid("shift-oh-wed"),
+          date: "2026-09-16",
+          day: "W",
+          absentTaRef: tid("ta-priya"),
+          absentName: "Priya Shah",
+          coverTaRef: null,
+          coverName: null,
+        },
+      ],
+    });
+    expect(awayHole(withRecord, wedOh, priya)).toBeUndefined();
+  });
+
+  it("is nothing with no week selected", () => {
+    expect(awayHole(null, wedOh, priya)).toBeUndefined();
+  });
+
+  it("stands a roster drop in for the away TA that date", () => {
+    expect(awayDropTarget(overlay, wedOh, priya, tid("ta-ravi"), { isMove: false })).toEqual({
+      absentTaRef: "ta-priya",
+      date: "2026-09-16",
+    });
+  });
+
+  it("leaves a moved chip to the standing roster", () => {
+    expect(awayDropTarget(overlay, wedOh, priya, tid("ta-ravi"), { isMove: true })).toBeUndefined();
+  });
+
+  it("does not let the away TA stand in for themselves", () => {
+    expect(awayDropTarget(overlay, wedOh, priya, tid("ta-priya"), { isMove: false })).toBeUndefined();
   });
 });

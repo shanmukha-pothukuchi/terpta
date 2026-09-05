@@ -227,6 +227,145 @@ export const candidates = query({
   },
 });
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Open a one-off hole for a TA who is away on a date, and optionally fill it
+ * in the same step.
+ *
+ * Until now a hole only came from an approved date-scoped swap. A TA who
+ * marked the date as an exception on their availability made no request, so
+ * there was no hole to drop a stand-in into — and a name dropped on the slot
+ * joined it every week for the rest of term. This is the record that drop
+ * writes instead. Idempotent on (shift, date, absent TA): opening twice fills
+ * the same hole rather than making a second one.
+ */
+export const open = mutation({
+  args: {
+    shiftRef: v.id("shifts"),
+    date: v.string(),
+    absentTaRef: v.id("taProfiles"),
+    coverTaRef: v.optional(v.id("taProfiles")),
+  },
+  returns: v.id("shiftCoverages"),
+  handler: async (ctx, args) => {
+    const shift = await ctx.db.get(args.shiftRef);
+    if (!shift) throw new ConvexError("Shift not found");
+    const { user } = await requireCoordinator(ctx, shift.periodRef);
+    if (!ISO_DATE.test(args.date)) throw new ConvexError("date must be ISO YYYY-MM-DD");
+
+    // The shift has to actually meet on that date.
+    if (shift.recurrence === "weekly") {
+      if (dayOfIso(args.date) !== shift.day) {
+        throw new ConvexError("This shift does not meet on that day");
+      }
+      if (
+        (shift.startDate !== undefined && args.date < shift.startDate) ||
+        (shift.endDate !== undefined && args.date > shift.endDate)
+      ) {
+        throw new ConvexError("This shift does not run on that date");
+      }
+    } else if (shift.recurrence === "once") {
+      if (shift.date !== args.date) throw new ConvexError("This event is not on that date");
+    } else {
+      throw new ConvexError("Only a shift with a meeting time can be covered");
+    }
+
+    const seats = await ctx.db
+      .query("assignments")
+      .withIndex("by_shift", (q) => q.eq("shiftRef", shift._id))
+      .collect();
+    if (!seats.some((a) => a.taProfileRef === args.absentTaRef)) {
+      throw new ConvexError("That TA is not on this shift");
+    }
+    if (args.coverTaRef !== undefined) {
+      if (args.coverTaRef === args.absentTaRef) {
+        throw new ConvexError("That TA is the one who is out");
+      }
+      const cover = await ctx.db.get(args.coverTaRef);
+      if (!cover || cover.periodRef !== shift.periodRef) {
+        throw new ConvexError("That TA is not in this course");
+      }
+    }
+
+    const existing = (
+      await ctx.db
+        .query("shiftCoverages")
+        .withIndex("by_shift_date", (q) => q.eq("shiftRef", shift._id).eq("date", args.date))
+        .collect()
+    ).find((c) => c.absentTaRef === args.absentTaRef);
+
+    let coverageRef: Id<"shiftCoverages">;
+    if (existing) {
+      coverageRef = existing._id;
+      await ctx.db.patch(existing._id, {
+        coverTaRef: args.coverTaRef,
+        filledBy: args.coverTaRef ? ("manual" as const) : undefined,
+      });
+    } else {
+      coverageRef = await ctx.db.insert("shiftCoverages", {
+        periodRef: shift.periodRef,
+        shiftRef: shift._id,
+        date: args.date,
+        absentTaRef: args.absentTaRef,
+        ...(args.coverTaRef !== undefined
+          ? { coverTaRef: args.coverTaRef, filledBy: "manual" as const }
+          : {}),
+      });
+    }
+    await ctx.db.insert("changeLog", {
+      periodRef: shift.periodRef,
+      actorRef: user._id,
+      action: "coverage.open",
+      before: existing
+        ? { coverageRef, coverTaRef: existing.coverTaRef ?? null }
+        : null,
+      after: {
+        coverageRef,
+        shiftRef: shift._id,
+        date: args.date,
+        absentTaRef: args.absentTaRef,
+        coverTaRef: args.coverTaRef ?? null,
+      },
+      at: Date.now(),
+    });
+    return coverageRef;
+  },
+});
+
+/**
+ * Take a hole back off the week. The inverse of `open`, for Undo; a hole an
+ * approved swap made stays, since the request it answers is still approved.
+ */
+export const remove = mutation({
+  args: { coverageRef: v.id("shiftCoverages") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const coverage = await ctx.db.get(args.coverageRef);
+    if (!coverage) return null;
+    const { user } = await requireCoordinator(ctx, coverage.periodRef);
+    if (coverage.swapRef !== undefined) {
+      throw new ConvexError("This cover came from an approved swap; clear the fill-in instead");
+    }
+    await ctx.db.delete(coverage._id);
+    await ctx.db.insert("changeLog", {
+      periodRef: coverage.periodRef,
+      actorRef: user._id,
+      action: "coverage.remove",
+      before: {
+        coverageRef: coverage._id,
+        shiftRef: coverage.shiftRef,
+        date: coverage.date,
+        absentTaRef: coverage.absentTaRef,
+        coverTaRef: coverage.coverTaRef ?? null,
+      },
+      after: null,
+      at: Date.now(),
+    });
+    return null;
+  },
+});
+
 /** Pick the fill-in by hand, or clear it by passing no TA. */
 export const setCover = mutation({
   args: {

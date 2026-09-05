@@ -62,6 +62,13 @@ export function dateOfDayInWeek(weekStart: string, day: DayCode): string {
   return addDaysIso(weekStart, DAY_CODES.indexOf(day));
 }
 
+/** The first date on or after `from` that falls on `day`. */
+export function nextDateOfDay(day: DayCode, from = todayIso()): string {
+  const monday = mondayOf(from);
+  const candidate = dateOfDayInWeek(monday, day);
+  return candidate >= from ? candidate : addDaysIso(candidate, 7);
+}
+
 export interface WeekRange {
   /** Monday, inclusive. */
   start: string;

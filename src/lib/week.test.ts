@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addDaysIso,
   dateOfDayInWeek,
+  nextDateOfDay,
   dayOfIso,
   isDateInRange,
   mondayOf,
@@ -130,5 +131,20 @@ describe("labels", () => {
     expect(relativeWeekLabel("2026-09-07", from)).toBe("last week");
     expect(relativeWeekLabel("2026-10-05", from)).toBe("in 3 weeks");
     expect(relativeWeekLabel("2026-08-24", from)).toBe("3 weeks ago");
+  });
+});
+
+describe("nextDateOfDay", () => {
+  // 2026-09-16 is a Wednesday.
+  it("is today when today is that day", () => {
+    expect(nextDateOfDay("W", "2026-09-16")).toBe("2026-09-16");
+  });
+
+  it("is later this week when the day is still ahead", () => {
+    expect(nextDateOfDay("F", "2026-09-16")).toBe("2026-09-18");
+  });
+
+  it("rolls to next week once the day has passed", () => {
+    expect(nextDateOfDay("M", "2026-09-16")).toBe("2026-09-21");
   });
 });

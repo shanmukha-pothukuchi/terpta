@@ -10,7 +10,7 @@ import { ArrowLeftRight } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { DAY_LABELS, type DayCode } from "../../lib/format";
-import { dayOfIso, todayIso } from "../../lib/week";
+import { dayOfIso, nextDateOfDay, todayIso } from "../../lib/week";
 import {
   Button,
   Input,
@@ -46,6 +46,21 @@ export interface SwapModalTarget {
   day?: DayCode;
   /** The date of a one-off event, which is the only date it can be covered on. */
   onceDate?: string;
+  /** The meeting the request was opened from, when it was a dated one. */
+  date?: string;
+}
+
+/**
+ * The date to offer first. The meeting the TA clicked on is the one they
+ * mean; failing that, the next time the shift meets. Asking for it again in
+ * the dialog was a second question with an answer already given.
+ */
+export function initialSwapDate(target: SwapModalTarget | null, today = todayIso()): string {
+  if (!target) return "";
+  if (target.onceDate) return target.onceDate;
+  if (target.date && target.date >= today) return target.date;
+  if (target.day) return nextDateOfDay(target.day, today);
+  return "";
 }
 
 export interface SwapRequestModalViewProps {
@@ -87,8 +102,7 @@ export function SwapRequestModalView({
       setSuggested("");
       // One date is the common case and the reversible one, so it leads.
       setScope("date");
-      setDate(target?.onceDate ?? "");
-      setDate("");
+      setDate(initialSwapDate(target));
       setError(null);
       setBusy(false);
     }
