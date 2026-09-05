@@ -200,6 +200,13 @@ export default defineSchema({
     /** Set for a TA's own schedule feed. */
     taProfileRef: v.optional(v.id("taProfiles")),
     periodRef: v.id("staffingPeriods"),
+    /** What a coordinator called a course feed, e.g. "Office hours only". */
+    label: v.optional(v.string()),
+    /**
+     * Which kinds of work a course feed carries. Absent means all of them,
+     * including any duty type made after the link was.
+     */
+    dutyTypeRefs: v.optional(v.array(v.id("dutyTypes"))),
     createdBy: v.id("users"),
     createdAt: v.number(),
   })

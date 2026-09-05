@@ -175,7 +175,13 @@ const scheduleEventValidator = v.object({
  * them is the detail behind it.
  */
 export const courseCalendarForExport = internalQuery({
-  args: { periodRef: v.id("staffingPeriods") },
+  args: {
+    periodRef: v.id("staffingPeriods"),
+    /** Only these kinds of work; absent for all of them. */
+    dutyTypeRefs: v.optional(v.array(v.id("dutyTypes"))),
+    /** What the coordinator called the link, for the calendar's name. */
+    label: v.optional(v.string()),
+  },
   returns: v.union(
     v.null(),
     v.object({
@@ -202,8 +208,13 @@ export const courseCalendarForExport = internalQuery({
       dutyNames.set(duty._id as string, duty.name);
     }
 
+    const carried =
+      args.dutyTypeRefs === undefined ? null : new Set<string>(args.dutyTypeRefs);
+
     const events = [];
     for (const shift of shifts) {
+      // Not what this link was made to carry.
+      if (carried && !carried.has(shift.dutyTypeRef as string)) continue;
       const rows = await ctx.db
         .query("assignments")
         .withIndex("by_shift", (q) => q.eq("shiftRef", shift._id))
@@ -255,8 +266,9 @@ export const courseCalendarForExport = internalQuery({
       // Async pools have no hour to sit in a student's calendar.
     }
 
+    const courseId = course?.courseId ?? "Course";
     return {
-      taName: `${course?.courseId ?? "Course"} staff`,
+      taName: args.label ? `${courseId} ${args.label}` : `${courseId} staff`,
       taEmail: "",
       events,
     };

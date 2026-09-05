@@ -11,7 +11,7 @@ import {
 } from "@dnd-kit/core";
 import {
   CalendarOff,
-  ClipboardList,
+  CalendarPlus,
   RefreshCw,
   Send,
   TriangleAlert,
@@ -62,7 +62,7 @@ import {
 import { TaDrawer } from "./builder/TaDrawer";
 import { ShiftDrawer, type ShiftCandidate } from "./builder/ShiftDrawer";
 import { PublishModal } from "./builder/PublishModal";
-import { CoverageExportModal } from "./builder/CoverageExportModal";
+import { CourseCalendarModal } from "./builder/CourseCalendarModal";
 
 /** Fixture bundle so a DEV preview harness can render without auth/Convex. */
 export interface BuilderFixture {
@@ -169,7 +169,7 @@ export function BuilderScreen({
   const [drawerTa, setDrawerTa] = useState<Id<"taProfiles"> | null>(initialDrawerTa);
   const [drawerShift, setDrawerShift] = useState<Id<"shifts"> | null>(initialDrawerShift);
   const [publishOpen, setPublishOpen] = useState(initialPublishOpen);
-  const [exportOpen, setExportOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [addedTaIds, setAddedTaIds] = useState<string[]>([]);
@@ -621,11 +621,10 @@ export function BuilderScreen({
             {hasAssignments ? "Regenerate" : "Generate"}
             <span className="text-faint">· keeps {lockCount} locks</span>
           </Button>
-          {/* The week as text for a syllabus or a course post, off the whole
-              board rather than off what is currently shown. */}
-          <Button variant="secondary" onClick={() => setExportOpen(true)}>
-            <ClipboardList size={14} strokeWidth={1.5} className="text-muted" />
-            Hours to publish
+          {/* Calendars students subscribe to, one per audience. */}
+          <Button variant="secondary" onClick={() => setCalendarOpen(true)}>
+            <CalendarPlus size={14} strokeWidth={1.5} className="text-muted" />
+            Add to calendar
           </Button>
           <Button variant="primary" onClick={() => setPublishOpen(true)}>
             <Send size={14} strokeWidth={1.5} />
@@ -735,11 +734,11 @@ export function BuilderScreen({
         />
       )}
 
-      <CoverageExportModal
-        open={exportOpen}
-        onClose={() => setExportOpen(false)}
-        model={fullModel}
+      <CourseCalendarModal
+        open={calendarOpen}
+        onClose={() => setCalendarOpen(false)}
         periodRef={fixture ? undefined : periodRef}
+        dutyTypes={data.dutyTypes!}
       />
 
       <PublishModal

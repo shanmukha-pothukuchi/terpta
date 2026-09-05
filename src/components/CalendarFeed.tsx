@@ -22,7 +22,9 @@ export interface CalendarFeedProps {
   onCreate: () => void;
   onRotate?: () => void;
   /** What the feed holds, for the sentence above the address. */
-  description: string;
+  description?: string;
+  /** Say that the link is the credential. Off when a list of links says it once. */
+  note?: boolean;
 }
 
 /**
@@ -38,6 +40,7 @@ export function CalendarFeed({
   onCreate,
   onRotate,
   description,
+  note = true,
 }: CalendarFeedProps) {
   const [copied, setCopied] = useState(false);
   const [confirmingRotate, setConfirmingRotate] = useState(false);
@@ -45,7 +48,9 @@ export function CalendarFeed({
   if (!secret) {
     return (
       <div className="flex flex-col gap-2">
-        <p className="text-[12.5px] leading-[1.5] text-muted">{description}</p>
+        {description ? (
+          <p className="text-[12.5px] leading-[1.5] text-muted">{description}</p>
+        ) : null}
         <Button variant="secondary" onClick={onCreate} loading={loading} className="w-fit">
           Create a calendar link
         </Button>
@@ -70,7 +75,9 @@ export function CalendarFeed({
 
   return (
     <div className="flex flex-col gap-2.5">
-      <p className="text-[12.5px] leading-[1.5] text-muted">{description}</p>
+      {description ? (
+        <p className="text-[12.5px] leading-[1.5] text-muted">{description}</p>
+      ) : null}
       <input
         readOnly
         value={url}
@@ -104,11 +111,13 @@ export function CalendarFeed({
           Google Calendar
         </a>
       </div>
-      <p className="text-[11.5px] leading-[1.45] text-faint">
-        Anyone with this link can read the calendar, so treat it like a private
-        address. Calendar apps check it on their own schedule — usually every
-        few hours — so a change can take a little while to appear.
-      </p>
+      {note ? (
+        <p className="text-[11.5px] leading-[1.45] text-faint">
+          Anyone with this link can read the calendar, so treat it like a private
+          address. Calendar apps check it on their own schedule — usually every
+          few hours — so a change can take a little while to appear.
+        </p>
+      ) : null}
       {onRotate ? (
         confirmingRotate ? (
           <div className="flex flex-wrap items-center gap-2 rounded-[9px] border border-line bg-[rgba(245,165,36,0.08)] px-3 py-2">

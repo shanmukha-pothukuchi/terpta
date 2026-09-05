@@ -197,6 +197,8 @@ http.route({
     } else if (feed.kind === "course") {
       data = await ctx.runQuery(internal.exportTokens.courseCalendarForExport, {
         periodRef: feed.periodRef,
+        ...(feed.dutyTypeRefs !== undefined ? { dutyTypeRefs: feed.dutyTypeRefs } : {}),
+        ...(feed.label !== undefined ? { label: feed.label } : {}),
       });
     }
     if (!data) return new Response("Calendar not found", { status: 404 });
