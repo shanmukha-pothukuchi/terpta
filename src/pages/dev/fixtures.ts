@@ -20,6 +20,7 @@ import type { HourLogRow, TaTotalsRow } from "../coordinator/Hours";
 import type { PaletteTa } from "../../components/CommandPalette";
 import type { PeriodEntry } from "../../lib/period";
 import type { ScheduleViewProps } from "../ta/Schedule";
+import type { ChangelogViewProps } from "../coordinator/Changelog";
 import type { HoursViewProps as TaHoursViewProps, WeekOccurrence as TaWeekOccurrence } from "../ta/Hours";
 import type { PeriodSetupViewProps } from "../coordinator/PeriodSetup";
 import type { CoveragePanelViewProps } from "../coordinator/builder/CoveragePanel";
@@ -1093,5 +1094,121 @@ export const weekExceptions: NonNullable<ScheduleViewProps["weekExceptions"]> = 
     startDate: "2026-09-17",
     endDate: "2026-09-17",
     reason: "Conference travel",
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* Changelog — both sides of the course in one list                    */
+/* ------------------------------------------------------------------ */
+
+const DAY = 24 * 60 * 60 * 1000;
+
+export const changeEntries: NonNullable<ChangelogViewProps["entries"]> = [
+  {
+    _id: fid("changeLog:c1"),
+    _creationTime: T0,
+    periodRef: fid("staffingPeriods:p1"),
+    actorRef: fid("users:u-daniel"),
+    actorRole: "ta",
+    action: "swap.request",
+    before: null,
+    after: {
+      swapRef: "sw-1",
+      shift: "Discussion 0104 · W 11:00",
+      scope: "date",
+      date: "2026-10-08",
+      reason: "Doctor's appointment",
+    },
+    at: T0 + 4 * DAY,
+    actorName: "Daniel Chen",
+  },
+  {
+    _id: fid("changeLog:c2"),
+    _creationTime: T0,
+    periodRef: fid("staffingPeriods:p1"),
+    actorRef: fid("users:u-sarah"),
+    actorRole: "ta",
+    action: "hours.unsubmit",
+    before: { weekStart: "2026-09-28", entries: 3, hours: 6.5 },
+    after: null,
+    at: T0 + 3 * DAY,
+    actorName: "Sarah Kim",
+  },
+  {
+    _id: fid("changeLog:c3"),
+    _creationTime: T0,
+    periodRef: fid("staffingPeriods:p1"),
+    actorRef: fid("users:u-coord"),
+    actorRole: undefined,
+    action: "assignment.override",
+    before: { taProfileRef: "tp-alex", locked: false },
+    after: { taProfileRef: "tp-priya", locked: true },
+    at: T0 + 2 * DAY,
+    actorName: "Jordan Lee",
+  },
+  {
+    _id: fid("changeLog:c4"),
+    _creationTime: T0,
+    periodRef: fid("staffingPeriods:p1"),
+    actorRef: fid("users:u-priya"),
+    actorRole: "ta",
+    action: "availability.submit",
+    before: null,
+    after: { blocks: 14 },
+    at: T0 + DAY,
+    actorName: "Priya Shah",
+  },
+  {
+    _id: fid("changeLog:c5"),
+    _creationTime: T0,
+    periodRef: fid("staffingPeriods:p1"),
+    actorRef: fid("users:u-coord"),
+    actorRole: undefined,
+    action: "period.publish",
+    before: { status: "generated" },
+    after: { status: "published" },
+    at: T0,
+    actorName: "Jordan Lee",
+  },
+];
+
+export const changeSwaps: NonNullable<ChangelogViewProps["swaps"]> = [
+  {
+    _id: fid("swapRequests:sw-1"),
+    _creationTime: T0 + 4 * DAY,
+    status: "pending",
+    reason: "Doctor's appointment",
+    scope: "date",
+    swapDate: "2026-10-08",
+    requesterName: "Daniel Chen",
+    suggestedTaName: "Priya Shah",
+    assignmentGone: false,
+    dutyTypeName: "Discussion",
+    description: "Discussion 0104",
+    recurrence: "weekly",
+    day: "W",
+    startMin: 660,
+    endMin: 710,
+    date: undefined,
+    dueDate: undefined,
+  },
+  {
+    _id: fid("swapRequests:sw-2"),
+    _creationTime: T0 + DAY,
+    status: "approved",
+    reason: "Class moved this term",
+    scope: "permanent",
+    swapDate: undefined,
+    description: undefined,
+    requesterName: "Alex Rivera",
+    suggestedTaName: null,
+    assignmentGone: false,
+    dutyTypeName: "Office Hours",
+    recurrence: "weekly",
+    day: "Tu",
+    startMin: 840,
+    endMin: 960,
+    date: undefined,
+    dueDate: undefined,
   },
 ];

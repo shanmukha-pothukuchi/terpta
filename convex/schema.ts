@@ -323,6 +323,13 @@ export default defineSchema({
   changeLog: defineTable({
     periodRef: v.id("staffingPeriods"),
     actorRef: v.id("users"),
+    /**
+     * Which side of the course made the change, denormalized so the log can be
+     * paged and filtered without joining every row to its user. Only TA writes
+     * set it: nothing but a coordinator could write here before, so an absent
+     * role reads as "coordinator" and needs no backfill.
+     */
+    actorRole: v.optional(roleValidator),
     action: v.string(),
     before: v.any(),
     after: v.any(),

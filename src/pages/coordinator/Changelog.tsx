@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useEffect, useRef, useState } from "react";
+import { usePaginatedQuery, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { ArrowLeftRight, History } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
@@ -9,6 +9,7 @@ import {
   Button,
   EmptyState,
   PageHeader,
+  SegmentedControl,
   Spinner,
   Surface,
   toast,
@@ -18,11 +19,17 @@ import { usePeriod } from "../../lib/period";
 import { formatDate, formatTimeRange, shortShiftName } from "../../lib/format";
 import { errorMessage } from "../../lib/errorMessage";
 
-export type ChangeEntry = FunctionReturnType<typeof api.periods.getChangelog>[number];
+export type ChangeEntry =
+  FunctionReturnType<typeof api.periods.getChangelog>["page"][number];
+
+/** Which side of the course to show. */
+export type ChangeSide = "all" | "coordinator" | "ta";
 export type SwapRow = FunctionReturnType<typeof api.periods.listSwaps>[number];
 
 const ACTION_LABEL: Record<string, string> = {
   "period.publish": "Published the schedule",
+  "period.share_on": "Opened schedules to the whole team",
+  "period.share_off": "Made TA schedules private again",
   "shift.create": "Added a shift",
   "shift.update": "Edited a shift",
   "shift.remove": "Removed a shift",
@@ -37,6 +44,16 @@ const ACTION_LABEL: Record<string, string> = {
   "coverage.clear": "Cleared a one-off fill-in",
   "coverage.open": "Covered an away TA for one date",
   "coverage.remove": "Took back a one-date cover",
+  // The TA side of the course. Everything below is written by a TA acting on
+  // their own record — the half of the story the log used to leave out.
+  "ta.join": "Joined the period",
+  "ta.preferences": "Changed their preferences",
+  "availability.submit": "Submitted availability",
+  "availability.resubmit": "Resubmitted availability",
+  "hours.submit": "Submitted a week of hours",
+  "hours.unsubmit": "Pulled a week of hours back",
+  "swap.request": "Asked for a swap",
+  "swap.cancel": "Withdrew a swap request",
 };
 
 const SWAP_TONE: Record<SwapRow["status"], BadgeTone> = {
@@ -154,6 +171,21 @@ export interface ChangelogViewProps {
   swaps: SwapRow[] | undefined;
   resolving: Id<"swapRequests"> | null;
   onResolve: (id: Id<"swapRequests">, approve: boolean) => void;
+  /** Which side of the course is being shown. Defaults to everything. */
+  side?: ChangeSide;
+  onSideChange?: (side: ChangeSide) => void;
+  /**
+   * More pages exist. The list loads them as the reader reaches the bottom,
+   * so a term's worth of history never has to arrive at once.
+   */
+  canLoadMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
+}
+
+/** Who wrote a log row. An absent role predates TAs writing to the log. */
+function actorSide(entry: ChangeEntry): "coordinator" | "ta" {
+  return entry.actorRole === "ta" ? "ta" : "coordinator";
 }
 
 export function ChangelogView({
@@ -162,13 +194,34 @@ export function ChangelogView({
   swaps,
   resolving,
   onResolve,
+  side = "all",
+  onSideChange,
+  canLoadMore = false,
+  loadingMore = false,
+  onLoadMore,
 }: ChangelogViewProps) {
+  // Reaching the end of the list is the request for the next page — a button
+  // to press would only be a step between the reader and what they came for.
+  const sentinel = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = sentinel.current;
+    if (!node || !canLoadMore || !onLoadMore || loadingMore) return;
+    const io = new IntersectionObserver(
+      (rows) => {
+        if (rows.some((r) => r.isIntersecting)) onLoadMore();
+      },
+      { rootMargin: "240px" },
+    );
+    io.observe(node);
+    return () => io.disconnect();
+  }, [canLoadMore, loadingMore, onLoadMore, entries?.length]);
+
   if (!periodSelected) {
     return (
       <div>
         <PageHeader
           title="Changelog"
-          description="Post-publish edits and swap requests for this period — who changed what, when."
+          description="Everything that happened to this period — coordinator edits, TA submissions and swap requests, newest first."
         />
         <EmptyState
           icon={History}
@@ -185,7 +238,7 @@ export function ChangelogView({
     <div className="mx-auto max-w-3xl">
       <PageHeader
         title="Changelog"
-        description="Post-publish edits and swap requests for this period — who changed what, when."
+        description="Everything that happened to this period — coordinator edits, TA submissions and swap requests, newest first."
       />
 
       {/* Swap requests ---------------------------------------------------- */}
@@ -267,24 +320,42 @@ export function ChangelogView({
       </Surface>
 
       {/* Change entries ---------------------------------------------------- */}
-      {entries === undefined ? (
-        <Spinner label="Loading changelog…" />
-      ) : entries.length === 0 ? (
-        <EmptyState
-          icon={History}
-          title="No changes yet"
-          hint="Post-publish edits — shift changes, reassignments, approved swaps — are recorded here."
-        />
-      ) : (
-        <Surface className="overflow-hidden">
-          <div className="flex h-10 items-center gap-2.5 border-b border-line px-3.5">
-            <History size={14} strokeWidth={1.5} className="text-muted" aria-hidden />
-            <span className="text-[13px] font-medium text-ink">Changes</span>
+      <Surface className="overflow-hidden">
+        <div className="flex h-11 flex-wrap items-center gap-2.5 border-b border-line px-3.5">
+          <History size={14} strokeWidth={1.5} className="text-muted" aria-hidden />
+          <span className="text-[13px] font-medium text-ink">Changes</span>
+          {entries !== undefined ? (
             <span className="text-[12px] text-faint">
-              {entries.length} entr{entries.length === 1 ? "y" : "ies"} · newest first
+              {entries.length}
+              {canLoadMore ? "+" : ""} entr{entries.length === 1 ? "y" : "ies"} · newest
+              first
             </span>
-          </div>
-          {entries.map((entry) => {
+          ) : null}
+          <span className="flex-1" />
+          {onSideChange ? (
+            <SegmentedControl<ChangeSide>
+              value={side}
+              onChange={onSideChange}
+              options={[
+                { value: "all", label: "Everyone" },
+                { value: "coordinator", label: "Coordinator" },
+                { value: "ta", label: "TAs" },
+              ]}
+            />
+          ) : null}
+        </div>
+        {entries === undefined ? (
+          <Spinner label="Loading changelog…" />
+        ) : entries.length === 0 ? (
+          <p className="px-3.5 py-6 text-center text-[12.5px] text-faint">
+            {side === "ta"
+              ? "No TA activity yet — swaps, availability and submitted hours land here."
+              : side === "coordinator"
+                ? "You haven't changed anything in this period yet."
+                : "Nothing has happened in this period yet."}
+          </p>
+        ) : (
+          entries.map((entry) => {
             const lines = diffLines(entry.before, entry.after);
             return (
               <div
@@ -298,7 +369,13 @@ export function ChangelogView({
                   <span className="text-[12.5px] text-ink">
                     {ACTION_LABEL[entry.action] ?? "Change"}
                   </span>
-                  <span className="text-[12px] text-faint">by {entry.actorName}</span>
+                  {/* The log has two authors now, and "who" changes how a row
+                      reads: a coordinator moved someone, or a TA asked to be
+                      moved. */}
+                  <Badge tone={actorSide(entry) === "ta" ? "blue" : "neutral"} dot={false}>
+                    {actorSide(entry) === "ta" ? "TA" : "Coordinator"}
+                  </Badge>
+                  <span className="text-[12px] text-faint">{entry.actorName}</span>
                   <span className="flex-1" />
                   <span className="font-mono text-[11px] text-faint">
                     {formatDate(entry.at)} · {timeOf(entry.at)}
@@ -326,9 +403,21 @@ export function ChangelogView({
                 ) : null}
               </div>
             );
-          })}
-        </Surface>
-      )}
+          })
+        )}
+        {/* Crossing this is what asks for the next page. */}
+        {canLoadMore || loadingMore ? (
+          <div ref={sentinel} className="px-3.5 py-3">
+            {loadingMore ? (
+              <Spinner label="Loading more…" />
+            ) : (
+              <Button variant="ghost" size="sm" onClick={onLoadMore}>
+                Load more
+              </Button>
+            )}
+          </div>
+        ) : null}
+      </Surface>
     </div>
   );
 }
@@ -339,7 +428,15 @@ export function ChangelogView({
 
 export default function Changelog() {
   const { periodId } = usePeriod();
-  const entries = useQuery(api.periods.getChangelog, periodId ? { periodRef: periodId } : "skip");
+  const [side, setSide] = useState<ChangeSide>("all");
+  // A period's log grows for the whole term. Pages of 25 keep the first
+  // screenful instant however long the course has been running; changing the
+  // filter re-queries from the top, which is what a filter should do.
+  const changes = usePaginatedQuery(
+    api.periods.getChangelog,
+    periodId ? { periodRef: periodId, side } : "skip",
+    { initialNumItems: 25 },
+  );
   const swaps = useQuery(api.periods.listSwaps, periodId ? { periodRef: periodId } : "skip");
   const resolveSwap = useMutation(api.periods.resolveSwap);
   const [resolving, setResolving] = useState<Id<"swapRequests"> | null>(null);
@@ -347,8 +444,15 @@ export default function Changelog() {
   return (
     <ChangelogView
       periodSelected={periodId !== null}
-      entries={periodId ? entries : undefined}
+      entries={
+        !periodId || changes.status === "LoadingFirstPage" ? undefined : changes.results
+      }
       swaps={periodId ? swaps : undefined}
+      side={side}
+      onSideChange={setSide}
+      canLoadMore={changes.status === "CanLoadMore"}
+      loadingMore={changes.status === "LoadingMore"}
+      onLoadMore={() => changes.loadMore(25)}
       resolving={resolving}
       onResolve={(id, approve) => {
         setResolving(id);

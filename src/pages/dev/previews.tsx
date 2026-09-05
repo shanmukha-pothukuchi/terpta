@@ -12,6 +12,7 @@
  *   /dev/preview/builder-publish — builder with the publish modal open
  *   /dev/preview/builder-shift   — builder with the shift side panel open
  *   /dev/preview/roster          — coordinator roster
+ *   /dev/preview/changelog       — coordinator changelog, both sides + filter
  *   /dev/preview/shifts          — coordinator shifts
  *   /dev/preview/hours-approval  — coordinator hours approval queue
  *   /dev/preview/schedule        — TA published schedule
@@ -28,6 +29,7 @@ import { AvailabilityEditor } from "../ta/availability/AvailabilityEditor";
 import { availabilityFixture } from "../ta/availability/model";
 import { BuilderScreen } from "../coordinator/Builder";
 import { RosterView } from "../coordinator/Roster";
+import { ChangelogView, type ChangeSide } from "../coordinator/Changelog";
 import { ShiftsView } from "../coordinator/Shifts";
 import { DutyTypesView } from "../coordinator/DutyTypes";
 import { CoveragePanelView } from "../coordinator/builder/CoveragePanel";
@@ -232,6 +234,31 @@ function RosterPreview() {
         onRemove={noop}
         shareSchedules={shareSchedules}
         onShareSchedulesChange={setShareSchedules}
+      />
+    </PageFrame>
+  );
+}
+
+/** Changelog with both sides of the course in the list, and the side filter. */
+function ChangelogPreview() {
+  const [side, setSide] = useState<ChangeSide>("all");
+  const entries = fx.changeEntries.filter((e) =>
+    side === "all"
+      ? true
+      : side === "ta"
+        ? e.actorRole === "ta"
+        : e.actorRole !== "ta",
+  );
+  return (
+    <PageFrame>
+      <ChangelogView
+        periodSelected
+        entries={entries}
+        swaps={fx.changeSwaps}
+        resolving={null}
+        onResolve={noop}
+        side={side}
+        onSideChange={setSide}
       />
     </PageFrame>
   );
@@ -556,6 +583,10 @@ const SCREENS: Record<string, { label: string; element: ReactNode }> = {
     element: <BuilderPreview week />,
   },
   roster: { label: "Coordinator roster", element: <RosterPreview /> },
+  changelog: {
+    label: "Coordinator changelog (both sides + filter)",
+    element: <ChangelogPreview />,
+  },
   shifts: { label: "Coordinator shifts", element: <ShiftsPreview /> },
   "duty-types": {
     label: "Coordinator duty types",

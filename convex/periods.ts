@@ -1,8 +1,9 @@
 import { ConvexError, v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { action, internalQuery, mutation, query } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { dayValidator, meetingValidator, sectionTypeValidator } from "./schema";
+import { dayValidator, meetingValidator, roleValidator, sectionTypeValidator } from "./schema";
 import { requireCoordinator, requireUser } from "./lib/auth";
 import { appUrl, type EmailResult } from "./emails";
 import { batchResultValidator, type BatchResult } from "./roster";
@@ -39,6 +40,7 @@ const changeLogFields = {
   _creationTime: v.number(),
   periodRef: v.id("staffingPeriods"),
   actorRef: v.id("users"),
+  actorRole: v.optional(roleValidator),
   action: v.string(),
   before: v.any(),
   after: v.any(),
@@ -345,36 +347,59 @@ TerpTA`,
 });
 
 /**
- * Change log for a period, newest first, with the actor's display name
- * joined in. Coordinator only.
+ * Change log for a period, newest first, with the actor's display name joined
+ * in. Coordinator only.
+ *
+ * Paginated rather than collected: the log now carries the TA side of the
+ * course as well — swaps asked for and withdrawn, availability submitted,
+ * hours pulled back out of review — so a busy period runs to thousands of
+ * rows, and loading a term of them to render the first screenful is the kind
+ * of page that gets slower every week it is used.
+ *
+ * `side` filters on the denormalized `actorRole`. Rows written before TAs
+ * could write here at all carry no role, so "coordinator" is expressed as
+ * "not a TA" — which is what those rows are — instead of an equality test
+ * that would silently drop the whole history.
  */
 export const getChangelog = query({
-  args: { periodRef: v.id("staffingPeriods") },
-  returns: v.array(
-    v.object({
-      ...changeLogFields,
-      actorName: v.string(),
-    }),
-  ),
+  args: {
+    periodRef: v.id("staffingPeriods"),
+    paginationOpts: paginationOptsValidator,
+    side: v.optional(v.union(v.literal("all"), v.literal("coordinator"), v.literal("ta"))),
+  },
+  returns: v.object({
+    page: v.array(v.object({ ...changeLogFields, actorName: v.string() })),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+    splitCursor: v.optional(v.union(v.string(), v.null())),
+    pageStatus: v.optional(v.union(v.literal("SplitRecommended"), v.literal("SplitRequired"), v.null())),
+  }),
   handler: async (ctx, args) => {
     await requireCoordinator(ctx, args.periodRef);
-    const entries = await ctx.db
+    const side = args.side ?? "all";
+    let q = ctx.db
       .query("changeLog")
-      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
-      .order("desc")
-      .collect();
+      .withIndex("by_period", (qq) => qq.eq("periodRef", args.periodRef))
+      .order("desc");
+    if (side === "ta") {
+      q = q.filter((f) => f.eq(f.field("actorRole"), "ta"));
+    } else if (side === "coordinator") {
+      q = q.filter((f) => f.neq(f.field("actorRole"), "ta"));
+    }
+    const result = await q.paginate(args.paginationOpts);
+
     const nameCache = new Map<string, string>();
-    const out = [];
-    for (const entry of entries) {
+    const page = [];
+    for (const entry of result.page) {
       let name = nameCache.get(entry.actorRef);
       if (name === undefined) {
         const actor = await ctx.db.get(entry.actorRef);
-        name = actor?.name ?? "(unknown)";
+        name = actor?.preferredName || actor?.name || "(unknown)";
         nameCache.set(entry.actorRef, name);
       }
-      out.push({ ...entry, actorName: name });
+      page.push({ ...entry, actorName: name });
     }
-    return out;
+    return { ...result, page };
   },
 });
 

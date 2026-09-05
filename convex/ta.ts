@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values";
 import type { FunctionReference } from "convex/server";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   blockStatusValidator,
   dayValidator,
@@ -10,6 +10,7 @@ import {
   officeHoursStyleValidator,
 } from "./schema";
 import { requireOwnProfile, requireUser } from "./lib/auth";
+import { recordTaChange } from "./lib/changeLog";
 import { dutyTypeDoc } from "./dutyTypes";
 import { assignmentDoc, shiftDoc } from "./shifts";
 import { dayOfIso, toIsoDate } from "./lib/week";
@@ -292,6 +293,35 @@ export const saveProfile = mutation({
     if (enrolledChanged) {
       await ctx.runMutation(regenerateImportedBlocks, { taProfileRef });
     }
+
+    // The setup wizard saves on every step, most of which change nothing the
+    // coordinator would want to read about. Only a difference is worth a row.
+    const summary = (p: {
+      maxHoursPerWeek: number;
+      syncAsyncPreference: number;
+      enrolledSectionRefs: unknown[];
+      officeHoursStyle?: string;
+    }) => ({
+      maxHoursPerWeek: p.maxHoursPerWeek,
+      syncAsyncPreference: p.syncAsyncPreference,
+      classes: p.enrolledSectionRefs.length,
+      officeHoursStyle: p.officeHoursStyle ?? "few_long",
+    });
+    const after = summary({
+      ...fields,
+      officeHoursStyle: args.officeHoursStyle ?? existing?.officeHoursStyle,
+    });
+    const before = existing ? summary(existing) : null;
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      await recordTaChange(
+        ctx,
+        args.periodRef,
+        user._id,
+        existing ? "ta.preferences" : "ta.join",
+        before,
+        after,
+      );
+    }
     return taProfileRef;
   },
 });
@@ -316,7 +346,7 @@ export const saveAvailability = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { profile } = await requireOwnProfile(ctx, args.taProfileRef);
+    const { user, profile } = await requireOwnProfile(ctx, args.taProfileRef);
     for (const b of args.blocks) {
       if (
         !Number.isInteger(b.startMin) ||
@@ -346,7 +376,19 @@ export const saveAvailability = mutation({
       });
     }
     if (args.submitted) {
+      const previously = profile.availabilitySubmittedAt;
       await ctx.db.patch(profile._id, { availabilitySubmittedAt: Date.now() });
+      // Only the act of submitting is logged; the grid autosaves constantly,
+      // and a coordinator wants the deadline met, not every brushstroke.
+      const wasManual = existing.filter((b) => b.source === "manual").length;
+      await recordTaChange(
+        ctx,
+        profile.periodRef,
+        user._id,
+        previously === undefined ? "availability.submit" : "availability.resubmit",
+        previously === undefined ? null : { blocks: wasManual },
+        { blocks: args.blocks.length },
+      );
     }
     return null;
   },
@@ -459,7 +501,7 @@ export const submitWeek = mutation({
   },
   returns: v.number(),
   handler: async (ctx, args) => {
-    const { profile } = await requireOwnProfile(ctx, args.taProfileRef);
+    const { user, profile } = await requireOwnProfile(ctx, args.taProfileRef);
     if (!ISO_DATE.test(args.weekStart)) {
       throw new ConvexError("weekStart must be ISO YYYY-MM-DD");
     }
@@ -469,6 +511,7 @@ export const submitWeek = mutation({
       .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
       .collect();
     let submitted = 0;
+    let hours = 0;
     for (const log of logs) {
       if (
         log.status === "draft" &&
@@ -477,7 +520,15 @@ export const submitWeek = mutation({
       ) {
         await ctx.db.patch(log._id, { status: "submitted" });
         submitted++;
+        hours += log.hours;
       }
+    }
+    if (submitted > 0) {
+      await recordTaChange(ctx, profile.periodRef, user._id, "hours.submit", null, {
+        weekStart: args.weekStart,
+        entries: submitted,
+        hours,
+      });
     }
     return submitted;
   },
@@ -501,7 +552,7 @@ export const requestSwap = mutation({
   handler: async (ctx, args) => {
     const assignment = await ctx.db.get(args.assignmentRef);
     if (!assignment) throw new ConvexError("Assignment not found");
-    const { profile } = await requireOwnProfile(ctx, assignment.taProfileRef);
+    const { user, profile } = await requireOwnProfile(ctx, assignment.taProfileRef);
     const shift = await ctx.db.get(assignment.shiftRef);
     if (!shift) throw new ConvexError("Shift not found for this assignment");
     if (args.reason.trim().length === 0) {
@@ -554,7 +605,7 @@ export const requestSwap = mutation({
         throw new ConvexError("You cannot suggest yourself");
       }
     }
-    return await ctx.db.insert("swapRequests", {
+    const swapRef = await ctx.db.insert("swapRequests", {
       periodRef: shift.periodRef,
       assignmentRef: assignment._id,
       shiftRef: shift._id,
@@ -565,6 +616,18 @@ export const requestSwap = mutation({
       date: args.scope === "date" ? args.date : undefined,
       status: "pending",
     });
+    // The swap card already shows pending requests, but the log is where a
+    // coordinator reconstructs a week after the fact — asked and withdrawn
+    // is a different story from never asked.
+    const dutyType = await ctx.db.get(shift.dutyTypeRef);
+    await recordTaChange(ctx, profile.periodRef, user._id, "swap.request", null, {
+      swapRef,
+      shift: shiftLabel(shift, dutyType?.name),
+      scope: args.scope,
+      ...(args.scope === "date" ? { date: args.date } : {}),
+      reason: args.reason.trim(),
+    });
+    return swapRef;
   },
 });
 
@@ -646,14 +709,42 @@ export const cancelSwap = mutation({
   handler: async (ctx, args) => {
     const swap = await ctx.db.get(args.swapRef);
     if (!swap) throw new ConvexError("Swap request not found");
-    await requireOwnProfile(ctx, swap.requesterRef);
+    const { user, profile } = await requireOwnProfile(ctx, swap.requesterRef);
     if (swap.status !== "pending") {
       throw new ConvexError("That request has already been resolved");
     }
     await ctx.db.patch(swap._id, { status: "cancelled" });
+    const shift = swap.shiftRef ? await ctx.db.get(swap.shiftRef) : null;
+    const dutyType = shift ? await ctx.db.get(shift.dutyTypeRef) : null;
+    await recordTaChange(
+      ctx,
+      profile.periodRef,
+      user._id,
+      "swap.cancel",
+      { swapRef: swap._id, status: "pending" },
+      {
+        swapRef: swap._id,
+        status: "cancelled",
+        ...(shift ? { shift: shiftLabel(shift, dutyType?.name) } : {}),
+      },
+    );
     return null;
   },
 });
+
+/**
+ * "Discussion 0201 · Tu 10:00" — enough for a log row to name what a request
+ * was about after the assignment behind it is gone.
+ */
+function shiftLabel(shift: Doc<"shifts">, dutyTypeName?: string): string {
+  const base = shift.description ?? dutyTypeName ?? "Shift";
+  if (shift.recurrence === "weekly" && shift.day && shift.startMin !== undefined) {
+    return `${base} · ${shift.day} ${formatMin(shift.startMin)}`;
+  }
+  if (shift.recurrence === "once" && shift.date) return `${base} · ${shift.date}`;
+  if (shift.dueDate) return `${base} · due ${shift.dueDate}`;
+  return base;
+}
 
 /** 600 -> "10:00". Local helper so the query can label a shift. */
 function formatMin(min: number): string {
@@ -815,7 +906,7 @@ export const unsubmitWeek = mutation({
   args: { taProfileRef: v.id("taProfiles"), weekStart: v.string() },
   returns: v.number(),
   handler: async (ctx, args) => {
-    const { profile } = await requireOwnProfile(ctx, args.taProfileRef);
+    const { user, profile } = await requireOwnProfile(ctx, args.taProfileRef);
     if (!ISO_DATE.test(args.weekStart)) {
       throw new ConvexError("weekStart must be ISO YYYY-MM-DD");
     }
@@ -828,11 +919,25 @@ export const unsubmitWeek = mutation({
       .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
       .collect();
     let count = 0;
+    let hours = 0;
     for (const log of logs) {
       if (log.date < args.weekStart || log.date > weekEnd) continue;
       if (log.status !== "submitted") continue;
       await ctx.db.patch(log._id, { status: "draft" });
       count++;
+      hours += log.hours;
+    }
+    if (count > 0) {
+      // Hours coming back out of review is exactly the kind of thing a
+      // coordinator finds out about too late. It belongs in the log.
+      await recordTaChange(
+        ctx,
+        profile.periodRef,
+        user._id,
+        "hours.unsubmit",
+        { weekStart: args.weekStart, entries: count, hours },
+        null,
+      );
     }
     return count;
   },
