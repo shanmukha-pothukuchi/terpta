@@ -969,6 +969,7 @@ export const weekOccurrences: NonNullable<ScheduleViewProps["weekOccurrences"]> 
   {
     key: "occ-1",
     dutyTypeRef: "dt-disc",
+    shiftRef: "sh-disc-0101",
     date: "2026-09-14",
     day: "M",
     startMin: 600,
@@ -983,6 +984,7 @@ export const weekOccurrences: NonNullable<ScheduleViewProps["weekOccurrences"]> 
   {
     key: "occ-2",
     dutyTypeRef: "dt-oh",
+    shiftRef: "sh-oh-mon",
     date: "2026-09-14",
     day: "M",
     startMin: 780,
@@ -997,6 +999,7 @@ export const weekOccurrences: NonNullable<ScheduleViewProps["weekOccurrences"]> 
   {
     key: "occ-3",
     dutyTypeRef: "dt-disc",
+    shiftRef: "sh-disc-0104",
     date: "2026-09-16",
     day: "W",
     startMin: 660,
@@ -1011,6 +1014,7 @@ export const weekOccurrences: NonNullable<ScheduleViewProps["weekOccurrences"]> 
   {
     key: "occ-4",
     dutyTypeRef: "dt-disc",
+    shiftRef: "sh-disc-0106",
     date: "2026-09-17",
     day: "Th",
     startMin: 600,
@@ -1021,6 +1025,65 @@ export const weekOccurrences: NonNullable<ScheduleViewProps["weekOccurrences"]> 
     otherName: null,
     note: "Conference travel",
     swapTarget: { assignmentRef: "sa-3", label: "Discussion 0106", detail: "Th 10:00a" },
+  },
+];
+
+/* The rest of the team's week, as the coordinator-shared view serves it.
+   "occ-1" above is a discussion this TA runs alone; the Monday office hour
+   has two other TAs on it, which is the case the feature exists for. */
+export const teamOccurrences: NonNullable<ScheduleViewProps["teamOccurrences"]> = [
+  {
+    key: "team-1",
+    shiftRef: "sh-oh-mon",
+    dutyTypeRef: "dt-oh",
+    date: "2026-09-14",
+    day: "M",
+    startMin: 780,
+    endMin: 900,
+    title: "Office Hours",
+    color: "#7D93B2",
+    taName: "Ravi Patel",
+    state: "normal",
+  },
+  {
+    key: "team-2",
+    shiftRef: "sh-oh-mon",
+    dutyTypeRef: "dt-oh",
+    date: "2026-09-14",
+    day: "M",
+    startMin: 780,
+    endMin: 840,
+    title: "Office Hours",
+    color: "#7D93B2",
+    taName: "Aisha Khan",
+    state: "normal",
+  },
+  {
+    // On the discussion this TA runs: the case the "with" line exists for.
+    key: "team-4",
+    shiftRef: "sh-disc-0101",
+    dutyTypeRef: "dt-disc",
+    date: "2026-09-14",
+    day: "M",
+    startMin: 600,
+    endMin: 650,
+    title: "Discussion 0101",
+    color: "#E21833",
+    taName: "Priya Nair",
+    state: "normal",
+  },
+  {
+    key: "team-3",
+    shiftRef: "sh-disc-0102",
+    dutyTypeRef: "dt-disc",
+    date: "2026-09-15",
+    day: "Tu",
+    startMin: 660,
+    endMin: 710,
+    title: "Discussion 0102",
+    color: "#E21833",
+    taName: "Daniel Chen",
+    state: "normal",
   },
 ];
 

@@ -92,6 +92,12 @@ export default defineSchema({
     ),
     /** TAs each discussion section needs. Absent means one. */
     taPerSection: v.optional(v.number()),
+    /**
+     * Whether TAs in this period may look at each other's published shifts.
+     * Absent means no: a schedule is private to the TA standing on it until a
+     * coordinator decides the team should see who they work alongside.
+     */
+    shareSchedulesWithTas: v.optional(v.boolean()),
   }).index("by_coordinator", ["coordinatorRef"]),
 
   dutyTypes: defineTable({

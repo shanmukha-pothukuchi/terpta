@@ -244,6 +244,156 @@ export const taWeek = query({
 });
 
 /* ------------------------------------------------------------------ */
+/* TA — the rest of the team's week, when the coordinator allows it     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Everyone else's dated week.
+ *
+ * A TA looking at their own schedule can see when they work but not who with,
+ * which is the thing they actually want to know before turning up to a busy
+ * office hour. This answers that — but only when the coordinator has turned
+ * sharing on for the period, and only ever with a name, a duty and a time.
+ * Nothing about anybody's availability, hours, reasons for being away, or
+ * address goes across, because none of that is any of a colleague's business.
+ *
+ * The caller's own rows are left out: they already have them from `taWeek`,
+ * where they arrive with the assignment attached so they can be swapped.
+ */
+export const teamWeek = query({
+  args: { taProfileRef: v.id("taProfiles"), weekStart: v.string() },
+  returns: v.object({
+    /** False when the coordinator has not opened the period up. */
+    shared: v.boolean(),
+    weekStart: v.string(),
+    weekEnd: v.string(),
+    occurrences: v.array(
+      v.object({
+        key: v.string(),
+        date: v.string(),
+        day: v.union(v.null(), dayValidator),
+        startMin: v.number(),
+        endMin: v.number(),
+        shiftRef: v.id("shifts"),
+        dutyTypeRef: v.id("dutyTypes"),
+        dutyTypeName: v.string(),
+        color: v.string(),
+        description: v.optional(v.string()),
+        taProfileRef: v.id("taProfiles"),
+        taName: v.string(),
+        /** "off": handed this date to somebody. "covering": standing in. */
+        state: v.union(v.literal("normal"), v.literal("off"), v.literal("covering")),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    assertWeekStart(args.weekStart);
+    const { profile } = await requireOwnProfile(ctx, args.taProfileRef);
+    const week = weekRange(args.weekStart);
+    const period = await ctx.db.get(profile.periodRef);
+    const shared = period?.status === "published" && period.shareSchedulesWithTas === true;
+    if (!shared) {
+      return { shared: false, weekStart: week.start, weekEnd: week.end, occurrences: [] };
+    }
+
+    const coverages = (
+      await ctx.db
+        .query("shiftCoverages")
+        .withIndex("by_period", (q) => q.eq("periodRef", profile.periodRef))
+        .collect()
+    ).filter((c) => isDateInRange(c.date, week.start, week.end));
+
+    const shifts = await ctx.db
+      .query("shifts")
+      .withIndex("by_period", (q) => q.eq("periodRef", profile.periodRef))
+      .collect();
+
+    const names = new Map<string, string>();
+    const nameOf = async (ref: Id<"taProfiles">) => {
+      const cached = names.get(ref as string);
+      if (cached !== undefined) return cached;
+      const name = await displayName(ctx, ref);
+      names.set(ref as string, name);
+      return name;
+    };
+
+    const occurrences = [];
+    for (const shift of shifts) {
+      // Async work has no hour on a grid to stand next to, so it says nothing
+      // about who a TA is working with.
+      if (shift.startMin === undefined || shift.endMin === undefined) continue;
+      const date = dateInWeek(shift, week);
+      if (!date) continue;
+      const dutyType = await ctx.db.get(shift.dutyTypeRef);
+      if (!dutyType) continue;
+
+      const seats = await ctx.db
+        .query("assignments")
+        .withIndex("by_shift", (q) => q.eq("shiftRef", shift._id))
+        .collect();
+
+      for (const seat of seats) {
+        if (seat.taProfileRef === profile._id) continue;
+        const handedOff = coverages.some(
+          (c) =>
+            c.shiftRef === shift._id &&
+            c.date === date &&
+            c.absentTaRef === seat.taProfileRef,
+        );
+        occurrences.push({
+          key: `${seat._id}:${date}`,
+          date,
+          day: dayOfIso(date),
+          startMin: shift.startMin,
+          endMin: shift.endMin,
+          shiftRef: shift._id,
+          dutyTypeRef: dutyType._id,
+          dutyTypeName: dutyType.name,
+          color: dutyType.color,
+          description: shift.description,
+          taProfileRef: seat.taProfileRef,
+          taName: await nameOf(seat.taProfileRef),
+          state: handedOff ? ("off" as const) : ("normal" as const),
+        });
+      }
+    }
+
+    // Stand-ins hold no assignment of their own, so they have to be added from
+    // the coverage rows or the TA who is actually there that day is invisible.
+    for (const coverage of coverages) {
+      if (!coverage.coverTaRef || coverage.coverTaRef === profile._id) continue;
+      const shift = await ctx.db.get(coverage.shiftRef);
+      if (!shift || shift.startMin === undefined || shift.endMin === undefined) continue;
+      const dutyType = await ctx.db.get(shift.dutyTypeRef);
+      if (!dutyType) continue;
+      occurrences.push({
+        key: `${coverage._id}:cover`,
+        date: coverage.date,
+        day: dayOfIso(coverage.date),
+        startMin: shift.startMin,
+        endMin: shift.endMin,
+        shiftRef: shift._id,
+        dutyTypeRef: dutyType._id,
+        dutyTypeName: dutyType.name,
+        color: dutyType.color,
+        description: shift.description,
+        taProfileRef: coverage.coverTaRef,
+        taName: await nameOf(coverage.coverTaRef),
+        state: "covering" as const,
+      });
+    }
+
+    occurrences.sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) || a.startMin - b.startMin ||
+        a.taName.localeCompare(b.taName),
+    );
+
+    return { shared: true, weekStart: week.start, weekEnd: week.end, occurrences };
+  },
+});
+
+/* ------------------------------------------------------------------ */
 /* Coordinator — the week overlay for the Builder                      */
 /* ------------------------------------------------------------------ */
 

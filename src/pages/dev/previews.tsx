@@ -219,6 +219,7 @@ function BuilderPreview({
 }
 
 function RosterPreview() {
+  const [shareSchedules, setShareSchedules] = useState(false);
   return (
     <PageFrame>
       <RosterView
@@ -229,6 +230,8 @@ function RosterPreview() {
         inviting={false}
         onInvite={noop}
         onRemove={noop}
+        shareSchedules={shareSchedules}
+        onShareSchedulesChange={setShareSchedules}
       />
     </PageFrame>
   );
@@ -369,6 +372,9 @@ function HoursApprovalPreview() {
 function SchedulePreview() {
   const [weekStart, setWeekStart] = useState(fx.TA_WEEK_START_DATED);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  // The preview stands in for a period whose coordinator has turned sharing
+  // on, so both scopes are reachable here.
+  const [scope, setScope] = useState<"mine" | "everyone">("mine");
   return (
     <PageFrame>
       <ScheduleView
@@ -387,6 +393,12 @@ function SchedulePreview() {
         }
         weekExceptions={
           weekStart === fx.TA_WEEK_START_DATED ? fx.weekExceptions : []
+        }
+        sharingOn
+        scope={scope}
+        onScopeChange={setScope}
+        teamOccurrences={
+          weekStart === fx.TA_WEEK_START_DATED ? fx.teamOccurrences : []
         }
         onRequestSwap={noop}
         hiddenDuties={hidden}

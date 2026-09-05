@@ -16,8 +16,10 @@ import {
   CalendarOff,
   CalendarPlus,
   Inbox,
+  User,
   UserRoundCheck,
   UserRoundPlus,
+  Users,
   X,
 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
@@ -49,6 +51,7 @@ import {
   Modal,
   PageHeader,
   ProgressBar,
+  SegmentedControl,
   Spinner,
   Tooltip,
   toast,
@@ -86,6 +89,30 @@ export interface PendingSwap {
   date?: string;
   suggestedName?: string;
 }
+
+/**
+ * Somebody else's meeting in the same week.
+ *
+ * Only what a colleague needs in order to know who they are on with: a name,
+ * a duty and a time. The coordinator turns this on per period; when it is off
+ * the query returns nothing and the toggle is not offered at all.
+ */
+export interface TeamOccurrence {
+  key: string;
+  shiftRef: string;
+  dutyTypeRef: string;
+  date: string;
+  day: DayCode;
+  startMin: number;
+  endMin: number;
+  title: string;
+  color: string;
+  taName: string;
+  state: "normal" | "off" | "covering";
+}
+
+/** Whose week the grid is showing. */
+export type ScheduleScope = "mine" | "everyone";
 
 /** One-off coverage the TA is either taking or handing off. */
 export interface CoverageNotice {
@@ -151,7 +178,13 @@ function useMyTaPeriod() {
   const mine = useQuery(api.periods.listMine, {});
   return useMemo(() => {
     if (mine === undefined) {
-      return { loading: true as const, periodId: null, taProfileId: null, courseLabel: "" };
+      return {
+        loading: true as const,
+        periodId: null,
+        taProfileId: null,
+        sharingOn: false,
+        courseLabel: "",
+      };
     }
     let row = ctx.periodId
       ? (mine.find((r) => r.period._id === ctx.periodId) ?? null)
@@ -161,6 +194,7 @@ function useMyTaPeriod() {
       loading: false as const,
       periodId: row?.period._id ?? null,
       taProfileId: row?.taProfileId ?? null,
+      sharingOn: row?.period.shareSchedulesWithTas === true,
       courseLabel: row
         ? `${row.course?.courseId ?? "Course"} · ${termName(row.period.term)}`
         : "",
@@ -219,6 +253,8 @@ export interface WeekOccurrence {
   key: string;
   /** Which duty type this is, so the view filter can hide it. */
   dutyTypeRef: string;
+  /** Which shift, so the team's week can be matched against this one. */
+  shiftRef: string;
   date: string;
   day: DayCode;
   startMin: number;
@@ -266,6 +302,7 @@ export function occurrencesFromItems(
     out.push({
       key: `${item.assignment._id}:${date}`,
       dutyTypeRef: item.dutyType._id as string,
+      shiftRef: s._id as string,
       date,
       day,
       startMin: s.startMin,
@@ -289,12 +326,107 @@ export function occurrenceTitle(dutyTypeName: string, description?: string): str
 
 const SLOT_PX = 22; // px per 30 minutes (board recipe)
 
+/**
+ * One block on the grid, from either side.
+ *
+ * The grid used to draw the TA's own occurrences and nothing else, so showing
+ * the team meant either a second grid or blocks that overlap unresolved. Both
+ * sides become the same kind of thing here, which means one lane pass places
+ * all of them and a teammate's office hour sits next to yours rather than on
+ * top of it.
+ */
+export interface GridBlock {
+  key: string;
+  day: DayCode;
+  startMin: number;
+  endMin: number;
+  /** The line that carries identity: your duty, or their name. */
+  title: string;
+  /** The line underneath: their duty, when the title is a name. */
+  subtitle: string | null;
+  color: string;
+  /** Yours. Somebody else's is drawn quieter and cannot be swapped. */
+  mine: boolean;
+  state: WeekOccurrence["state"];
+  otherName: string | null;
+  note: string | null;
+  /** Who else is on this meeting with you. */
+  withNames: string[];
+  swapTarget: SwapModalTarget | null;
+}
+
+/**
+ * Merge your week with the team's into the blocks the grid draws.
+ *
+ * Two things happen here. Every one of your meetings picks up the names of the
+ * people on it, whichever scope you are in — that is the question sharing was
+ * turned on to answer. And in "everyone" scope the team's own meetings join
+ * the list, so the lane pass can place them beside yours instead of under them.
+ *
+ * A teammate who handed their date to somebody else is not on that meeting, so
+ * they are not counted as working it with you; the stand-in arrives as their
+ * own row and is.
+ */
+export function buildGridBlocks(
+  mine: WeekOccurrence[],
+  team: TeamOccurrence[],
+  scope: ScheduleScope,
+): GridBlock[] {
+  const teamByMeeting = new Map<string, string[]>();
+  for (const o of team) {
+    if (o.state === "off") continue;
+    const key = `${o.shiftRef}:${o.date}`;
+    const names = teamByMeeting.get(key);
+    if (names) names.push(o.taName);
+    else teamByMeeting.set(key, [o.taName]);
+  }
+
+  const blocks: GridBlock[] = mine.map((o) => ({
+    key: o.key,
+    day: o.day,
+    startMin: o.startMin,
+    endMin: o.endMin,
+    title: o.title,
+    subtitle: null,
+    color: o.color,
+    mine: true,
+    state: o.state,
+    otherName: o.otherName,
+    note: o.note,
+    // A meeting you handed off is not one you are working with anybody.
+    withNames:
+      o.state === "off" ? [] : (teamByMeeting.get(`${o.shiftRef}:${o.date}`) ?? []),
+    swapTarget: o.swapTarget,
+  }));
+
+  if (scope === "everyone") {
+    for (const o of team) {
+      blocks.push({
+        key: o.key,
+        day: o.day,
+        startMin: o.startMin,
+        endMin: o.endMin,
+        title: o.taName,
+        subtitle: o.title,
+        color: o.color,
+        mine: false,
+        state: o.state,
+        otherName: null,
+        note: null,
+        withNames: [],
+        swapTarget: null,
+      });
+    }
+  }
+  return blocks;
+}
+
 function WeeklyGrid({
-  occurrences,
+  blocks,
   weekStart,
   onRequestSwap,
 }: {
-  occurrences: WeekOccurrence[];
+  blocks: GridBlock[];
   weekStart: string;
   onRequestSwap: (t: SwapModalTarget) => void;
 }) {
@@ -303,7 +435,7 @@ function WeeklyGrid({
 
   let rangeStart = 8 * 60;
   let rangeEnd = 20 * 60;
-  for (const o of occurrences) {
+  for (const o of blocks) {
     rangeStart = Math.min(rangeStart, Math.floor(o.startMin / 60) * 60);
     rangeEnd = Math.max(rangeEnd, Math.ceil(o.endMin / 60) * 60);
   }
@@ -311,9 +443,9 @@ function WeeklyGrid({
   const hours: number[] = [];
   for (let h = rangeStart / 60; h < rangeEnd / 60; h++) hours.push(h);
 
-  const byDay = new Map<DayCode, WeekOccurrence[]>();
+  const byDay = new Map<DayCode, GridBlock[]>();
   for (const d of DAY_CODES) byDay.set(d, []);
-  for (const o of occurrences) byDay.get(o.day)?.push(o);
+  for (const o of blocks) byDay.get(o.day)?.push(o);
 
   // Blocks are absolutely positioned by time, so two in the same slot would
   // paint on top of each other. Split each day overlap set into side-by-side
@@ -338,7 +470,7 @@ function WeeklyGrid({
           // Hours the TA is actually on the hook for: a meeting somebody else
           // is covering does not count toward their week.
           const total = dayItems
-            .filter((o) => o.state !== "off")
+            .filter((o) => o.mine && o.state !== "off")
             .reduce((sum, o) => sum + (o.endMin - o.startMin) / 60, 0);
           const isToday = date === today;
           return (
@@ -399,22 +531,39 @@ function WeeklyGrid({
             {(byDay.get(day) ?? []).map((o) => {
               const top = ((o.startMin - rangeStart) / 30) * SLOT_PX + 1;
               const height = ((o.endMin - o.startMin) / 30) * SLOT_PX - 3;
-              const { left, width } = laneStyle(laneSpans.get(o.key));
+              const span = laneSpans.get(o.key);
+              const { left, width } = laneStyle(span);
+              // Three or more abreast — common once the whole team is on the
+              // grid — leaves a column too narrow for two lines of anything.
+              // Drop to the one line that identifies the block and let the
+              // tooltip carry the rest, rather than truncating both.
+              const narrow = (span?.lanes ?? 1) >= 3;
               // Handed off: keep the block so the TA can see it is not simply
               // gone, but drain the colour so it never reads as work to attend.
               const off = o.state === "off";
               const accent = off ? "#7d7d86" : o.color;
+              // A teammate's block is context, not an obligation: it keeps the
+              // duty's colour so the shape of the day still reads, at a weight
+              // that never competes with the shifts you actually have to work.
+              const fill = hexToRgba(accent, o.mine ? (off ? 0.07 : 0.16) : 0.05);
               const ring =
                 o.state === "excepted"
                   ? "inset 0 0 0 1px rgba(245,165,36,0.75)"
-                  : `inset 0 0 0 1px ${hexToRgba(accent, off ? 0.28 : 0.35)}`;
-              const stateNote = OCCURRENCE_NOTE[o.state];
+                  : `inset 0 0 0 1px ${hexToRgba(accent, o.mine ? (off ? 0.28 : 0.35) : 0.16)}`;
+              const stateNote = o.mine ? OCCURRENCE_NOTE[o.state] : null;
+              // A state note is the more urgent thing to say, so it keeps the
+              // second line when both want it.
+              const withLine =
+                !stateNote && o.withNames.length > 0
+                  ? `with ${o.withNames.join(", ")}`
+                  : null;
               const tip = [
-                o.title,
+                o.mine ? o.title : `${o.title} — ${o.subtitle ?? ""}`.trim(),
                 formatTimeRange(o.startMin, o.endMin),
                 o.state === "off" && o.otherName
                   ? `${o.otherName} is covering`
                   : stateNote,
+                o.withNames.length > 0 ? `with ${o.withNames.join(", ")}` : null,
                 o.note,
               ]
                 .filter(Boolean)
@@ -423,13 +572,16 @@ function WeeklyGrid({
                 <div
                   key={o.key}
                   title={tip}
-                  className="group absolute box-border overflow-hidden rounded-[6px] px-2 py-[5px]"
+                  className={
+                    "group absolute box-border overflow-hidden rounded-[6px] py-[5px] " +
+                    (narrow ? "px-1" : "px-2")
+                  }
                   style={{
                     top,
                     height,
                     left,
                     width,
-                    background: hexToRgba(accent, off ? 0.07 : 0.16),
+                    background: fill,
                     boxShadow: ring,
                     // Standing in for somebody is not the same commitment as
                     // your own shift, and the block is too short for a label —
@@ -438,35 +590,61 @@ function WeeklyGrid({
                       o.state === "covering" ? "3px solid var(--color-ok)" : undefined,
                   }}
                 >
-                  {/* pr-5 keeps the title clear of the hover swap button. */}
-                  <div className="flex min-w-0 flex-col gap-px pr-5">
+                  {/* pr-5 keeps the title clear of the hover swap button —
+                      space a narrow block cannot spare, so there it overlaps
+                      on hover instead. */}
+                  <div className={"flex min-w-0 flex-col gap-px " + (narrow ? "" : "pr-5")}>
                     <span
                       className={
-                        "truncate text-[11px] font-medium " +
-                        (off ? "text-faint line-through" : "text-ink")
+                        "truncate text-[11px] " +
+                        (o.mine ? "font-medium " : "") +
+                        (off
+                          ? "text-faint line-through"
+                          : o.mine
+                            ? "text-ink"
+                            : "text-[#C9C9CF]")
                       }
                     >
                       {o.title}
                     </span>
-                    {height >= 34 ? (
-                      <span
-                        className="truncate font-mono text-[10.5px]"
-                        style={{ color: accent }}
-                      >
-                        {formatTimeRange(o.startMin, o.endMin)}
-                      </span>
+                    {/* The second line is the one most blocks have room for,
+                        so it goes to whichever fact is not already on screen.
+                        The time is the block's own position; who is on the
+                        desk with you is not visible anywhere else. */}
+                    {height >= 34 && !narrow ? (
+                      withLine ? (
+                        <span className="truncate text-[10.5px] text-faint">
+                          {withLine}
+                        </span>
+                      ) : (
+                        <span
+                          className="truncate font-mono text-[10.5px]"
+                          style={{ color: o.mine ? accent : hexToRgba(accent, 0.7) }}
+                        >
+                          {o.mine ? formatTimeRange(o.startMin, o.endMin) : o.subtitle}
+                        </span>
+                      )
                     ) : null}
-                    {height >= 50 && stateNote ? (
-                      <span
-                        className={
-                          "truncate text-[10.5px] " +
-                          (o.state === "excepted" ? "text-warn-text" : "text-faint")
-                        }
-                      >
-                        {o.state === "off" && o.otherName
-                          ? `${o.otherName} covers`
-                          : stateNote}
-                      </span>
+                    {height >= 50 && !narrow ? (
+                      stateNote ? (
+                        <span
+                          className={
+                            "truncate text-[10.5px] " +
+                            (o.state === "excepted" ? "text-warn-text" : "text-faint")
+                          }
+                        >
+                          {o.state === "off" && o.otherName
+                            ? `${o.otherName} covers`
+                            : stateNote}
+                        </span>
+                      ) : withLine ? (
+                        <span
+                          className="truncate font-mono text-[10.5px]"
+                          style={{ color: o.mine ? accent : hexToRgba(accent, 0.7) }}
+                        >
+                          {o.mine ? formatTimeRange(o.startMin, o.endMin) : o.subtitle}
+                        </span>
+                      ) : null
                     ) : null}
                   </div>
                   {o.swapTarget && o.state !== "off" ? (
@@ -512,6 +690,14 @@ export interface ScheduleViewProps {
    * from `items` so the grid is never blank.
    */
   weekOccurrences?: WeekOccurrence[];
+  /**
+   * The rest of the team's week. Empty unless the coordinator has opened the
+   * period up; the scope toggle is only offered when `sharingOn` is true.
+   */
+  teamOccurrences?: TeamOccurrence[];
+  sharingOn?: boolean;
+  scope?: ScheduleScope;
+  onScopeChange?: (scope: ScheduleScope) => void;
   /** Date exceptions overlapping the visible week. */
   weekExceptions?: Array<{ id: string; startDate: string; endDate: string; reason: string }>;
   onRequestSwap: (target: SwapModalTarget) => void;
@@ -536,6 +722,10 @@ export function ScheduleView({
   weekStart: weekStartProp,
   onWeekChange,
   weekOccurrences,
+  teamOccurrences = [],
+  sharingOn = false,
+  scope = "mine",
+  onScopeChange,
   weekExceptions = [],
   onRequestSwap,
   onCancelSwap,
@@ -576,6 +766,18 @@ export function ScheduleView({
 
   const shown = items.filter((i) => !hiddenDuties.has(i.dutyType._id as string));
   const shownOccurrences = occurrences.filter((o) => !hiddenDuties.has(o.dutyTypeRef));
+  const shownTeam = teamOccurrences.filter((o) => !hiddenDuties.has(o.dutyTypeRef));
+  const gridBlocks = buildGridBlocks(shownOccurrences, shownTeam, scope);
+
+  // The grid can only spare a line on a block tall enough for one, and a
+  // 50-minute discussion is not. Listing the week's shared meetings puts the
+  // answer somewhere it always fits and does not need hovering to find.
+  const sharedMeetings = gridBlocks
+    .filter((b) => b.mine && b.withNames.length > 0)
+    .sort(
+      (a, b) =>
+        DAY_CODES.indexOf(a.day) - DAY_CODES.indexOf(b.day) || a.startMin - b.startMin,
+    );
 
   const onceItems = shown
     .filter((i) => i.shift.recurrence === "once" && (i.shift.date ?? "") >= today)
@@ -663,6 +865,28 @@ export function ScheduleView({
             </div>
           ) : null}
 
+          {/* Offered only where the coordinator allows it — a toggle that
+              turns out to show nothing is worse than no toggle. */}
+          {sharingOn && onScopeChange ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <SegmentedControl<ScheduleScope>
+                value={scope}
+                onChange={onScopeChange}
+                options={[
+                  { value: "mine", label: "Just me", icon: User },
+                  { value: "everyone", label: "Everyone", icon: Users },
+                ]}
+              />
+              <span className="text-[12px] text-faint">
+                {scope === "everyone"
+                  ? `${new Set(teamOccurrences.map((o) => o.taName)).size} other TA${
+                      new Set(teamOccurrences.map((o) => o.taName)).size === 1 ? "" : "s"
+                    } on the schedule this week`
+                  : "See the whole team's week to know who you are on with"}
+              </span>
+            </div>
+          ) : null}
+
           {onToggleDuty && onShowAllDuties ? (
             <DutyFilterBar
               items={dutyFilterItems}
@@ -673,10 +897,42 @@ export function ScheduleView({
           ) : null}
 
           <WeeklyGrid
-            occurrences={shownOccurrences}
+            blocks={gridBlocks}
             weekStart={weekStart}
             onRequestSwap={onRequestSwap}
           />
+
+          {sharedMeetings.length > 0 ? (
+            <Card title="Who you are on with">
+              <div className="flex flex-col gap-1.5">
+                {sharedMeetings.map((m) => (
+                  <div
+                    key={m.key}
+                    className="flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 rounded-[9px] border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] px-2.5 py-1.5"
+                  >
+                    <Users
+                      size={14}
+                      strokeWidth={1.5}
+                      className="shrink-0 text-muted"
+                      aria-hidden
+                    />
+                    <span className="w-8 shrink-0 text-[12.5px] text-[#C9C9CF]">
+                      {DAY_SHORT[m.day]}
+                    </span>
+                    <span className="shrink-0 font-mono text-[12px] text-muted">
+                      {formatTimeRange(m.startMin, m.endMin)}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">
+                      {m.title}
+                    </span>
+                    <span className="min-w-0 shrink-0 truncate text-[12.5px] text-muted">
+                      {m.withNames.join(", ")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ) : null}
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card title="Upcoming events">
@@ -914,6 +1170,17 @@ export default function TaSchedule() {
     pick.taProfileId ? { taProfileRef: pick.taProfileId, weekStart } : "skip",
   );
 
+  // Whose week to draw. Asked for whenever the coordinator allows it, not only
+  // in the "Everyone" scope: the names of the people on your own shifts are
+  // worth having even when you are only looking at yourself.
+  const [scope, setScope] = useState<ScheduleScope>("mine");
+  const team = useQuery(
+    api.weeks.teamWeek,
+    pick.taProfileId && pick.sharingOn
+      ? { taProfileRef: pick.taProfileId, weekStart }
+      : "skip",
+  );
+
   if (pick.loading) {
     return (
       <div>
@@ -995,6 +1262,7 @@ export default function TaSchedule() {
             ? week.occurrences.map((o) => ({
                 key: o.key,
                 dutyTypeRef: o.dutyType._id as string,
+                shiftRef: o.shift._id as string,
                 date: o.date,
                 day: (o.day ?? "M") as DayCode,
                 startMin: o.shift.startMin ?? 0,
@@ -1024,6 +1292,22 @@ export default function TaSchedule() {
               }))
             : undefined
         }
+        sharingOn={pick.sharingOn}
+        scope={scope}
+        onScopeChange={setScope}
+        teamOccurrences={(team?.occurrences ?? []).map((o) => ({
+          key: o.key,
+          shiftRef: o.shiftRef as string,
+          dutyTypeRef: o.dutyTypeRef as string,
+          date: o.date,
+          day: (o.day ?? "M") as DayCode,
+          startMin: o.startMin,
+          endMin: o.endMin,
+          title: occurrenceTitle(o.dutyTypeName, o.description),
+          color: o.color || "#7d93b2",
+          taName: o.taName,
+          state: o.state,
+        }))}
         weekExceptions={(week?.exceptions ?? []).map((x) => ({
           id: x._id as string,
           startDate: x.startDate,

@@ -856,6 +856,59 @@ export function SegmentedControl<T extends string>({
 }
 
 /* ------------------------------------------------------------------ */
+/* Switch — one setting that is on or off                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A labelled on/off setting. The whole row is the control, so the label is
+ * part of the hit area rather than something to aim past.
+ */
+export function Switch({
+  checked,
+  onChange,
+  label,
+  hint,
+  disabled,
+  className,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: ReactNode;
+  hint?: ReactNode;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cx(
+        "flex items-center gap-3 text-left",
+        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+        className,
+      )}
+    >
+      <span
+        className="relative h-5 w-[34px] shrink-0 rounded-[10px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.10)] transition-colors duration-150"
+        style={{ background: checked ? "#3DD68C" : "rgba(255,255,255,0.10)" }}
+      >
+        <span
+          className="absolute top-[2px] h-4 w-4 rounded-full bg-white transition-[left] duration-150"
+          style={{ left: checked ? 16 : 2 }}
+        />
+      </span>
+      <span className="flex min-w-0 flex-col gap-px">
+        <span className="text-[13px] text-ink">{label}</span>
+        {hint ? <span className="text-[11.5px] text-faint">{hint}</span> : null}
+      </span>
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Stepper — onboarding steps                                          */
 /* ------------------------------------------------------------------ */
 

@@ -22,6 +22,7 @@ const periodDoc = v.object({
   coordinatorRef: v.id("users"),
   collectionDeadline: v.string(),
   taPerSection: v.optional(v.number()),
+  shareSchedulesWithTas: v.optional(v.boolean()),
   status: periodStatusValidator,
 });
 
@@ -374,6 +375,33 @@ export const getChangelog = query({
       out.push({ ...entry, actorName: name });
     }
     return out;
+  },
+});
+
+/**
+ * Let the TAs in this period see each other's published shifts, or stop them.
+ *
+ * Off by default. A TA's schedule is their own until the coordinator decides
+ * the team is better off knowing who is on the desk with them, and that is a
+ * judgement about the course, not something to assume.
+ */
+export const setScheduleSharing = mutation({
+  args: { periodRef: v.id("staffingPeriods"), share: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { user, period } = await requireCoordinator(ctx, args.periodRef);
+    const before = period.shareSchedulesWithTas ?? false;
+    if (before === args.share) return null;
+    await ctx.db.patch(period._id, { shareSchedulesWithTas: args.share });
+    await ctx.db.insert("changeLog", {
+      periodRef: period._id,
+      actorRef: user._id,
+      action: args.share ? "period.share_on" : "period.share_off",
+      before: { shareSchedulesWithTas: before },
+      after: { shareSchedulesWithTas: args.share },
+      at: Date.now(),
+    });
+    return null;
   },
 });
 

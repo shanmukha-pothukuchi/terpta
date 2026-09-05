@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { BellRing, MailCheck, Trash2, UserPlus, Users } from "lucide-react";
+import { BellRing, Eye, EyeOff, MailCheck, Trash2, UserPlus, Users } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import {
@@ -16,6 +16,7 @@ import {
   Spinner,
   StatusBadge,
   Surface,
+  Switch,
   toast,
 } from "../../components/ui";
 import { usePeriod } from "../../lib/period";
@@ -56,6 +57,12 @@ export interface RosterViewProps {
   inviting: boolean;
   onInvite: (email: string) => void;
   onRemove: (taProfileRef: Id<"taProfiles">) => void;
+  /**
+   * Whether TAs in this period can see each other's shifts. Undefined while
+   * the period loads; the switch is omitted in previews that pass no handler.
+   */
+  shareSchedules?: boolean;
+  onShareSchedulesChange?: (share: boolean) => void;
 }
 
 export function RosterView({
@@ -68,6 +75,8 @@ export function RosterView({
   inviting,
   onInvite,
   onRemove,
+  shareSchedules = false,
+  onShareSchedulesChange,
 }: RosterViewProps) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -134,6 +143,28 @@ export function RosterView({
           </>
         }
       />
+
+      {/* Whether the team can see itself. Kept next to the roster because it
+          is a fact about these people, not about the schedule. */}
+      {onShareSchedulesChange ? (
+        <Surface className="mb-4 flex items-center gap-3 px-3.5 py-3">
+          {shareSchedules ? (
+            <Eye size={15} strokeWidth={1.5} className="shrink-0 text-ok-text" aria-hidden />
+          ) : (
+            <EyeOff size={15} strokeWidth={1.5} className="shrink-0 text-faint" aria-hidden />
+          )}
+          <Switch
+            checked={shareSchedules}
+            onChange={onShareSchedulesChange}
+            label="Let TAs see each other's schedules"
+            hint={
+              shareSchedules
+                ? "TAs can switch their schedule to the whole team and see who they are on with — names, duties and times only."
+                : "Each TA sees only their own shifts. Availability, hours and away dates are never shared either way."
+            }
+          />
+        </Surface>
+      ) : null}
 
       {rows === undefined ? (
         <Spinner label="Loading roster…" />
@@ -327,6 +358,8 @@ export function RosterView({
 export default function Roster() {
   const { periodId } = usePeriod();
   const rows = useQuery(api.roster.list, periodId ? { periodRef: periodId } : "skip");
+  const periods = useQuery(api.periods.listMine);
+  const setSharing = useMutation(api.periods.setScheduleSharing);
   const invite = useAction(api.roster.invite);
   const removeTa = useMutation(api.roster.remove);
   const nudge = useAction(api.roster.nudge);
@@ -393,6 +426,24 @@ export default function Roster() {
           .then(() => toast("TA removed from period"))
           .catch((e) => toast(errorMessage(e), { tone: "error" }));
       }}
+      shareSchedules={
+        periods?.find((p) => p.period._id === periodId)?.period.shareSchedulesWithTas ?? false
+      }
+      onShareSchedulesChange={
+        periodId
+          ? (share) => {
+              setSharing({ periodRef: periodId, share })
+                .then(() =>
+                  toast(
+                    share
+                      ? "TAs can now see each other's schedules"
+                      : "TA schedules are private again",
+                  ),
+                )
+                .catch((e) => toast(errorMessage(e), { tone: "error" }));
+            }
+          : undefined
+      }
     />
   );
 }
