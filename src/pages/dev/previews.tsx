@@ -10,6 +10,7 @@
  *   /dev/preview/builder         — coordinator builder, default view
  *   /dev/preview/builder-drawer  — builder with Daniel's TA drawer open
  *   /dev/preview/builder-publish — builder with the publish modal open
+ *   /dev/preview/builder-table   — builder with the week-as-a-table modal open
  *   /dev/preview/builder-shift   — builder with the shift side panel open
  *   /dev/preview/roster          — coordinator roster
  *   /dev/preview/changelog       — coordinator changelog, both sides + filter
@@ -191,12 +192,15 @@ function BuilderPreview({
   drawer,
   shiftPanel,
   publish,
+  table,
   week,
 }: {
   drawer?: boolean;
   /** Open the shift side panel on the unfilled 0107 discussion. */
   shiftPanel?: boolean;
   publish?: boolean;
+  /** Open the week-as-a-table export. Pairs with `week` for the overlay. */
+  table?: boolean;
   week?: boolean;
 }) {
   return (
@@ -214,6 +218,7 @@ function BuilderPreview({
           initialDrawerShift={shiftPanel ? fx.PANEL_SHIFT_ID : null}
           fixtureCandidates={shiftPanel ? fx.shiftCandidates : undefined}
           initialPublishOpen={publish ?? false}
+          initialTableOpen={table ?? false}
         />
       </div>
     </Frame>
@@ -574,6 +579,10 @@ const SCREENS: Record<string, { label: string; element: ReactNode }> = {
   builder: { label: "Builder — default", element: <BuilderPreview /> },
   "builder-drawer": { label: "Builder — TA drawer (Daniel)", element: <BuilderPreview drawer /> },
   "builder-publish": { label: "Builder — publish modal", element: <BuilderPreview publish /> },
+  "builder-table": {
+    label: "Builder — week as a table (Scribble)",
+    element: <BuilderPreview table week />,
+  },
   "builder-shift": {
     label: "Builder — shift panel (0107)",
     element: <BuilderPreview shiftPanel />,

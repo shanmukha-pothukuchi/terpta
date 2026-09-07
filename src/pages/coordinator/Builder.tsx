@@ -14,6 +14,7 @@ import {
   CalendarPlus,
   RefreshCw,
   Send,
+  Table,
   TriangleAlert,
   Undo2,
   Wand2,
@@ -66,6 +67,7 @@ import { TaDrawer } from "./builder/TaDrawer";
 import { ShiftDrawer, type ShiftCandidate } from "./builder/ShiftDrawer";
 import { PublishModal } from "./builder/PublishModal";
 import { CourseCalendarModal } from "./builder/CourseCalendarModal";
+import { WeekTableModal } from "./builder/WeekTableModal";
 
 /** Fixture bundle so a DEV preview harness can render without auth/Convex. */
 export interface BuilderFixture {
@@ -134,6 +136,7 @@ export function BuilderScreen({
   initialDrawerShift = null,
   fixtureCandidates,
   initialPublishOpen = false,
+  initialTableOpen = false,
 }: {
   periodRef: Id<"staffingPeriods">;
   fixture?: BuilderFixture;
@@ -147,6 +150,8 @@ export function BuilderScreen({
   fixtureCandidates?: ShiftCandidate[];
   /** DEV harness: open the publish modal on mount. */
   initialPublishOpen?: boolean;
+  /** DEV harness: open the week-as-a-table modal on mount. */
+  initialTableOpen?: boolean;
 }) {
   const skip = fixture !== undefined;
   const shifts = useQuery(api.shifts.list, skip ? "skip" : { periodRef });
@@ -175,6 +180,7 @@ export function BuilderScreen({
   const [drawerShift, setDrawerShift] = useState<Id<"shifts"> | null>(initialDrawerShift);
   const [publishOpen, setPublishOpen] = useState(initialPublishOpen);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [tableOpen, setTableOpen] = useState(initialTableOpen);
   const [publishing, setPublishing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [addedTaIds, setAddedTaIds] = useState<string[]>([]);
@@ -709,6 +715,11 @@ export function BuilderScreen({
             {hasAssignments ? "Regenerate" : "Generate"}
             <span className="text-faint">· keeps {lockCount} locks</span>
           </Button>
+          {/* The same week as Scribble source, for the course page. */}
+          <Button variant="secondary" onClick={() => setTableOpen(true)}>
+            <Table size={14} strokeWidth={1.5} className="text-muted" />
+            Copy as table
+          </Button>
           {/* Calendars students subscribe to, one per audience. */}
           <Button variant="secondary" onClick={() => setCalendarOpen(true)}>
             <CalendarPlus size={14} strokeWidth={1.5} className="text-muted" />
@@ -833,6 +844,15 @@ export function BuilderScreen({
           onAssign={(shiftRef) => void doAssign(drawerTa, shiftRef, undefined, true)}
         />
       )}
+
+      <WeekTableModal
+        open={tableOpen}
+        onClose={() => setTableOpen(false)}
+        model={fullModel}
+        week={week}
+        weekStart={weekStart}
+        dutyTypes={data.dutyTypes!}
+      />
 
       <CourseCalendarModal
         open={calendarOpen}
