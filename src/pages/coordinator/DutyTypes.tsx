@@ -24,6 +24,7 @@ import {
   Tooltip,
 } from "../../components/ui";
 import { usePeriod } from "../../lib/period";
+import { DAY_LABELS, formatTimeRange, type DayCode } from "../../lib/format";
 import { errorMessage } from "../../lib/errorMessage";
 
 export type DutyTypeRow = FunctionReturnType<typeof api.dutyTypes.list>[number];
@@ -642,6 +643,75 @@ export interface DutyTypesViewProps {
   onCreate: (fields: DutyTypeFields) => void;
   onUpdate: (id: Id<"dutyTypes">, patch: Partial<DutyTypeFields>) => void;
   onRemove: (id: Id<"dutyTypes">) => void;
+  /** The lecture times the generator reads off this period's sections. */
+  lectures?: LectureTimes;
+}
+
+export interface LectureTimes {
+  lectures: Array<{
+    day: DayCode;
+    startMin: number;
+    endMin: number;
+    sectionNumbers: string[];
+  }>;
+  /** Window duty types with "Keep clear of ▸ Lectures" ticked. */
+  avoidedBy: string[];
+}
+
+/**
+ * What the generator thinks the lectures are.
+ *
+ * A board generated straight through lecture has two possible causes — the
+ * lecture times were never found, or no office-hours duty type was told to
+ * avoid them — and neither is visible from the board. Both are readable here.
+ */
+function LecturePanel({ lectures }: { lectures: LectureTimes }) {
+  const avoided = lectures.avoidedBy.length > 0;
+  return (
+    <Surface className="mt-4 overflow-hidden">
+      <div className="flex h-10 items-center gap-2.5 border-b border-line px-3.5">
+        <span className="text-[13px] font-medium text-ink">Lectures</span>
+        <span className="text-[12px] text-faint">
+          {lectures.lectures.length === 0
+            ? "none found"
+            : avoided
+              ? `kept clear by ${lectures.avoidedBy.join(", ")}`
+              : "not avoided by any office hours"}
+        </span>
+      </div>
+      {lectures.lectures.length === 0 ? (
+        <p className="px-3.5 py-3 text-[12px] leading-[1.5] text-faint">
+          No lecture meetings on the sections this period staffs. Office hours
+          are cut without regard for lecture time until the imported sections
+          carry one.
+        </p>
+      ) : (
+        <>
+          {lectures.lectures.map((l) => (
+            <div
+              key={`${l.day}-${l.startMin}-${l.endMin}`}
+              className="flex h-9 items-center gap-3 border-b border-[rgba(255,255,255,0.04)] px-3.5 text-[12.5px] last:border-b-0"
+            >
+              <span className="w-20 text-muted">{DAY_LABELS[l.day]}</span>
+              <span className="font-mono text-ink">
+                {formatTimeRange(l.startMin, l.endMin)}
+              </span>
+              <span className="min-w-0 truncate text-faint">
+                section{l.sectionNumbers.length === 1 ? "" : "s"}{" "}
+                {l.sectionNumbers.join(", ")}
+              </span>
+            </div>
+          ))}
+          {!avoided ? (
+            <p className="border-t border-line px-3.5 py-2.5 text-[11.5px] leading-[1.45] text-faint">
+              Nothing is avoiding these yet — tick "Keep clear of ▸ Lectures"
+              on an office-hours duty type above and generate again.
+            </p>
+          ) : null}
+        </>
+      )}
+    </Surface>
+  );
 }
 
 export function DutyTypesView({
@@ -650,6 +720,7 @@ export function DutyTypesView({
   onCreate,
   onUpdate,
   onRemove,
+  lectures,
 }: DutyTypesViewProps) {
   const [adding, setAdding] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<DutyTypeRow | null>(null);
@@ -738,6 +809,8 @@ export function DutyTypesView({
         </Surface>
       )}
 
+      {lectures ? <LecturePanel lectures={lectures} /> : null}
+
       <Modal
         open={pendingDelete !== null}
         onClose={() => setPendingDelete(null)}
@@ -788,6 +861,10 @@ export function DutyTypesView({
 export default function DutyTypes() {
   const { periodId } = usePeriod();
   const dutyTypes = useQuery(api.dutyTypes.list, periodId ? { periodRef: periodId } : "skip");
+  const lectures = useQuery(
+    api.builder.lectureTimes,
+    periodId ? { periodRef: periodId } : "skip",
+  );
   const create = useMutation(api.dutyTypes.create);
   const update = useMutation(api.dutyTypes.update);
   const remove = useMutation(api.dutyTypes.remove);
@@ -796,6 +873,7 @@ export default function DutyTypes() {
     <DutyTypesView
       periodSelected={periodId !== null}
       dutyTypes={periodId ? dutyTypes : undefined}
+      lectures={periodId ? lectures : undefined}
       onCreate={(fields) => {
         if (!periodId) return;
         create({ periodRef: periodId, ...fields })

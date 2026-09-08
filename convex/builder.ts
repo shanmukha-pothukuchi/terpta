@@ -571,31 +571,11 @@ async function windowBlackoutRanges(
     return out;
   }
 
-  const lectureRanges: TimeRange[] = [];
-  if (windowDuties.some((d) => d.noOverlapLectures)) {
-    // Only the lectures this period actually staffs. A course has several
-    // lecture sections under different instructors, and the others are
-    // somebody else's TAs' problem — blacking them all out cost this course
-    // its whole Tuesday and Thursday afternoon for lectures none of its own
-    // students attend.
-    const staffed = new Set<string>();
-    for (const shift of shiftDocs) {
-      if (shift.sectionRef !== undefined) staffed.add(shift.sectionRef as string);
-    }
-    const seen = new Set<string>();
-    for (const sectionId of staffed) {
-      const section = await ctx.db.get(sectionId as Id<"sections">);
-      if (!section) continue;
-      for (const m of section.meetings) {
-        if ((m.kind ?? section.type) !== "lecture") continue;
-        // One lecture is listed on every section that attends it.
-        const key = `${m.day}|${m.startMin}|${m.endMin}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        lectureRanges.push({ day: m.day, startMin: m.startMin, endMin: m.endMin });
-      }
-    }
-  }
+  const lectureRanges = windowDuties.some((d) => d.noOverlapLectures)
+    ? (await staffedLectures(ctx, shiftDocs)).map(
+        (l): TimeRange => ({ day: l.day, startMin: l.startMin, endMin: l.endMin }),
+      )
+    : [];
 
   for (const d of windowDuties) {
     const avoid = new Set((d.noOverlapDutyRefs ?? []).map((id) => id as string));
@@ -615,6 +595,99 @@ async function windowBlackoutRanges(
   }
   return out;
 }
+
+const DAY_ORDER: Day[] = ["M", "Tu", "W", "Th", "F"];
+
+/** One lecture the generator keeps office hours clear of, and where it came from. */
+type StaffedLecture = TimeRange & { sectionNumbers: string[] };
+
+/**
+ * The lecture times of the sections this period staffs.
+ *
+ * Only the lectures this period actually staffs. A course has several lecture
+ * sections under different instructors, and the others are somebody else's
+ * TAs' problem — blacking them all out cost this course its whole Tuesday and
+ * Thursday afternoon for lectures none of its own students attend. The
+ * sections are read off the shifts, since a shift is what says a section is
+ * ours; one lecture is listed on every section that attends it, so identical
+ * times are folded into one row that names them all.
+ */
+async function staffedLectures(
+  ctx: QueryCtx,
+  shiftDocs: Doc<"shifts">[],
+): Promise<StaffedLecture[]> {
+  const staffed = new Set<string>();
+  for (const shift of shiftDocs) {
+    if (shift.sectionRef !== undefined) staffed.add(shift.sectionRef as string);
+  }
+  const byTime = new Map<string, StaffedLecture>();
+  for (const sectionId of [...staffed].sort()) {
+    const section = await ctx.db.get(sectionId as Id<"sections">);
+    if (!section) continue;
+    for (const m of section.meetings) {
+      if ((m.kind ?? section.type) !== "lecture") continue;
+      const key = `${m.day}|${m.startMin}|${m.endMin}`;
+      const existing = byTime.get(key);
+      if (existing) {
+        if (!existing.sectionNumbers.includes(section.sectionNumber)) {
+          existing.sectionNumbers.push(section.sectionNumber);
+        }
+        continue;
+      }
+      byTime.set(key, {
+        day: m.day,
+        startMin: m.startMin,
+        endMin: m.endMin,
+        sectionNumbers: [section.sectionNumber],
+      });
+    }
+  }
+  return [...byTime.values()];
+}
+
+/**
+ * The lecture times the generator has in mind, so a coordinator can check
+ * them rather than infer them from a board that came out wrong.
+ *
+ * `avoidedBy` is empty when no window duty type has "Keep clear of ▸
+ * Lectures" ticked — which is what a schedule generated straight through
+ * lecture looks like.
+ */
+export const lectureTimes = query({
+  args: { periodRef: v.id("staffingPeriods") },
+  returns: v.object({
+    lectures: v.array(
+      v.object({
+        day: dayValidator,
+        startMin: v.number(),
+        endMin: v.number(),
+        sectionNumbers: v.array(v.string()),
+      }),
+    ),
+    avoidedBy: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    await requireCoordinator(ctx, args.periodRef);
+    const shiftDocs = await ctx.db
+      .query("shifts")
+      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
+      .collect();
+    const dutyTypes = await ctx.db
+      .query("dutyTypes")
+      .withIndex("by_period", (q) => q.eq("periodRef", args.periodRef))
+      .collect();
+    const lectures = await staffedLectures(ctx, shiftDocs);
+    lectures.sort(
+      (a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day) || a.startMin - b.startMin,
+    );
+    return {
+      lectures,
+      avoidedBy: dutyTypes
+        .filter((d) => d.mode === "window" && d.noOverlapLectures)
+        .map((d) => d.name),
+    };
+  },
+});
 
 // ---------------------------------------------------------------------------
 // officeHourGaps — who is short of their office hours, and what is in the way
