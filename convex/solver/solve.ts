@@ -71,6 +71,8 @@ type WindowShift = Extract<SolverShift, { kind: "window" }>;
 const SLOT = 15;
 /** Block lengths still come in half hours: 2h, 1h30, 1h. */
 const SIZE_STEP = 30;
+/** Grids a coordinator may cut office hours on, finest first. */
+const SLOT_CHOICES = [15, 30, 60];
 /** Shortest office-hour block when the duty type does not say otherwise. */
 const DEFAULT_MIN_BLOCK = 60;
 
@@ -800,12 +802,31 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
   const hoursPerTa = ctx.input.windowHoursPerTa ?? {};
   const hoursPerTaMin = ctx.input.windowHoursPerTaMin ?? {};
   const minBlockByDuty = ctx.input.windowMinBlockMin ?? {};
+  const slotByDuty = ctx.input.windowSlotMin ?? {};
   const blackoutByDuty = ctx.input.windowBlackouts ?? {};
 
-  /** Shortest block worth holding, snapped to the half-hour grid. */
+  /**
+   * The clock grid this duty type's blocks start on. A coordinator picks it;
+   * anything else is snapped to the nearest offered grid so a stray value
+   * can never put blocks on times the screens cannot show.
+   */
+  const stepOf = (dutyId: string): number => {
+    const raw = slotByDuty[dutyId] ?? SLOT;
+    return SLOT_CHOICES.reduce((best, c) =>
+      Math.abs(c - raw) < Math.abs(best - raw) ? c : best,
+    );
+  };
+
+  /**
+   * Shortest block worth holding, rounded up onto the grid.
+   *
+   * Up, never down: rounding a coordinator's floor down would place blocks
+   * shorter than the one they said was worth a TA's trip.
+   */
   const minBlockOf = (dutyId: string): number => {
     const raw = minBlockByDuty[dutyId] ?? DEFAULT_MIN_BLOCK;
-    return Math.max(SLOT, Math.round(raw / SLOT) * SLOT);
+    const step = stepOf(dutyId);
+    return Math.max(step, Math.ceil(raw / step) * step);
   };
   // Nobody comes to office hours held during the lecture, and the TA holding
   // them is usually in it. This is a rule about the hour, not about one TA:
@@ -891,6 +912,17 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
     // Nobody owes hours and no window asks to be covered: nothing to cut.
     if (targetMin <= 0 && !windows.some((w) => (w.minCount ?? 0) > 0)) continue;
     const minBlock = minBlockOf(dutyId);
+    const step = stepOf(dutyId);
+    // Lengths still come in half hours, unless the grid itself is coarser:
+    // an hourly grid that produced 90-minute blocks would end them at half
+    // past, which is the thing an hourly grid is chosen to avoid.
+    const sizeStep = Math.max(SIZE_STEP, step);
+    /**
+     * The first start inside a window that lands on the clock grid. Snapped
+     * to the clock rather than to the window, so an hourly grid reads 3-4
+     * even when the window itself opens at 10:45.
+     */
+    const gridStart = (from: number): number => Math.ceil(from / step) * step;
     const tas = [...ctx.tas].sort((a, b) => a.id.localeCompare(b.id));
 
     // "few_long" reaches for two-hour blocks and settles for less;
@@ -902,7 +934,7 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
       Math.max(styleOf(ta) === "few_long" ? 120 : 60, minBlock);
     const sizesOf = (ta: SolverTaProfile) => {
       const out: number[] = [];
-      for (let s = maxSizeOf(ta); s >= minBlock; s -= SIZE_STEP) out.push(s);
+      for (let s = maxSizeOf(ta); s >= minBlock; s -= sizeStep) out.push(s);
       return out;
     };
 
@@ -974,7 +1006,7 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
         let sizeCount = 0;
         for (const w of windows) {
           const occ = occupancy.get(w.id)!;
-          for (let start = w.startMin; start + size <= w.endMin; start += SLOT) {
+          for (let start = gridStart(w.startMin); start + size <= w.endMin; start += step) {
             const end = start + size;
             let room = true;
             for (let i = slotIndex(w, start); i < slotIndex(w, end); i++) {
@@ -1102,7 +1134,7 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
             if (size > budget) continue;
             for (const w of windows) {
               const occ = occupancy.get(w.id)!;
-              for (let start = w.startMin; start + size <= w.endMin; start += SLOT) {
+              for (let start = gridStart(w.startMin); start + size <= w.endMin; start += step) {
                 const end = start + size;
                 let room = true;
                 for (let i = slotIndex(w, start); i < slotIndex(w, end); i++) {
@@ -1182,8 +1214,9 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
             // more cover than the TAs owe between them stays part-covered
             // rather than quietly handing somebody a sixth hour.
             if ((need.get(ta.id) ?? 0) < minBlock) continue;
-            const first = Math.max(w.startMin, slotStart - minBlock + SLOT);
-            for (let start = first; start <= slotStart && start + minBlock <= w.endMin; start += SLOT) {
+            // Starts on the grid that would still cover this slot.
+            const first = Math.max(gridStart(w.startMin), gridStart(slotStart - minBlock + 1));
+            for (let start = first; start <= slotStart && start + minBlock <= w.endMin; start += step) {
               const end = start + minBlock;
               let room = true;
               for (let j = slotIndex(w, start); j < slotIndex(w, end); j++) {
@@ -1230,7 +1263,7 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
       // drops the rest, week after week. Grow a block by the remainder
       // instead, so long as it stays under the ceiling the TA asked for.
       const placed = targetMin - left;
-      if (placed < requiredHoursMin && left > 0 && left < minBlock && left % SLOT === 0) {
+      if (placed < requiredHoursMin && left > 0 && left < minBlock && left % step === 0) {
         for (const b of blocksOf.get(ta.id) ?? []) {
           if (b.dutyTypeId !== dutyId || b.locked) continue;
           // A TA who asked for fewer, longer blocks will not mind one being

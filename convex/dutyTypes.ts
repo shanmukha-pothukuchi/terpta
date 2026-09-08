@@ -16,6 +16,21 @@ const modeValidator = dutyModeValidator;
 const DEFAULT_MIN_BLOCK = 60;
 const MIN_BLOCK_FLOOR = 30;
 
+/**
+ * The clock grid office-hour blocks start on. Quarter hours by default,
+ * because that is how availability is painted; a coordinator who would
+ * rather read "3-4" than "3:15-4:15" picks a coarser one.
+ */
+const SLOT_CHOICES = [15, 30, 60];
+const DEFAULT_SLOT = 15;
+
+/** Nearest offered grid, so a hand-written value can never wedge the solver. */
+function normalizeSlot(minutes: number): number {
+  return SLOT_CHOICES.reduce((best, c) =>
+    Math.abs(c - minutes) < Math.abs(best - minutes) ? c : best,
+  );
+}
+
 /** Full dutyTypes doc validator (shared with ta.getSchedule). */
 export const dutyTypeDoc = v.object({
   _id: v.id("dutyTypes"),
@@ -29,6 +44,7 @@ export const dutyTypeDoc = v.object({
   hoursPerTaMin: v.optional(v.number()),
   maxPerTa: v.optional(v.number()),
   minBlockMinutes: v.optional(v.number()),
+  slotMinutes: v.optional(v.number()),
   noOverlapDutyRefs: v.optional(v.array(v.id("dutyTypes"))),
   noOverlapLectures: v.optional(v.boolean()),
 });
@@ -92,6 +108,7 @@ export const create = mutation({
     hoursPerTaMin: v.optional(v.number()),
     maxPerTa: v.optional(v.number()),
     minBlockMinutes: v.optional(v.number()),
+    slotMinutes: v.optional(v.number()),
     noOverlapDutyRefs: v.optional(v.array(v.id("dutyTypes"))),
     noOverlapLectures: v.optional(v.boolean()),
   },
@@ -115,6 +132,7 @@ export const create = mutation({
               ? { hoursPerTaMin: args.hoursPerTaMin }
               : {}),
             minBlockMinutes: args.minBlockMinutes ?? DEFAULT_MIN_BLOCK,
+            slotMinutes: normalizeSlot(args.slotMinutes ?? DEFAULT_SLOT),
             ...(args.noOverlapDutyRefs !== undefined
               ? { noOverlapDutyRefs: args.noOverlapDutyRefs }
               : {}),
@@ -140,6 +158,7 @@ export const update = mutation({
     /** Zero clears the cap. */
     maxPerTa: v.optional(v.number()),
     minBlockMinutes: v.optional(v.number()),
+    slotMinutes: v.optional(v.number()),
     noOverlapDutyRefs: v.optional(v.array(v.id("dutyTypes"))),
     noOverlapLectures: v.optional(v.boolean()),
   },
@@ -205,6 +224,11 @@ export const update = mutation({
       patch.minBlockMinutes = Math.round(args.minBlockMinutes);
     } else if (args.mode === "window" && dutyType.minBlockMinutes === undefined) {
       patch.minBlockMinutes = DEFAULT_MIN_BLOCK;
+    }
+    if (args.slotMinutes !== undefined) {
+      patch.slotMinutes = normalizeSlot(args.slotMinutes);
+    } else if (args.mode === "window" && dutyType.slotMinutes === undefined) {
+      patch.slotMinutes = DEFAULT_SLOT;
     }
     // An empty list is a real answer ("may overlap anything"), so it is
     // stored rather than treated as "not set".

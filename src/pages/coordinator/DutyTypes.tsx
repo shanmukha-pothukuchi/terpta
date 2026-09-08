@@ -43,6 +43,8 @@ export interface DutyTypeFields {
   maxPerTa?: number;
   /** "window" only: shortest office-hour block the solver may cut, in minutes. */
   minBlockMinutes?: number;
+  /** "window" only: the clock grid block start times land on — 15, 30 or 60. */
+  slotMinutes?: number;
   /** "window" only: duty types whose times office hours must stay clear of. */
   noOverlapDutyRefs?: Id<"dutyTypes">[];
   /** "window" only: also stay clear of the lecture meetings of the course. */
@@ -51,6 +53,61 @@ export interface DutyTypeFields {
 
 /** Office hours default to hour-long blocks. */
 const DEFAULT_MIN_BLOCK = 60;
+
+/** Grids office hours may be cut on, and how each reads on the board. */
+const SLOT_CHOICES = [
+  { value: 15, label: "15m", example: "3:15-4:45" },
+  { value: 30, label: "30m", example: "3:30-4:30" },
+  { value: 60, label: "1h", example: "3-4" },
+] as const;
+const DEFAULT_SLOT = 15;
+
+/**
+ * Which clock grid office hours start on.
+ *
+ * Availability is painted on quarter hours and the solver used to cut on
+ * them too, so a schedule came out full of 12:15s and 3:45s. The finest grid
+ * fits the most hours in; the coarsest is the one a coordinator can read.
+ */
+function SlotToggle({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const current = SLOT_CHOICES.find((c) => c.value === value) ?? SLOT_CHOICES[0];
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[12.5px] text-muted">Start times</span>
+        <div className="inline-flex h-6 items-center gap-0.5 rounded-[7px] border border-line bg-[rgba(255,255,255,0.03)] p-0.5">
+          {SLOT_CHOICES.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => onChange(c.value)}
+              aria-pressed={value === c.value}
+              className={
+                "h-full cursor-pointer whitespace-nowrap rounded-[5px] px-2 text-[11.5px] transition-colors duration-100 " +
+                (value === c.value
+                  ? "bg-[rgba(255,255,255,0.09)] font-medium text-ink shadow-[inset_0_0_0_1px_rgba(255,255,255,0.10)]"
+                  : "text-muted hover:text-ink")
+              }
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="text-[11.5px] leading-[1.45] text-faint">
+        Every block starts on this grid, so office hours read{" "}
+        <span className="font-mono text-muted">{current.example}</span>. A TA
+        free for a stretch that does not line up with it loses the ragged ends.
+      </p>
+    </div>
+  );
+}
 
 const MODE_LABEL: Record<DutyTypeFields["mode"], string> = {
   sync: "Sync",
@@ -429,9 +486,10 @@ function EditableRow({
   const most = dt.hoursPerTa ?? 2;
   const fewest = Math.min(dt.hoursPerTaMin ?? most, most);
   const summary = isWindow
-    ? `${fewest === most ? most : `${fewest}–${most}`}h/TA · ${minBlock % 60 === 0 ? `${minBlock / 60}h` : `${minBlock}m`} min${
-        avoidCount > 0 ? ` · ${avoidCount}` : ""
-      }`
+    ? `${fewest === most ? most : `${fewest}–${most}`}h/TA · ${minBlock % 60 === 0 ? `${minBlock / 60}h` : `${minBlock}m`} min · ${
+        (SLOT_CHOICES.find((c) => c.value === (dt.slotMinutes ?? DEFAULT_SLOT)) ??
+          SLOT_CHOICES[0]).label
+      }${avoidCount > 0 ? ` · ${avoidCount}` : ""}`
     : dt.maxPerTa !== undefined && dt.maxPerTa > 0
       ? `max ${dt.maxPerTa} per TA`
       : "no limit";
@@ -518,6 +576,12 @@ function EditableRow({
                 unit="h"
                 min={0.5}
                 hint="No TA is given a block shorter than this. Time left over after the last full block is reported, not shoehorned in."
+              />
+            </div>
+            <div className="border-t border-line pt-2.5">
+              <SlotToggle
+                value={dt.slotMinutes ?? DEFAULT_SLOT}
+                onChange={(slotMinutes) => onUpdate({ slotMinutes })}
               />
             </div>
             <div className="flex flex-col gap-1.5 border-t border-line pt-2.5">

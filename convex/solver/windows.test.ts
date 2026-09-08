@@ -634,3 +634,73 @@ describe("per-TA duty cap", () => {
     expect(out.assignments.filter((x) => x.locked)).toHaveLength(2);
   });
 });
+
+describe("the grid office hours are cut on", () => {
+  it("starts blocks on the hour when the coordinator asks for hours", () => {
+    const out = solve(
+      base({
+        // Opens at 10:15, which is on the quarter-hour grid and no other.
+        shifts: [window("w-mon", "M", 615, 1020)],
+        taProfiles: [ta("a")],
+        windowSlotMin: { oh: 60 },
+      }),
+    );
+    expect(out.windowBlocks).toHaveLength(1);
+    // 11:00-1:00, not 10:15-12:15: the grid is the clock, not the window.
+    expect(out.windowBlocks[0]).toMatchObject({ startMin: 660, endMin: 780 });
+  });
+
+  it("starts blocks on the half hour when asked for thirty", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 615, 1020)],
+        taProfiles: [ta("a")],
+        windowSlotMin: { oh: 30 },
+      }),
+    );
+    expect(out.windowBlocks[0]).toMatchObject({ startMin: 630, endMin: 750 });
+  });
+
+  it("still cuts on quarter hours by default", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 615, 1020)],
+        taProfiles: [ta("a")],
+      }),
+    );
+    expect(out.windowBlocks[0]).toMatchObject({ startMin: 615, endMin: 735 });
+  });
+
+  it("keeps every block a whole number of grid steps long", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 540, 1020)],
+        taProfiles: [ta("a", { officeHoursStyle: "many_short" })],
+        windowHoursPerTa: { oh: 2.5 },
+        // Ninety-minute blocks would end at half past, which is what an
+        // hourly grid is picked to avoid.
+        windowMinBlockMin: { oh: 90 },
+        windowSlotMin: { oh: 60 },
+      }),
+    );
+    for (const b of out.windowBlocks) {
+      expect(b.startMin % 60).toBe(0);
+      expect((b.endMin - b.startMin) % 60).toBe(0);
+    }
+  });
+
+  it("works the lecture blackout on the coarse grid too", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-tue", "Tu", 540, 1020)],
+        taProfiles: [ta("a")],
+        // The Tu/Th 9:30-10:45 lecture.
+        windowBlackouts: { oh: [{ day: "Tu", startMin: 570, endMin: 645 }] },
+        windowSlotMin: { oh: 60 },
+      }),
+    );
+    expect(out.windowBlocks).toHaveLength(1);
+    // 9:00 would run into the lecture, so the first legal hour is 11:00.
+    expect(out.windowBlocks[0]).toMatchObject({ startMin: 660, endMin: 780 });
+  });
+});

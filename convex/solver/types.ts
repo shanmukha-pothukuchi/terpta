@@ -128,6 +128,13 @@ export interface SolveInput {
   /** Shortest office-hour block in minutes, by window duty type id. Default 60. */
   windowMinBlockMin?: Record<string, number>;
   /**
+   * The clock grid block start times land on, by window duty type id —
+   * 15, 30 or 60. Default 15. At 60 a block runs 3:00-4:00; at 15 it may
+   * run 3:15-4:45. Sizes still come in half hours unless the grid is
+   * coarser than that.
+   */
+  windowSlotMin?: Record<string, number>;
+  /**
    * Times office hours of a window duty type may not be cut into, whoever
    * would hold them — lectures, discussions, anything the coordinator picked.
    */

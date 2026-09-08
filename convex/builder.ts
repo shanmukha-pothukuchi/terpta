@@ -331,6 +331,7 @@ const solveInputValidator = v.object({
   windowHoursPerTaMin: v.optional(v.record(v.string(), v.number())),
   maxPerTaByDuty: v.optional(v.record(v.string(), v.number())),
   windowMinBlockMin: v.optional(v.record(v.string(), v.number())),
+  windowSlotMin: v.optional(v.record(v.string(), v.number())),
   windowBlackouts: v.optional(
     v.record(
       v.string(),
@@ -454,6 +455,7 @@ export const loadSolverInput = internalQuery({
     const windowHoursPerTa: Record<string, number> = {};
     const windowHoursPerTaMin: Record<string, number> = {};
     const windowMinBlockMin: Record<string, number> = {};
+    const windowSlotMin: Record<string, number> = {};
     for (const d of dutyTypes) {
       if (d.maxPerTa !== undefined && d.maxPerTa > 0) maxPerTaByDuty[d._id as string] = d.maxPerTa;
       // Absent means the default the duty-type screen displays, never zero.
@@ -464,6 +466,7 @@ export const loadSolverInput = internalQuery({
           d.hoursPerTa ?? 2,
         );
         windowMinBlockMin[d._id as string] = d.minBlockMinutes ?? DEFAULT_MIN_BLOCK_MIN;
+        windowSlotMin[d._id as string] = d.slotMinutes ?? SOLVER_SLOT;
       }
     }
 
@@ -542,6 +545,7 @@ export const loadSolverInput = internalQuery({
       windowHoursPerTaMin,
       maxPerTaByDuty,
       windowMinBlockMin,
+      windowSlotMin,
       windowBlackouts,
       lockedWindowBlocks,
       periodStart: DEFAULT_PERIOD_START,
@@ -780,9 +784,12 @@ export const officeHourGaps = query({
         Math.min(duty.hoursPerTaMin ?? duty.hoursPerTa ?? 2, duty.hoursPerTa ?? 2) * 60,
       );
       if (targetMin <= 0) continue;
+      // Same grid the solver cuts on, or this reports gaps it would not
+      // leave — and offers slots it would refuse to use.
+      const step = duty.slotMinutes ?? SOLVER_SLOT;
       const minBlock = Math.max(
-        SOLVER_SLOT,
-        Math.round((duty.minBlockMinutes ?? DEFAULT_MIN_BLOCK_MIN) / SOLVER_SLOT) * SOLVER_SLOT,
+        step,
+        Math.ceil((duty.minBlockMinutes ?? DEFAULT_MIN_BLOCK_MIN) / step) * step,
       );
       const avoid = blackouts[duty._id as string] ?? [];
 
@@ -826,7 +833,11 @@ export const officeHourGaps = query({
         let anyOpen = false; // ...and it still has a seat
         for (const w of windows) {
           const day = w.day!;
-          for (let start = w.startMin!; start + minBlock <= w.endMin!; start += SOLVER_SLOT) {
+          for (
+            let start = Math.ceil(w.startMin! / step) * step;
+            start + minBlock <= w.endMin!;
+            start += step
+          ) {
             const end = start + minBlock;
             if (avoid.some((b) => b.day === day && minutesOverlap(b.startMin, b.endMin, start, end))) {
               continue;

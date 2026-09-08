@@ -121,6 +121,13 @@ export default defineSchema({
      */
     minBlockMinutes: v.optional(v.number()),
     /**
+     * "window" only: the clock grid block start times land on, in minutes —
+     * 15, 30 or 60. Absent means 15. Availability is painted on quarter
+     * hours, but a coordinator who wants office hours to read "3-4" rather
+     * than "3:15-4:15" sets an hour here and gets starts on the hour.
+     */
+    slotMinutes: v.optional(v.number()),
+    /**
      * "window" only: duty types whose shift times office hours must stay
      * clear of, for everybody — not just the TA holding them.
      */
