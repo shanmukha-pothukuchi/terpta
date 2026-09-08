@@ -157,14 +157,6 @@ export default defineSchema({
      * window covered, which is what spreads hours across the day.
      */
     minCount: v.optional(v.number()),
-    /**
-     * Window only: let the window's own hours follow the TAs' painted
-     * availability — earliest start to latest end on that weekday, refreshed
-     * on every generate. Absent means the stored hours are the coordinator's
-     * and are left alone. A coordinator asked to name a window before anyone
-     * had answered, and the guess cost the hours that fell outside it.
-     */
-    autoSpan: v.optional(v.boolean()),
     sectionRef: v.optional(v.id("sections")),
     description: v.optional(v.string()),
     // sync shifts

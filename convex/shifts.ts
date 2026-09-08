@@ -300,7 +300,6 @@ export const create = mutation({
     dutyTypeRef: v.id("dutyTypes"),
     requiredCount: v.number(),
     minCount: v.optional(v.number()),
-    autoSpan: v.optional(v.boolean()),
     sectionRef: v.optional(v.id("sections")),
     description: v.optional(v.string()),
     ...timingArgs,
@@ -330,7 +329,6 @@ export const create = mutation({
       ...(args.minCount !== undefined && args.minCount > 0
         ? { minCount: Math.round(args.minCount) }
         : {}),
-      ...(args.autoSpan === true ? { autoSpan: true } : {}),
       sectionRef: args.sectionRef,
       description: args.description,
       ...timing,
@@ -350,7 +348,6 @@ export const update = mutation({
     requiredCount: v.optional(v.number()),
     /** Window only. Zero clears it. */
     minCount: v.optional(v.number()),
-    autoSpan: v.optional(v.boolean()),
     sectionRef: v.optional(v.id("sections")),
     description: v.optional(v.string()),
     ...timingArgs,
@@ -399,16 +396,6 @@ export const update = mutation({
       dutyTypeRef,
       requiredCount,
       minCount: minCount !== undefined && minCount > 0 ? Math.round(minCount) : undefined,
-      // Naming hours by hand is the override: it turns following the TAs off.
-      autoSpan:
-        args.autoSpan !== undefined
-          ? args.autoSpan || undefined
-          : args.startMin !== undefined || args.endMin !== undefined
-            ? undefined
-            : shift.autoSpan,
-      // Rebuilt wholesale, so what the solver wrote has to be carried over.
-      windowRef: shift.windowRef,
-      createdBy: shift.createdBy,
       sectionRef,
       description: args.description ?? shift.description,
       ...timing,
