@@ -86,7 +86,7 @@ describe("tableRows", () => {
     expect(rows.map((r) => r.cells[0])).toEqual(["", "", "Sriman", ""]);
   });
 
-  it("names two TAs on one hour once each, in board order", () => {
+  it("names two TAs on one hour once each, alphabetically", () => {
     const rows = tableRows(
       [block("Tu", 13, 14, "Bora"), block("Tu", 13, 14, "Pierce", "Bora")],
       { start: 13, end: 14 },
@@ -182,5 +182,27 @@ describe("rows finer than an hour", () => {
   it("labels a quarter-hour row without losing the meridiem", () => {
     const rows = tableRows([], { start: 12, end: 13 }, 15);
     expect(rows.map((r) => r.label)).toEqual(["12 PM", "12:15 PM", "12:30 PM", "12:45 PM"]);
+  });
+});
+
+describe("name order inside a cell", () => {
+  it("names the same pair the same way on every row they share", () => {
+    // Tinu's block changes over at 4, which used to reorder the cell under
+    // a reader following the column down.
+    const rows = tableRows(
+      [
+        { day: "M", startMin: 14 * 60, endMin: 16 * 60, names: ["Tinu"] },
+        { day: "M", startMin: 16 * 60, endMin: 17 * 60, names: ["Tinu"] },
+        { day: "M", startMin: 15 * 60 + 30, endMin: 16 * 60 + 30, names: ["Priyam"] },
+      ],
+      { start: 15, end: 17 },
+      30,
+    );
+    expect(rows.map((r) => r.cells[0])).toEqual([
+      "Tinu",
+      "Priyam, Tinu",
+      "Priyam, Tinu",
+      "Tinu",
+    ]);
   });
 });

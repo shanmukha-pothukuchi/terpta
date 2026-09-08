@@ -219,7 +219,11 @@ export function tableRows(
       const names = blocks
         .filter((b) => b.day === day && b.startMin < to && b.endMin > from)
         .flatMap((b) => b.names);
-      return [...new Set(names)].join(", ");
+      // Alphabetical, not board order. Board order is the order the blocks
+      // happen to start in, which changes between one row and the next: the
+      // same two people came out "Tinu, Priyam" at 3:30 and "Priyam, Tinu"
+      // at 4, on a page students read down a column of.
+      return [...new Set(names)].sort((a, b) => a.localeCompare(b)).join(", ");
     });
     rows.push({ startMin: from, label: rowLabel(from), cells });
   }

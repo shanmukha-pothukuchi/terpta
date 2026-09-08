@@ -23,6 +23,7 @@ import type * as lib_availability from "../lib/availability.js";
 import type * as lib_cascade from "../lib/cascade.js";
 import type * as lib_changeLog from "../lib/changeLog.js";
 import type * as lib_jupiterp from "../lib/jupiterp.js";
+import type * as lib_names from "../lib/names.js";
 import type * as lib_syncUser from "../lib/syncUser.js";
 import type * as lib_umdFixtures from "../lib/umdFixtures.js";
 import type * as lib_week from "../lib/week.js";
@@ -60,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   "lib/cascade": typeof lib_cascade;
   "lib/changeLog": typeof lib_changeLog;
   "lib/jupiterp": typeof lib_jupiterp;
+  "lib/names": typeof lib_names;
   "lib/syncUser": typeof lib_syncUser;
   "lib/umdFixtures": typeof lib_umdFixtures;
   "lib/week": typeof lib_week;
