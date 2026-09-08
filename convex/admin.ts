@@ -14,7 +14,7 @@
 import { ConvexError, v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import { blockStatusValidator, dayValidator } from "./schema";
-import type { TableNames } from "./_generated/dataModel";
+import type { Id, TableNames } from "./_generated/dataModel";
 
 const TABLES: TableNames[] = [
   "hourLogs",
@@ -185,5 +185,180 @@ export const setAvailability = internalMutation({
     }
 
     return { name: user.name, removed, inserted: args.blocks.length, keptImported };
+  },
+});
+
+/**
+ * Stretch or shrink one TA's generated office-hour blocks, by hand.
+ *
+ * Internal, like the rest of this file: the board has no time editor, so a
+ * coordinator who has agreed a longer Tuesday with one TA out of band has
+ * nowhere to record it and ends up re-running the generator over a schedule
+ * everybody has already read.
+ *
+ * Deltas are signed minutes, so a quarter hour on the end is
+ * `{ endDeltaMin: 15 }` and a quarter hour off the front is
+ * `{ startDeltaMin: -15 }`. Only blocks cut from a window are touched —
+ * a discussion meets when it meets.
+ *
+ * Refuses rather than guesses: a block somebody else is also standing on, a
+ * stretch past the edge of its own window, one that would collide with the
+ * TA's own shifts, or one that would put the window over the heads the
+ * coordinator asked for, all stop the whole run. Nothing is written unless
+ * every block passes, and what it changed comes back so it can be put back.
+ */
+export const stretchOfficeHours = internalMutation({
+  args: {
+    /** Email, or enough of the TA's name to pick them out. */
+    who: v.string(),
+    periodRef: v.optional(v.id("staffingPeriods")),
+    /** Which weekdays to touch. Absent means all of them. */
+    days: v.optional(v.array(dayValidator)),
+    /** Only blocks starting before this, in minutes from midnight. */
+    startsBeforeMin: v.optional(v.number()),
+    startDeltaMin: v.optional(v.number()),
+    endDeltaMin: v.optional(v.number()),
+    /** Report what would change and write nothing. */
+    dryRun: v.optional(v.boolean()),
+  },
+  returns: v.array(
+    v.object({
+      day: dayValidator,
+      description: v.string(),
+      fromStartMin: v.number(),
+      fromEndMin: v.number(),
+      toStartMin: v.number(),
+      toEndMin: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const startDelta = Math.round(args.startDeltaMin ?? 0);
+    const endDelta = Math.round(args.endDeltaMin ?? 0);
+    if (startDelta === 0 && endDelta === 0) {
+      throw new ConvexError("Nothing to do: both deltas are zero");
+    }
+
+    const needle = args.who.trim().toLowerCase();
+    const users = (await ctx.db.query("users").collect()).filter(
+      (u) => u.email.toLowerCase() === needle || u.name.toLowerCase().includes(needle),
+    );
+    if (users.length === 0) throw new ConvexError(`Nobody matches "${args.who}"`);
+    if (users.length > 1) {
+      throw new ConvexError(
+        `"${args.who}" matches ${users.map((u) => u.name).join(", ")} — use an email`,
+      );
+    }
+    const user = users[0];
+
+    const profiles = (await ctx.db.query("taProfiles").collect()).filter(
+      (p) =>
+        p.userRef === user._id &&
+        (args.periodRef === undefined || p.periodRef === args.periodRef),
+    );
+    if (profiles.length === 0) throw new ConvexError(`${user.name} has no TA profile`);
+    if (profiles.length > 1) {
+      throw new ConvexError(
+        `${user.name} is a TA in ${profiles.length} periods — pass periodRef`,
+      );
+    }
+    const profile = profiles[0];
+
+    const shifts = await ctx.db
+      .query("shifts")
+      .withIndex("by_period", (q) => q.eq("periodRef", profile.periodRef))
+      .collect();
+    const shiftById = new Map(shifts.map((s) => [s._id as string, s]));
+
+    const assignments = (
+      await ctx.db.query("assignments").collect()
+    ).filter((a) => a.taProfileRef === profile._id && shiftById.has(a.shiftRef as string));
+    const mine = assignments
+      .map((a) => shiftById.get(a.shiftRef as string)!)
+      .filter((s) => s.day !== undefined && s.startMin !== undefined && s.endMin !== undefined);
+
+    const days = args.days;
+    const targets = mine
+      .filter((s) => s.windowRef !== undefined)
+      .filter((s) => days === undefined || days.includes(s.day!))
+      .filter((s) => args.startsBeforeMin === undefined || s.startMin! < args.startsBeforeMin)
+      .sort((a, b) => a.startMin! - b.startMin!);
+    if (targets.length === 0) {
+      throw new ConvexError(`No office-hour blocks of ${user.name}'s match that`);
+    }
+
+    const overlaps = (aS: number, aE: number, bS: number, bE: number) => aS < bE && bS < aE;
+    const moved = new Map<string, { startMin: number; endMin: number }>();
+    const report = [];
+
+    for (const block of targets) {
+      const toStartMin = block.startMin! + startDelta;
+      const toEndMin = block.endMin! + endDelta;
+      const where = `${block.description ?? "Office hours"} ${block.day}`;
+      if (toEndMin <= toStartMin) {
+        throw new ConvexError(`${where} would end before it starts`);
+      }
+
+      // Everybody on a block shares its hours, so growing it grows theirs.
+      const sharers = (await ctx.db.query("assignments").collect()).filter(
+        (a) => a.shiftRef === block._id && a.taProfileRef !== profile._id,
+      );
+      if (sharers.length > 0) {
+        throw new ConvexError(
+          `${where} is shared with ${sharers.length} other TA(s) — split it first`,
+        );
+      }
+
+      const window = await ctx.db.get(block.windowRef!);
+      if (!window || window.startMin === undefined || window.endMin === undefined) {
+        throw new ConvexError(`${where} has no window to sit in`);
+      }
+      if (toStartMin < window.startMin || toEndMin > window.endMin) {
+        throw new ConvexError(
+          `${where} would reach outside its window (${window.startMin}-${window.endMin})`,
+        );
+      }
+
+      for (const other of mine) {
+        if (other._id === block._id || other.day !== block.day) continue;
+        const at = moved.get(other._id as string);
+        const s = at?.startMin ?? other.startMin!;
+        const e = at?.endMin ?? other.endMin!;
+        if (overlaps(toStartMin, toEndMin, s, e)) {
+          throw new ConvexError(`${where} would run into ${other.description ?? "another shift"}`);
+        }
+      }
+
+      // The window's own ceiling on heads at once, counted over the stretch.
+      let atOnce = 1;
+      for (const other of shifts) {
+        if (other._id === block._id) continue;
+        if (String(other.windowRef) !== String(window._id) || other.day !== block.day) continue;
+        const at = moved.get(other._id as string);
+        const s = at?.startMin ?? other.startMin!;
+        const e = at?.endMin ?? other.endMin!;
+        if (overlaps(toStartMin, toEndMin, s, e)) atOnce += other.requiredCount;
+      }
+      if (atOnce > window.requiredCount) {
+        throw new ConvexError(
+          `${where} would put ${atOnce} TAs on a window that holds ${window.requiredCount}`,
+        );
+      }
+
+      moved.set(block._id as string, { startMin: toStartMin, endMin: toEndMin });
+      report.push({
+        day: block.day!,
+        description: block.description ?? "Office hours",
+        fromStartMin: block.startMin!,
+        fromEndMin: block.endMin!,
+        toStartMin,
+        toEndMin,
+      });
+    }
+
+    if (args.dryRun === true) return report;
+    for (const [shiftId, times] of moved) {
+      await ctx.db.patch(shiftId as Id<"shifts">, times);
+    }
+    return report;
   },
 });
