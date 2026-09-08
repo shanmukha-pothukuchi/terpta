@@ -1541,7 +1541,7 @@ export const taDetail = query({
     };
 
     return {
-      name: user?.name ?? "(unknown)",
+      name: user?.preferredName || user?.name || "(unknown)",
       email: user?.email ?? "",
       maxHoursPerWeek: profile.maxHoursPerWeek,
       syncAsyncPreference: profile.syncAsyncPreference,
