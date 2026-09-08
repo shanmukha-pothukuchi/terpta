@@ -809,18 +809,25 @@ export const officeHourGaps = query({
 
       for (const profile of profiles) {
         let heldMin = 0;
-        const mine: TimeRange[] = [];
+        // `own` marks this duty type's own blocks: a part-hour is reached by
+        // growing one of those, so standing in one is not being busy. Every
+        // other shift of theirs is.
+        const mine: Array<TimeRange & { own: boolean }> = [];
         for (const shift of shiftDocs) {
           const rows = assignmentsByShift.get(shift._id as string) ?? [];
           if (!rows.some((a) => a.taProfileRef === profile._id)) continue;
           if (shift.day === undefined || shift.startMin === undefined || shift.endMin === undefined) {
             continue;
           }
+          let own = false;
           if (shift.windowRef !== undefined) {
             const block = await ctx.db.get(shift.windowRef);
-            if (block?.dutyTypeRef === duty._id) heldMin += shift.endMin - shift.startMin;
+            if (block?.dutyTypeRef === duty._id) {
+              heldMin += shift.endMin - shift.startMin;
+              own = true;
+            }
           }
-          mine.push({ day: shift.day, startMin: shift.startMin, endMin: shift.endMin });
+          mine.push({ day: shift.day, startMin: shift.startMin, endMin: shift.endMin, own });
         }
         if (heldMin >= targetMin) continue;
 
@@ -829,21 +836,36 @@ export const officeHourGaps = query({
           .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
           .collect();
 
+        // Probe with what they are actually short of, never a whole block.
+        // A TA on 2 of 2.5h needs half an hour; asking whether a full hour
+        // fits anywhere reported them as "never free" while they stood in a
+        // two-hour block of their own.
+        const probeMin = Math.max(step, Math.min(minBlock, targetMin - heldMin));
+
         let anyFree = false; // a legal slot exists, ignoring who is in it
         let anyOpen = false; // ...and it still has a seat
         for (const w of windows) {
           const day = w.day!;
           for (
             let start = Math.ceil(w.startMin! / step) * step;
-            start + minBlock <= w.endMin!;
+            start + probeMin <= w.endMin!;
             start += step
           ) {
-            const end = start + minBlock;
+            const end = start + probeMin;
             if (avoid.some((b) => b.day === day && minutesOverlap(b.startMin, b.endMin, start, end))) {
               continue;
             }
             if (fitWindow(blocks, day, start, end) === "unavailable") continue;
-            if (mine.some((b) => b.day === day && minutesOverlap(b.startMin, b.endMin, start, end))) {
+            // Time already theirs is time they are free for: the solver
+            // reaches a part-hour by growing a block they are standing in.
+            if (
+              mine.some(
+                (b) =>
+                  b.day === day &&
+                  minutesOverlap(b.startMin, b.endMin, start, end) &&
+                  !(b.own && b.startMin <= start && end <= b.endMin),
+              )
+            ) {
               continue;
             }
             anyFree = true;

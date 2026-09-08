@@ -704,3 +704,46 @@ describe("the grid office hours are cut on", () => {
     expect(out.windowBlocks[0]).toMatchObject({ startMin: 660, endMin: 780 });
   });
 });
+
+describe("a requirement that is not a whole number of blocks", () => {
+  it("splits two hours into 90 + 60 to reach two and a half", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 540, 1020), window("w-tue", "Tu", 540, 1020)],
+        taProfiles: [ta("a")],
+        windowHoursPerTa: { oh: 2.5 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    expect(minutes(out.windowBlocks)).toBe(150);
+    expect(out.diagnostics.unfilledWindowHours).toEqual([]);
+  });
+
+  it("leaves a TA whole when the range lets them stop early", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 540, 1020), window("w-tue", "Tu", 540, 1020)],
+        taProfiles: [ta("a")],
+        windowHoursPerTa: { oh: 2.5 },
+        // Two hours is an acceptable answer, so one block still wins.
+        windowHoursPerTaMin: { oh: 2 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    expect(out.windowBlocks).toHaveLength(1);
+    expect(minutes(out.windowBlocks)).toBe(120);
+  });
+
+  it("still prefers one block when one block reaches the requirement", () => {
+    const out = solve(
+      base({
+        shifts: [window("w-mon", "M", 540, 1020)],
+        taProfiles: [ta("a")],
+        windowHoursPerTa: { oh: 2 },
+        windowMinBlockMin: { oh: 60 },
+      }),
+    );
+    expect(out.windowBlocks).toHaveLength(1);
+    expect(minutes(out.windowBlocks)).toBe(120);
+  });
+});

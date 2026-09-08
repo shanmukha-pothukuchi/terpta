@@ -1111,11 +1111,17 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
      * kept only if it is fewer blocks, or the same number holding more
      * hours. Nobody else's week can get worse for it.
      */
+    /** Whether these blocks leave the TA under the hours they are owed. */
+    const shortOf = (blocks: SolvedWindowBlock[]): boolean =>
+      blocks.reduce((n, b) => n + (b.endMin - b.startMin), 0) < requiredHoursMin;
+
     const recut = (ta: SolverTaProfile) => {
       const mine = (blocksOf.get(ta.id) ?? []).filter(
         (b) => b.dutyTypeId === dutyId && !b.locked,
       );
-      if (mine.length < 2) return; // one block cannot be improved on
+      // One block can still be improved on when it leaves the TA short: a
+      // single two-hour block is not two and a half hours, and 90 + 60 is.
+      if (mine.length < 2 && !shortOf(mine)) return;
       const held = mine.reduce((n, b) => n + (b.endMin - b.startMin), 0);
       const original = mine.map((b) => ({
         w: ctx.shiftById.get(b.windowShiftId) as WindowShift,
@@ -1132,6 +1138,11 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
           let best: Placement | null = null;
           for (const size of sizesOf(ta)) {
             if (size > budget) continue;
+            // Never take a block that strands the rest of the requirement.
+            // Two hours out of two and a half leaves half an hour that can
+            // never be a block of its own; ninety minutes leaves an hour.
+            const rest = budget - size;
+            if (n < limit - 1 && rest > 0 && rest < minBlock) continue;
             for (const w of windows) {
               const occ = occupancy.get(w.id)!;
               for (let start = gridStart(w.startMin); start + size <= w.endMin; start += step) {
@@ -1183,6 +1194,18 @@ function fillWindows(ctx: Ctx, state: State): SolveDiagnostics["unfilledWindowHo
         if (total < Math.max(requiredHoursMin, held)) continue;
         winner = attempt;
         break; // fewer blocks is the whole point; stop at the first that works
+      }
+      // Nothing shorter reached the hours they are owed. One more block than
+      // they hold may, and an extra block beats being short: a TA on 2 of
+      // 2.5h wants the half hour more than they want it in one piece.
+      if (winner === null && held < requiredHoursMin) {
+        for (let limit = mine.length; limit <= mine.length + 1; limit++) {
+          const attempt = layOut(limit);
+          const total = attempt.reduce((n, c) => n + (c.e - c.s), 0);
+          if (total <= held) continue; // splitting for no extra hours is worse
+          winner = attempt;
+          break;
+        }
       }
 
       for (const p of winner ?? original) place(p.w, ta.id, p.s, p.e, false);
