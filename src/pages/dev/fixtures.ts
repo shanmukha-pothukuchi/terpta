@@ -447,6 +447,7 @@ export const officeHourGaps: NonNullable<BuilderFixture["officeHourGaps"]> = [
     dutyTypeName: "Office Hours",
     heldHours: 0,
     targetHours: 2,
+    ceilingHours: 2,
     reason: "no_free_time",
   },
   {
@@ -456,6 +457,8 @@ export const officeHourGaps: NonNullable<BuilderFixture["officeHourGaps"]> = [
     dutyTypeName: "Office Hours",
     heldHours: 1,
     targetHours: 2,
+    // A range, so the preview exercises the "2-3h" row too.
+    ceilingHours: 3,
     reason: "over_cap",
   },
 ];

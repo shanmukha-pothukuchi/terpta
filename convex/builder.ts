@@ -732,7 +732,10 @@ export const officeHourGaps = query({
       dutyTypeRef: v.id("dutyTypes"),
       dutyTypeName: v.string(),
       heldHours: v.number(),
+      /** The fewest they must end up with — what "short" is measured against. */
       targetHours: v.number(),
+      /** The most they may be given. Equal to `targetHours` for an exact number. */
+      ceilingHours: v.number(),
       reason: gapReasonValidator,
     }),
   ),
@@ -784,6 +787,7 @@ export const officeHourGaps = query({
         Math.min(duty.hoursPerTaMin ?? duty.hoursPerTa ?? 2, duty.hoursPerTa ?? 2) * 60,
       );
       if (targetMin <= 0) continue;
+      const ceilingMin = Math.round((duty.hoursPerTa ?? 2) * 60);
       // Same grid the solver cuts on, or this reports gaps it would not
       // leave — and offers slots it would refuse to use.
       const step = duty.slotMinutes ?? SOLVER_SLOT;
@@ -812,7 +816,7 @@ export const officeHourGaps = query({
         // `own` marks this duty type's own blocks: a part-hour is reached by
         // growing one of those, so standing in one is not being busy. Every
         // other shift of theirs is.
-        const mine: Array<TimeRange & { own: boolean }> = [];
+        const mine: Array<TimeRange & { own: boolean; windowRef?: string }> = [];
         for (const shift of shiftDocs) {
           const rows = assignmentsByShift.get(shift._id as string) ?? [];
           if (!rows.some((a) => a.taProfileRef === profile._id)) continue;
@@ -827,7 +831,13 @@ export const officeHourGaps = query({
               own = true;
             }
           }
-          mine.push({ day: shift.day, startMin: shift.startMin, endMin: shift.endMin, own });
+          mine.push({
+            day: shift.day,
+            startMin: shift.startMin,
+            endMin: shift.endMin,
+            own,
+            ...(own ? { windowRef: shift.windowRef as string } : {}),
+          });
         }
         if (heldMin >= targetMin) continue;
 
@@ -836,36 +846,60 @@ export const officeHourGaps = query({
           .withIndex("by_profile", (q) => q.eq("taProfileRef", profile._id))
           .collect();
 
-        // Probe with what they are actually short of, never a whole block.
-        // A TA on 2 of 2.5h needs half an hour; asking whether a full hour
-        // fits anywhere reported them as "never free" while they stood in a
-        // two-hour block of their own.
-        const probeMin = Math.max(step, Math.min(minBlock, targetMin - heldMin));
+        // The two things the solver can still do for them: cut a fresh block,
+        // or grow one they already hold. Free time that is neither — half an
+        // hour adrift in the middle of an afternoon — is not time they can
+        // use, and saying so would send a coordinator hunting for nothing.
+        const needMin = targetMin - heldMin;
+        const canUse = (day: Day, start: number, end: number, w: Doc<"shifts">, skip?: TimeRange) =>
+          start >= w.startMin! &&
+          end <= w.endMin! &&
+          !avoid.some((b) => b.day === day && minutesOverlap(b.startMin, b.endMin, start, end)) &&
+          fitWindow(blocks, day, start, end) !== "unavailable" &&
+          !mine.some(
+            (b) =>
+              b !== skip &&
+              b.day === day &&
+              minutesOverlap(b.startMin, b.endMin, start, end),
+          );
+        const seatFree = (w: Doc<"shifts">, day: Day, start: number, end: number) =>
+          (takenByWindow.get(w._id as string) ?? []).filter(
+            (b) => b.day === day && minutesOverlap(b.startMin, b.endMin, start, end),
+          ).length < Math.max(1, w.requiredCount);
 
         let anyFree = false; // a legal slot exists, ignoring who is in it
         let anyOpen = false; // ...and it still has a seat
-        for (const w of windows) {
+
+        // Growth first: it is the cheaper of the two and the only thing that
+        // reaches a part-hour, which is what a TA short of a block needs.
+        for (const b of mine) {
+          if (!b.own || needMin <= 0) continue;
+          const w = windows.find((x) => (x._id as string) === b.windowRef);
+          if (!w) continue;
+          for (const [start, end] of [
+            [b.endMin, b.endMin + needMin],
+            [b.startMin - needMin, b.startMin],
+          ]) {
+            if (!canUse(b.day, start, end, w, b)) continue;
+            anyFree = true;
+            if (seatFree(w, b.day, start, end)) anyOpen = true;
+          }
+          if (anyOpen) break;
+        }
+
+        for (const w of anyOpen ? [] : windows) {
           const day = w.day!;
           for (
             let start = Math.ceil(w.startMin! / step) * step;
-            start + probeMin <= w.endMin!;
+            start + minBlock <= w.endMin!;
             start += step
           ) {
-            const end = start + probeMin;
+            const end = start + minBlock;
             if (avoid.some((b) => b.day === day && minutesOverlap(b.startMin, b.endMin, start, end))) {
               continue;
             }
             if (fitWindow(blocks, day, start, end) === "unavailable") continue;
-            // Time already theirs is time they are free for: the solver
-            // reaches a part-hour by growing a block they are standing in.
-            if (
-              mine.some(
-                (b) =>
-                  b.day === day &&
-                  minutesOverlap(b.startMin, b.endMin, start, end) &&
-                  !(b.own && b.startMin <= start && end <= b.endMin),
-              )
-            ) {
+            if (mine.some((b) => b.day === day && minutesOverlap(b.startMin, b.endMin, start, end))) {
               continue;
             }
             anyFree = true;
@@ -904,6 +938,7 @@ export const officeHourGaps = query({
           dutyTypeName: duty.name,
           heldHours: round1(heldMin / 60),
           targetHours: round1(targetMin / 60),
+          ceilingHours: round1(ceilingMin / 60),
           reason,
         });
       }

@@ -181,8 +181,13 @@ export function DiagnosticsPanel({
               onClick={() => onOpenTa?.(gap.taProfileRef)}
               className="pl-[17px] text-left text-[11.5px] leading-[1.35] text-muted transition-colors hover:text-ink"
             >
-              {model.shortName(gap.name)} — {gap.heldHours} of {gap.targetHours}h ·{" "}
-              {GAP_REASON[gap.reason]}
+              {/* Both numbers when they differ: "2 of 2.5h" read as the
+                  whole story to a coordinator who had asked for 3. */}
+              {model.shortName(gap.name)} — {gap.heldHours} of{" "}
+              {gap.ceilingHours > gap.targetHours
+                ? `${gap.targetHours}–${gap.ceilingHours}`
+                : gap.targetHours}
+              h · {GAP_REASON[gap.reason]}
             </button>
           ))}
         </div>
