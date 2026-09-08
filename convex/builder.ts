@@ -12,6 +12,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireCoordinator } from "./lib/auth";
 import { fitWindow } from "./lib/availability";
+import { displayName } from "./lib/names";
 import { dayValidator, meetingValidator } from "./schema";
 import { solve } from "./solver/solve";
 import type {
@@ -1541,7 +1542,7 @@ export const taDetail = query({
     };
 
     return {
-      name: user?.preferredName || user?.name || "(unknown)",
+      name: displayName(user?.name, user?.preferredName) || "(unknown)",
       email: user?.email ?? "",
       maxHoursPerWeek: profile.maxHoursPerWeek,
       syncAsyncPreference: profile.syncAsyncPreference,

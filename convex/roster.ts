@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import { displayName } from "./lib/names";
 import {
   action,
   internalMutation,
@@ -96,11 +97,9 @@ export const list = query({
       out.push({
         taProfileRef: profile._id,
         userRef: profile.userRef,
-        // What the TA asked to be called, the way the exports, the coverage
-        // picker and the TA panel already read it. The roster feeds the
-        // board chips and the table students see, which is the last place a
-        // TA's own answer about their name should be overruled.
-        name: user?.preferredName || user?.name || "(unknown)",
+        // Their preferred first name over their registered one, surname
+        // kept so the board can still tell two Anirudhs apart.
+        name: displayName(user?.name, user?.preferredName) || "(unknown)",
         email: user?.email ?? "",
         invitePending: user ? user.workosId.startsWith("invited:") : false,
         status:
