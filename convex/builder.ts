@@ -560,6 +560,16 @@ type TimeRange = { day: Day; startMin: number; endMin: number };
  * A lecture is not a shift in this app — nobody is staffed on one — so it has
  * to come off the course's own meetings rather than out of the shift table.
  */
+/**
+ * Whether a window duty type stays off lecture time. Unset means yes: nobody
+ * comes to office hours held during the lecture, so avoiding it is the
+ * answer a coordinator would have given anyway, and every period built
+ * before the setting existed was silently getting the wrong one.
+ */
+function avoidsLectures(duty: Doc<"dutyTypes">): boolean {
+  return duty.noOverlapLectures ?? true;
+}
+
 async function windowBlackoutRanges(
   ctx: QueryCtx,
   dutyTypes: Doc<"dutyTypes">[],
@@ -567,11 +577,13 @@ async function windowBlackoutRanges(
 ): Promise<Record<string, TimeRange[]>> {
   const out: Record<string, TimeRange[]> = {};
   const windowDuties = dutyTypes.filter((d) => d.mode === "window");
-  if (!windowDuties.some((d) => (d.noOverlapDutyRefs?.length ?? 0) > 0 || d.noOverlapLectures)) {
+  if (
+    !windowDuties.some((d) => (d.noOverlapDutyRefs?.length ?? 0) > 0 || avoidsLectures(d))
+  ) {
     return out;
   }
 
-  const lectureRanges = windowDuties.some((d) => d.noOverlapLectures)
+  const lectureRanges = windowDuties.some(avoidsLectures)
     ? (await staffedLectures(ctx, shiftDocs)).map(
         (l): TimeRange => ({ day: l.day, startMin: l.startMin, endMin: l.endMin }),
       )
@@ -590,7 +602,7 @@ async function windowBlackoutRanges(
         ranges.push({ day: shift.day, startMin: shift.startMin, endMin: shift.endMin });
       }
     }
-    if (d.noOverlapLectures) ranges.push(...lectureRanges);
+    if (avoidsLectures(d)) ranges.push(...lectureRanges);
     if (ranges.length > 0) out[d._id as string] = ranges;
   }
   return out;
@@ -683,7 +695,7 @@ export const lectureTimes = query({
     return {
       lectures,
       avoidedBy: dutyTypes
-        .filter((d) => d.mode === "window" && d.noOverlapLectures)
+        .filter((d) => d.mode === "window" && avoidsLectures(d))
         .map((d) => d.name),
     };
   },

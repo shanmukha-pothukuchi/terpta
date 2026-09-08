@@ -414,7 +414,9 @@ function EditableRow({
   };
 
   const avoiding = new Set((dt.noOverlapDutyRefs ?? []).map((id) => id as string));
-  const avoidCount = avoiding.size + (dt.noOverlapLectures ? 1 : 0);
+  // Unset means the lectures are avoided, the same as the generator reads it.
+  const avoidsLectures = dt.noOverlapLectures ?? true;
+  const avoidCount = avoiding.size + (avoidsLectures ? 1 : 0);
   const toggleAvoid = (id: Id<"dutyTypes">) => {
     const next = new Set(avoiding);
     if (next.has(id as string)) next.delete(id as string);
@@ -523,7 +525,7 @@ function EditableRow({
               <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-muted hover:text-ink">
                 <input
                   type="checkbox"
-                  checked={dt.noOverlapLectures ?? false}
+                  checked={avoidsLectures}
                   onChange={(e) => onUpdate({ noOverlapLectures: e.target.checked })}
                   className="size-[13px] accent-[#E21833]"
                 />
@@ -665,7 +667,13 @@ export interface LectureTimes {
  * lecture times were never found, or no office-hours duty type was told to
  * avoid them — and neither is visible from the board. Both are readable here.
  */
-function LecturePanel({ lectures }: { lectures: LectureTimes }) {
+function LecturePanel({
+  lectures,
+  hasWindowDuty,
+}: {
+  lectures: LectureTimes;
+  hasWindowDuty: boolean;
+}) {
   const avoided = lectures.avoidedBy.length > 0;
   return (
     <Surface className="mt-4 overflow-hidden">
@@ -676,7 +684,9 @@ function LecturePanel({ lectures }: { lectures: LectureTimes }) {
             ? "none found"
             : avoided
               ? `kept clear by ${lectures.avoidedBy.join(", ")}`
-              : "not avoided by any office hours"}
+              : hasWindowDuty
+                ? "not avoided — turned off"
+                : "nothing to avoid them"}
         </span>
       </div>
       {lectures.lectures.length === 0 ? (
@@ -704,8 +714,9 @@ function LecturePanel({ lectures }: { lectures: LectureTimes }) {
           ))}
           {!avoided ? (
             <p className="border-t border-line px-3.5 py-2.5 text-[11.5px] leading-[1.45] text-faint">
-              Nothing is avoiding these yet — tick "Keep clear of ▸ Lectures"
-              on an office-hours duty type above and generate again.
+              {hasWindowDuty
+                ? 'Nothing is avoiding these — tick "Keep clear of ▸ Lectures" on an office-hours duty type above and generate again.'
+                : "Only office hours move around lectures, and this period has no duty type in office-hours mode. Switch one to that mode to have its hours cut around these times."}
             </p>
           ) : null}
         </>
@@ -809,7 +820,9 @@ export function DutyTypesView({
         </Surface>
       )}
 
-      {lectures ? <LecturePanel lectures={lectures} /> : null}
+      {lectures ? (
+        <LecturePanel lectures={lectures} hasWindowDuty={windowCount > 0} />
+      ) : null}
 
       <Modal
         open={pendingDelete !== null}
