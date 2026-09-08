@@ -175,25 +175,53 @@ export function hourLabel(hour: number): string {
   return `${h12} ${h < 12 ? "AM" : "PM"}`;
 }
 
-/** One hour row: its label and the five weekday cells, blank where nobody is on. */
+/**
+ * A row's label at any granularity: "9 AM" on the hour, "9:30 AM" off it.
+ *
+ * The meridiem is kept on every row rather than only the hour ones, because
+ * a reader scanning the column for "1:30" should not have to look upward to
+ * find out which half of the day they are in.
+ */
+export function rowLabel(startMin: number): string {
+  const hour = Math.floor(startMin / 60);
+  const minute = startMin % 60;
+  if (minute === 0) return hourLabel(hour);
+  const h = ((hour % 24) + 24) % 24;
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(minute).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+
+/** One row: its label and the five weekday cells, blank where nobody is on. */
 export interface TableRow {
-  hour: number;
+  /** Minutes from midnight the row opens at. */
+  startMin: number;
   label: string;
   cells: string[];
 }
 
-export function tableRows(blocks: readonly TableBlock[], span: HourSpan): TableRow[] {
+/**
+ * `stepMin` is how tall a row is. Hours read best on a course page, but a
+ * course cutting office hours on the half hour gets a table that lies at
+ * that granularity: a 12:30-1:30 block covers the 12 PM and 1 PM rows both,
+ * so the page claims an hour of cover on either side that nobody is holding.
+ * Matching the row to the grid the hours were cut on fixes that.
+ */
+export function tableRows(
+  blocks: readonly TableBlock[],
+  span: HourSpan,
+  stepMin = 60,
+): TableRow[] {
   const rows: TableRow[] = [];
-  for (let hour = span.start; hour < span.end; hour++) {
-    const from = hour * 60;
-    const to = from + 60;
+  const step = Math.max(5, Math.round(stepMin));
+  for (let from = span.start * 60; from < span.end * 60; from += step) {
+    const to = from + step;
     const cells = DAY_CODES.map((day) => {
       const names = blocks
         .filter((b) => b.day === day && b.startMin < to && b.endMin > from)
         .flatMap((b) => b.names);
       return [...new Set(names)].join(", ");
     });
-    rows.push({ hour, label: hourLabel(hour), cells });
+    rows.push({ startMin: from, label: rowLabel(from), cells });
   }
   return rows;
 }

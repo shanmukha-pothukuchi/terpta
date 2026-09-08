@@ -159,3 +159,28 @@ describe("scribbleTabular", () => {
     expect(scribbleTabular(rows)).toContain('"Da\\"n"');
   });
 });
+
+describe("rows finer than an hour", () => {
+  it("gives a half-hour block its own row instead of two hour rows", () => {
+    const rows = tableRows(
+      [{ day: "M", startMin: 12 * 60 + 30, endMin: 13 * 60 + 30, names: ["Yi"] }],
+      { start: 12, end: 14 },
+      30,
+    );
+    expect(rows.map((r) => r.label)).toEqual(["12 PM", "12:30 PM", "1 PM", "1:30 PM"]);
+    expect(rows.map((r) => r.cells[0])).toEqual(["", "Yi", "Yi", ""]);
+  });
+
+  it("keeps the hour rows it always had at the default step", () => {
+    const rows = tableRows(
+      [{ day: "M", startMin: 12 * 60 + 30, endMin: 13 * 60 + 30, names: ["Yi"] }],
+      { start: 12, end: 14 },
+    );
+    expect(rows.map((r) => r.cells[0])).toEqual(["Yi", "Yi"]);
+  });
+
+  it("labels a quarter-hour row without losing the meridiem", () => {
+    const rows = tableRows([], { start: 12, end: 13 }, 15);
+    expect(rows.map((r) => r.label)).toEqual(["12 PM", "12:15 PM", "12:30 PM", "12:45 PM"]);
+  });
+});

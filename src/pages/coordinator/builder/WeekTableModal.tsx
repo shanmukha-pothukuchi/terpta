@@ -66,9 +66,21 @@ export function WeekTableModal({
   );
   const measured = useMemo(() => hourSpan(blocks), [blocks]);
   const effective = span ?? measured;
+  // The grid the hours were actually cut on, so the table cannot claim cover
+  // on either side of a block that does not fill its row. Finest wins when
+  // two window duty types disagree; an hour is the fallback and the default
+  // for a course whose office hours land on the hour anyway.
+  const measuredStep = useMemo(() => {
+    const grids = dutyTypes
+      .filter((d) => d.mode === "window" && !excluded.has(d._id as string))
+      .map((d) => d.slotMinutes ?? 15);
+    return grids.length > 0 ? Math.min(...grids) : 60;
+  }, [dutyTypes, excluded]);
+  const [step, setStep] = useState<number | null>(null);
+  const effectiveStep = step ?? measuredStep;
   const source = useMemo(
-    () => scribbleTabular(tableRows(blocks, effective)),
-    [blocks, effective],
+    () => scribbleTabular(tableRows(blocks, effective, effectiveStep)),
+    [blocks, effective, effectiveStep],
   );
 
   const staffed = blocks.filter((b) => b.names.length > 0).length;
@@ -154,10 +166,34 @@ export function WeekTableModal({
               </Select>
             </div>
           </div>
-          {span ? (
+          <div className="flex flex-col gap-1">
+            <span className="text-[12px] text-muted">Rows</span>
+            <div className="inline-flex h-8 items-center gap-0.5 rounded-[7px] border border-line bg-[rgba(255,255,255,0.03)] p-0.5">
+              {[15, 30, 60].map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setStep(m)}
+                  aria-pressed={effectiveStep === m}
+                  className={
+                    "h-full cursor-pointer rounded-[5px] px-2 text-[11.5px] transition-colors duration-100 " +
+                    (effectiveStep === m
+                      ? "bg-[rgba(255,255,255,0.09)] font-medium text-ink shadow-[inset_0_0_0_1px_rgba(255,255,255,0.10)]"
+                      : "text-muted hover:text-ink")
+                  }
+                >
+                  {m === 60 ? "1h" : `${m}m`}
+                </button>
+              ))}
+            </div>
+          </div>
+          {span || step ? (
             <button
               type="button"
-              onClick={() => setSpan(null)}
+              onClick={() => {
+                setSpan(null);
+                setStep(null);
+              }}
               className="h-8 text-[11.5px] text-faint transition-colors hover:text-ink"
             >
               Fit to the week
